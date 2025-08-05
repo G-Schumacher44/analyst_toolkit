@@ -1,4 +1,4 @@
-
+<p align="center">
   <img src="../repo_files/dark_logo_banner.png" width="1000"/>
   <br>
   <em>Data QA + Cleaning Engine</em>
@@ -8,7 +8,6 @@
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
   <img alt="Version" src="https://img.shields.io/badge/version-v0.1.0-blueviolet">
 </p>
-
 
 ---
 
