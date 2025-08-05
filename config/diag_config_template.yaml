@@ -1,0 +1,59 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: run_diagnostics_config.yaml
+# 🧩 Module: Diagnostics (M02)
+# 📌 Purpose: Generates a high-level statistical and structural profile of a DataFrame.
+# ------------------------------------------------------------------------------
+# This module is non-destructive. It produces reports and plots without modifying data.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+notebook: true               # Show inline output in notebooks
+run_id: "0002_QA"            # Identifier for tagging output files
+logging: "auto"                # Options: 'on', 'off', or 'auto' (auto = on in notebook mode)
+
+# ⚙️ Diagnostics settings
+diagnostics:
+  input_path: "data/raw/synthetic_penguins_v3.5.csv"
+
+  profile:
+    run: true                # Master toggle to run the profile step
+
+    settings:
+      # 📤 Output controls
+      export: true
+      as_csv: false          # Export format: false = XLSX, true = CSV
+      export_path: "exports/reports/diagnostics/diagnostics_summary.xlsx"
+      checkpoint: false
+      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m02_diag_checkpoint.joblib"
+
+      # 📊 Display + analysis controls
+      show_inline: true
+      include_samples: true
+      include_metadata: true
+      encoding: "utf-8"
+      max_rows: 5
+      high_cardinality_threshold: 15
+
+      # ✅ Quality checks
+      quality_checks:
+        skew_threshold: 2.0
+        expected_dtypes:
+          tag_id: "object"
+          species: "object"
+          bill length (mm): "float64"
+          bill depth (mm): "float64"
+          flipper_length_mm: "float64"
+          body_mass_g: "float64"
+          age_group: "object"
+          sex: "object"
+          colony_id: "object"
+          island: "object"
+          capture_date: "object"
+          health_status: "object"
+          study_name: "object"
+          clutch_completion: "object"
+          date_egg: "object"
+
+  plotting:
+    run: true
+    save_dir: "exports/plots/diagnostics/"   # Directory to save diagnostic plots                             # Max preview rows per section

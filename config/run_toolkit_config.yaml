@@ -1,0 +1,58 @@
+# ===================================================================
+# Master Orchestration Configuration for the Analyst Toolkit Pipeline
+# ===================================================================
+# This file enables or disables modules in the main pipeline.
+# Detailed configuration for each module is now located in its
+# own dedicated YAML file within its module directory.
+
+# --- Global Run Settings ---
+run_id: "CLI_2_QA"
+notebook: true
+
+# --- Pipeline Entry Point ---
+# The single, explicit path for the initial raw data load.
+pipeline_entry_path: "data/raw/synthetic_penguins_v3.5.csv"
+
+
+# ===================================================================
+# Module Execution Flags
+# -------------------------------------------------------------------
+# Set 'run' to true to execute a module, false to skip.
+# The execution order is determined by the master runner script.
+# ===================================================================
+modules:
+  diagnostics:
+    run: true
+    config_path: "config/diag_config_template.yaml"
+
+  validation:
+    run: true
+    config_path: "config/validation_config_template.yaml"
+
+  normalization:
+    run: true
+    config_path: "config/normalization_config_template.yaml"
+
+  validation_gatekeeper:
+    run: true
+    config_path: "config/certification_config_template.yaml" # Uses the strict certification config
+
+  duplicates:
+    run: true
+    config_path: "config/dups_config_template.yaml"
+
+  outlier_detection:
+    run: true
+    config_path: "config/outlier_config_template.yaml"
+
+  outlier_handling:
+    run: true
+    config_path: "config/handling_config_template.yaml"
+
+  imputation:
+    run: true
+    config_path: "config/imputation_config_template.yaml"
+
+  final_audit:
+    run: true
+    config_path: "config/final_audit_config_template.yaml"

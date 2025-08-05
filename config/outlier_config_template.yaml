@@ -1,0 +1,61 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: run_outlier_detection_config.yaml
+# 🧩 Module: Outlier Detection (M05)
+# 📌 Purpose: Identifies numeric outliers using IQR or Z-score methods.
+# ------------------------------------------------------------------------------
+# This module flags outliers in numeric columns and supports visualization,
+# column-specific thresholds, and export of flagged results.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+notebook: true
+run_id: "0002_QA"
+logging: "auto"               # Options: 'on', 'off', or 'auto'
+
+# 🚨 Outlier detection configuration
+outlier_detection:
+  run: true
+
+  # 📂 Input data path
+  input_path: "data/processed/df_validated.csv"
+
+  # ⚙️ Detection rules
+  detection_specs:
+    # Per-column overrides
+    bill_length_mm:
+      method: 'iqr'
+      iqr_multiplier: 1.5
+
+    body_mass_g:
+      method: 'zscore'
+      zscore_threshold: 3.5
+
+    # Global default for all other numeric columns
+    __default__:
+      method: 'iqr'
+      iqr_multiplier: 2.0
+
+  # 🚫 Columns to exclude from analysis
+  exclude_columns: ['id', 'tag_id']
+
+  # 🏷️ Append boolean flags (e.g., 'bill_length_mm_outlier') to output
+  append_flags: true
+
+  # 📊 Plotting settings
+  plotting:
+    run: true
+    plot_save_dir: "exports/plots/outliers/{run_id}"
+    plot_types: ['box', 'hist', 'violin']      # Options: 'box', 'hist', 'violin'
+    show_plots_inline: true                    # Enables PlotViewer in notebook
+    hue: "species"                             # Optional grouping variable for plots
+
+  # 📤 Export reports
+  export:
+    run: true
+    export_dir: "exports/reports/outliers/detection/"
+    as_csv: false                              # false = XLSX with multiple sheets
+
+  # 💾 Checkpoint results
+  checkpoint:
+    run: true
+    checkpoint_path: "exports/joblib/{run_id}/{run_id}_m05_outliers_flagged.joblib"

@@ -1,0 +1,130 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: run_normalization_config.yaml
+# 🧩 Module: Normalization (M03)
+# 📌 Purpose: Cleans and standardizes data using rule-based transformations.
+# ------------------------------------------------------------------------------
+# This module is designed to resolve data quality issues identified in validation.
+# It performs column renaming, value mapping, fuzzy matching, and type coercion.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+notebook: true
+run_id: "0002_QA"
+logging: "auto"            # Options: 'on', 'off', or 'auto'
+
+# 🔧 Normalization settings
+normalization:
+  run: true
+
+  # Optionally define input_path if this is the first module in a run
+  # input_path: "path/to/input.csv"
+
+  rules:
+    # ✏️ Rename columns
+    rename_columns:
+      'bill length (mm)': 'bill_length_mm'
+      'bill depth (mm)': 'bill_depth_mm'
+
+    # 🧹 Standardize categorical text columns
+    standardize_text_columns:
+      - 'clutch_completion'
+      - 'sex'
+
+    # 🧩 Explicit value mappings for cleanup
+    value_mappings:
+      sex:
+        '.': null
+        'male': 'MALE'
+        'female': 'FEMALE'
+        'm': 'MALE'
+        'f': 'FEMALE'
+        '?': 'UNKNOWN'
+        'unknown': 'UNKNOWN'
+      species:
+        'unknown': 'UNKNOWN'
+      island:
+        'unknown': 'UNKNOWN'
+      colony_id:
+        'biscoe 2': 'Biscoe West'
+        'cormorant NW': 'Cormorant East'
+        'invalid_colony': 'UNKNOWN'
+        'Torgersen': 'Torgersen North'
+        'Cormorant': 'Cormorant East'
+        'torgersen SE': 'Torgersen North'
+        'TORGERSEN 4': 'Torgersen North'
+        '/Shortcut': 'Shortcut Point'
+        ' short point': 'Shortcut Point'
+        'Biscoe': 'Biscoe West'
+        'Unknown': 'UNKNOWN'
+        'dream island': 'Dream South'
+        'Dream Island': 'Dream South'
+        'dream': 'Dream South'
+      age_group:
+        'juvenille': 'Juvenile'
+        'unk': 'UNKNOWN'
+        'ADLT': 'Adult'
+        'chik': 'Chick'
+      health_status:
+        'Unwell': 'Sick'
+        'Critically Ill': 'Critical'
+        'critcal ill': 'Critical'
+        'Overwight': 'Overweight'
+        'under weight': 'Underweight'
+        'Unknown': 'UNKNOWN'
+        'ok': 'UNKNOWN'
+      study_name:
+        'PAPR12021': 'PAPRI2021'
+        'papri2024': 'PAPRI2024'
+        'STUDY_2022': 'PAPRI2022'
+        'PP2020': 'PAPRI2020'
+        'PAPR2023': 'PAPRI2023'
+        'PAPRI20X9': 'UNKNOWN'
+
+    # 🤖 Fuzzy string matching for typo correction
+    fuzzy_matching:
+      run: true
+      settings:
+        species:
+          master_list: ["Adelie", "Chinstrap", "Gentoo"]
+          score_cutoff: 80
+        island:
+          master_list: ["Torgersen", "Biscoe", "Dream", "Shortcut", "Cormorant"]
+          score_cutoff: 85
+
+    # 📅 Date parsing for timestamp fields
+    parse_datetimes:
+      capture_date:
+        format: '%Y-%m-%d'
+        errors: 'coerce'
+      date_egg:
+        format: '%Y-%m-%d'
+        errors: 'coerce'
+
+    # 🔬 Columns to preview in the report
+    preview_columns:
+      - 'sex'
+      - 'island'
+      - 'species'
+      - 'health_status'
+      - 'colony_id'
+      - 'age_group'
+      - 'study_name'
+      - 'capture_date'
+      - 'date_egg'
+      - 'clutch_completion'
+
+    # 🧪 Coerce data types explicitly
+    coerce_dtypes:
+      bill_length_mm: 'float64'
+      flipper_length_mm: 'float64'
+
+  # 📤 Output and display controls
+  settings:
+    show_inline: true
+    export: true
+    as_csv: false
+    export_path: "exports/reports/normalization/normalization_report.xlsx"
+
+    checkpoint:
+      run: true
+      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m03_df_normalized.joblib"

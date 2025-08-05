@@ -1,0 +1,100 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: run_final_audit_config.yaml
+# 🧩 Module: Final Audit & Certification (M10)
+# 📌 Purpose: Applies final edits, runs a certification pass, and produces
+#            a capstone report summarizing the pipeline's data transformations.
+# ------------------------------------------------------------------------------
+# This module is the last quality gate before dataset delivery.
+# It compares raw vs cleaned data, drops artifacts, certifies schema, 
+# and generates final reports and lifecycle stats.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+run_id: "0002_QA"
+notebook: true
+logging: "auto"                # Options: 'on', 'off', or 'auto'
+
+# 🧮 Final audit configuration
+final_audit:
+  run: true
+
+  # 📂 Input paths
+  input_df_path: "exports/joblib/{run_id}/{run_id}_m07_df_imputed.joblib"
+  raw_data_path: "data/raw/synthetic_penguins_v3.5.csv"
+
+  # 🧼 Final edits before certification
+  final_edits:
+    run: true
+    drop_columns:
+      - 'body_mass_g_zscore_outlier'
+      - 'bill_length_mm_iqr_outlier'
+    rename_columns: {}
+    coerce_dtypes: {}
+
+  # ✅ Certification block (invokes validation logic in strict mode)
+  certification:
+    run: true
+    fail_on_error: true
+
+    rules:
+      expected_columns: 
+        - "tag_id"
+        - "species"
+        - "bill_length_mm"
+        - "bill_depth_mm"
+        - "flipper_length_mm"
+        - "body_mass_g"
+        - "age_group"
+        - "sex"
+        - "colony_id"
+        - "island"
+        - "capture_date"
+        - "health_status"
+        - "study_name"
+        - "clutch_completion"
+        - "date_egg"
+
+      expected_types:
+        tag_id: "object"
+        species: "object"
+        bill_length_mm: "float64"
+        bill_depth_mm: "float64"
+        flipper_length_mm: "float64"
+        body_mass_g: "float64"
+        age_group: "object"
+        sex: "object"
+        colony_id: "object"
+        island: "object"
+        capture_date: "datetime64[ns]"
+        health_status: "object"
+        study_name: "object"
+        clutch_completion: "object"
+        date_egg: "datetime64[ns]"
+
+      categorical_values:
+        species: ["Adelie", "Chinstrap", "Gentoo", "UNKNOWN"]
+        island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut", "UNKNOWN"]
+        sex: ["MALE", "FEMALE", "UNKNOWN"]
+        clutch_completion: ["yes", "no", "UNKNOWN"]
+        age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
+        health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
+
+      # 🚫 Columns that must not contain nulls
+      disallowed_null_columns:
+        - 'tag_id'
+        - 'species'
+        - 'island'
+        - 'sex'
+        - 'body_mass_g'
+
+  # 📤 Reporting and checkpoint settings
+  settings:
+    show_inline: true
+    export_report: true
+
+    paths:
+      report_excel: "exports/reports/final_audit/{run_id}_FinalAuditReport.xlsx"
+      report_joblib: "exports/reports/final_audit/{run_id}_FinalAuditReport.joblib"
+      checkpoint_csv: "data/processed/{run_id}_penguins_certified.csv"
+      checkpoint_joblib: "exports/joblib/{run_id}/{run_id}_penguins_certified.joblib"
+      plot_save_dir: "exports/plots/final_audit/{run_id}/"

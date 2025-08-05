@@ -1,0 +1,115 @@
+# ===============================
+# Python Bytecode & Caches
+# ===============================
+__pycache__/
+*.py[cod]
+*.so
+*.pyo
+*.pyd
+*.dll
+
+# ===============================
+# Virtual Environments
+# ===============================
+.env
+.venv/
+env/
+venv/
+ENV/
+*.env
+.envrc
+
+# ===============================
+# IDEs & Editor Configs
+# ===============================
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# ===============================
+# Jupyter Notebooks
+# ===============================
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# ===============================
+# Data & Artifacts
+# ===============================
+data/raw/*
+!data/raw/synthetic_penguins_v3.5.csv
+!data/raw/.gitkeep
+
+exports/*
+!exports/sample/
+!exports/sample/**
+!exports/sample/.gitkeep
+
+# Optional: block common export formats
+*.csv
+*.xlsx
+*.xls
+*.pdf
+*.tsv
+*.png
+!exports/sample/plots/
+!exports/sample/plots/*.png
+!exports/sample/reports/
+!exports/sample/reports/*.xlsx
+!exports/sample/cleaned_datasets/
+!exports/sample/cleaned_datasets/*.csv
+!exports/sample/cleaned_datasets/*.xlsx
+!repo_files/
+!repo_files/**/*.png
+!data/raw/synthetic_penguins_v3.5.csv
+!data/raw/.gitkeep
+# ===============================
+# Logs & Runtime Artifacts
+# ===============================
+*.log
+*.tmp
+*.bak
+
+# ===============================
+# System Files
+# ===============================
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ===============================
+# Packaging & Build
+# ===============================
+*.egg-info/
+*.egg
+build/
+dist/
+pip-wheel-metadata/
+*.whl
+
+# ===============================
+# PyInstaller
+# ===============================
+*.spec
+
+# ===============================
+# Coverage & Testing
+# ===============================
+.coverage
+.cache/
+htmlcov/
+.tox/
+.nox/
+pytest_cache/
+
+# ===============================
+# Other
+# ===============================
+*.lock
+*.gz
+*.zip
+*.tar
+*.rar
+*.7z
+!resource_hub/config.zip

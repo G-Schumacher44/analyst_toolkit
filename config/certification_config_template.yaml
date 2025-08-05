@@ -1,0 +1,95 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: run_certification_config.yaml
+# 🧩 Module: Validation (M02 - Certification Mode)
+# 📌 Purpose: Performs strict schema and content validation as a quality gate.
+# ------------------------------------------------------------------------------
+# This configuration is used as the final checkpoint before certifying the data.
+# It enforces a strict fail policy (`fail_on_error: true`) to stop the pipeline
+# if any schema or value rules are violated.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+notebook: true
+run_id: "0002_QA"
+logging: "auto"              # Options: 'on', 'off', or 'auto'
+
+# 🧪 Validation settings
+validation:
+  input_path: "data/raw/synthetic_penguins_v3.5.csv"
+
+  # ✅ Schema and content validation rules
+  schema_validation:
+    run: true
+    fail_on_error: true    # Hard stop if validation fails (certification mode)
+
+    rules:
+      # 📐 Required column schema
+      expected_columns: 
+        - "tag_id"
+        - "species"
+        - "bill_length_mm"
+        - "bill_depth_mm"
+        - "flipper_length_mm"
+        - "body_mass_g"
+        - "age_group"
+        - "sex"
+        - "colony_id"
+        - "island"
+        - "capture_date"
+        - "health_status"
+        - "study_name"
+        - "clutch_completion"
+        - "date_egg"
+
+      # 🔢 Expected data types (post-normalization)
+      expected_types:
+        tag_id: "object"
+        species: "object"
+        bill length (mm): "float64"
+        bill depth (mm): "float64"
+        flipper_length_mm: "float64"
+        body_mass_g: "float64"
+        age_group: "object"
+        sex: "object"
+        colony_id: "object"
+        island: "object"
+        capture_date: "datetime64[ns]"
+        health_status: "object"
+        study_name: "object"
+        clutch_completion: "object"
+        date_egg: "datetime64[ns]"
+
+      # 🧬 Valid categorical values (strict)
+      categorical_values:
+        species: ["Adelie", "Chinstrap", "Gentoo"]
+        island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut", "UNKNOWN"]
+        sex: ["MALE", "FEMALE", "UNKNOWN"]
+        colony_id: ["Biscoe West", "Cormorant East", "Dream South", "Shortcut Point", "Torgersen North", "UNKNOWN"]
+        clutch_completion: ["yes", "no"]
+        age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
+        health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
+        study_name: ["PAPRI2019", "PAPRI2020", "PAPRI2021", "PAPRI2022", "PAPRI2023", "PAPRI2024", "UNKNOWN"]
+
+      # 📏 Numeric range validation
+      numeric_ranges:
+        bill length (mm):
+          min: 30.0
+          max: 65.0
+        bill depth (mm):
+          min: 12.0
+          max: 23.5
+        flipper_length_mm:
+          min: 160.0
+          max: 255.0
+        body_mass_g:
+          min: 2300.0
+          max: 7500.0
+
+  # 📤 Output and reporting
+  settings:
+    checkpoint: true
+    checkpoint_path: "exports/joblib/{run_id}/{run_id}_m02_certified.joblib"
+    export: true
+    as_csv: false
+    export_path: "exports/reports/certification/certification_report.xlsx"
+    show_inline: true

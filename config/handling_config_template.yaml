@@ -1,0 +1,52 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: run_outlier_handling_config.yaml
+# 🧩 Module: Outlier Handling (M06)
+# 📌 Purpose: Applies corrective strategies to flagged outlier values.
+# ------------------------------------------------------------------------------
+# This module takes in the results of the detection step and modifies values
+# based on per-column or global handling strategies.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+notebook: true
+run_id: "0002_QA"
+logging: "auto"               # Options: 'on', 'off', or 'auto'
+
+# 🛠️ Outlier handling configuration
+outlier_handling:
+  run: true
+
+  # 📂 Input paths
+  input_df_path: "exports/joblib/{run_id}_m05_outliers_flagged.joblib"
+  detection_results_path: "exports/joblib/{run_id}_m05_detection_results.joblib"
+
+  # ⚙️ Handling strategies
+  handling_specs:
+    __global__:
+      strategy: 'none'         # Explicitly specify no handling unless overridden
+
+    bill_length_mm:
+      strategy: 'clip'         # Caps values at bounds
+
+    body_mass_g:
+      strategy: 'median'       # Replaces outliers with column median
+
+    flipper_length_mm:
+      strategy: 'constant'     # Fills with specified value
+      fill_value: -999
+
+    __default__:
+      strategy: 'clip'         # Fallback if column-specific rule not defined
+
+  # ⚙️ Settings for export, checkpointing, and display
+  settings:
+    show_inline: true
+
+    export:
+      run: true
+      export_path: "exports/reports/outliers/handling/outlier_handling_report.xlsx"
+      as_csv: false            # false = single XLSX report with multiple sheets
+
+    checkpoint:
+      run: true
+      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m06_df_handled.joblib"
