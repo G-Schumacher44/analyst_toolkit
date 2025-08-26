@@ -252,7 +252,7 @@ duplicates:
 </details>
 
 <details>
-<summary><strong>📉 detect_outliers.yaml</strong> — Statistical Outlier Detection</summary>
+<summary><strong>📉 outlier_config_template.yaml</strong> — Statistical Outlier Detection</summary>
 
 This configuration governs the **Outlier Detection** module, which identifies anomalous values in numeric fields based on statistical rules. No data is modified — this is a non-destructive detection pass.
 
@@ -265,7 +265,7 @@ This configuration governs the **Outlier Detection** module, which identifies an
 
 ### ✅ Example
 ```yaml
-detect_outliers:
+outlier_detection:
   run: true
   method: "iqr"
   threshold: 1.5

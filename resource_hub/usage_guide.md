@@ -53,7 +53,7 @@ Each module is configured via a YAML file located in the `config/` directory. Th
 <details>
 <summary><strong>⚙️ YAML Example (Final Audit Template)</strong></summary>
 
-**Sample Configuration**
+**Sample Configuration (`final_audit_config_template.yaml`)**
 ```yaml
 final_audit:
   run: true
@@ -61,13 +61,12 @@ final_audit:
     drop_columns:
       - 'body_mass_g_zscore_outlier'
       - 'bill_length_mm_iqr_outlier'
+    # You can also add rename_columns and coerce_dtypes here
   certification:
     run: true
     fail_on_error: true
     rules:
-      expected_columns: [...]
-      expected_types: [...]
-      categorical_values: [...]
+      # ... strict validation rules ...
       disallowed_null_columns:
         - 'tag_id'
         - 'species'

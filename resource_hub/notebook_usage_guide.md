@@ -159,17 +159,16 @@ Returns deduplicated data and an export log. Configurable to `flag`, `drop`, or 
 ---
 
 ### 6. Detect Outliers
-
 ```python
-from analyst_toolkit.m05_detect_outliers import run_detect_outliers_pipeline
+from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import run_outlier_detection_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/outlier_detect_config_template.yaml")
+config = load_config("config/outlier_config_template.yaml")
 detect_cfg = config.get("outlier_detection", {})
 run_id = config.get("run_id", "demo_run")
 notebook_mode = config.get("notebook", True)
 
-df = run_detect_outliers_pipeline(
+df_outliers_flagged, detection_results = run_outlier_detection_pipeline(
     df=df,
     config=detect_cfg,
     notebook=notebook_mode,

@@ -1,14 +1,13 @@
 """
-🚀 run_toolkit_pipeline.py (v7 - Final Authoritative)
-✅ Module: final_audit_pipeline.py
-This is the main runner script for the M10 Final Audit & Certification module.
+🚀 run_toolkit_pipeline.py
+✅ Module: Master Pipeline Orchestrator
+This is the main entry point for running the entire Analyst Toolkit pipeline from start to finish.
 
 Responsibilities:
-- Loads the final cleaned DataFrame and original raw input
-- Applies last-minute edits (drop, rename, coerce types)
-- Executes a strict certification pass (schema, types, nulls, categoricals)
-- Builds a capstone report summarizing changes, certification, and impact
-- Optionally displays the report inline and/or saves it to disk
+- Loads a master YAML configuration file.
+- Sequentially executes each enabled module (M01-M10).
+- Passes the DataFrame from one module to the next.
+- Handles global settings like `run_id` and `notebook_mode`.
 
 Usage (Notebook):
 -----------------
