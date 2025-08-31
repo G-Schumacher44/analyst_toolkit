@@ -14,12 +14,13 @@
 A modular, end-to-end data QA and preprocessing pipeline designed for analysts and data scientists.
 
 
-## 👀 Eco System Improvements
+## 👀 Eco System Improvements(NEW)
 
- [**Deployment Utility1](link) new companion extention for ease of use, automation, and getting you analyzing data not scaffolding projects.
+To make getting started even easier, two companion projects are available:
 
- [`Deployment Zip`](link] a portable one stop project builder to make using the toolkit easier than ever.
+-   [**Deployment Utility**](https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility): A utility to automate project setup, manage configurations, and run pipelines from a simple interface. Spend less time on scaffolding and more time analyzing data.
 
+-   [**Starter Kit (Zip)**](https://github.com/G-Schumacher44/analyst_toolkit_starter_kit): A portable, one-stop project builder. Download the zip to get a ready-to-use project structure with pre-configured templates, making it easier than ever to use the toolkit.
 
 ---
 
