@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../repo_files/dark_logo_banner.png" width="1000"/>
+  <img src="../repo_files/analyst_toolkit_banner.png" alt="Analyst Toolkit Logo" width="1000"/>
   <br>
   <em>Data QA + Cleaning Engine</em>
 </p>

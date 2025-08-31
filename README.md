@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="repo_files/dark_logo_banner.png" width="1000"/>
+  <img src="repo_files/analyst_toolkit_banner.png" alt="Analyst Toolkit Logo" width="1000"/>
   <br>
   <em>Data QA + Cleaning Engine</em>
 </p>
@@ -12,6 +12,14 @@
 # 🧪 Analyst Toolkit
 
 A modular, end-to-end data QA and preprocessing pipeline designed for analysts and data scientists.
+
+
+## 👀 Eco System Improvements
+
+ [**Deployment Utility1](link) new companion extention for ease of use, automation, and getting you analyzing data not scaffolding projects.
+
+ [`Deployment Zip`](link] a portable one stop project builder to make using the toolkit easier than ever.
+
 
 ---
 
