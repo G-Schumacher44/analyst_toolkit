@@ -14,7 +14,7 @@
 A modular, end-to-end data QA and preprocessing pipeline designed for analysts and data scientists.
 
 
-## 👀 Eco System Improvements(NEW)
+## 👀 Ecosystem Improvements(NEW)
 
 To make getting started even easier, two companion projects are available:
 
