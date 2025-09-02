@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 # 📄 Config File: run_validation_config.yaml
-# 🧩 Module: Validation (M01)
+# 🧩 Module: Validation (M02)
 # 📌 Purpose: Performs the first-pass audit on raw input data.
 # ------------------------------------------------------------------------------
 # This configuration identifies issues in the dataset without halting the pipeline.

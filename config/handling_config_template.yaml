@@ -17,7 +17,7 @@ outlier_handling:
   run: true
 
   # 📂 Input paths
-  input_df_path: "exports/joblib/{run_id}_m05_outliers_flagged.joblib"
+  input_path: "exports/joblib/{run_id}_m05_outliers_flagged.joblib"
   detection_results_path: "exports/joblib/{run_id}_m05_detection_results.joblib"
 
   # ⚙️ Handling strategies

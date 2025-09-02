@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.1.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.0-blueviolet">
 </p>
 
 
@@ -26,13 +26,19 @@ pip install -e .
 ### 🧭 Standard Import Pattern
 
 ```python
-# Example imports after installation
+# --- Core utilities ---
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m00_utils.config_loader import load_config
+
+# --- Individual module runners ---
 from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
 from analyst_toolkit.m02_validation.run_validation_pipeline import run_validation_pipeline
 from analyst_toolkit.m03_normalization.run_normalization_pipeline import run_normalization_pipeline
 from analyst_toolkit.m04_duplicates.run_dupes_pipeline import run_duplicates_pipeline
+from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import run_outlier_detection_pipeline
+from analyst_toolkit.m06_outlier_handling.run_handling_pipeline import run_outlier_handling_pipeline
+from analyst_toolkit.m07_imputation.run_imputation_pipeline import run_imputation_pipeline
+from analyst_toolkit.m10_final_audit.final_audit_pipeline import run_final_audit_pipeline
 ```
 
 ---

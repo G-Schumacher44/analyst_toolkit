@@ -27,10 +27,18 @@ from analyst_toolkit.m00_utils.export_utils import export_validation_results, sa
 from analyst_toolkit.m02_validation.validation_display import display_validation_summary
 
 def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
-    if logging_mode == "off": logging.disable(logging.CRITICAL)
-    else:
-        level = logging.INFO if logging_mode == "on" or not notebook else logging.WARNING
-        logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s", force=True)
+    """Configures logging based on execution mode."""
+    if logging_mode == "off":
+        logging.disable(logging.CRITICAL)
+        return
+
+    # Default to WARNING in notebooks unless 'on', and INFO in scripts unless 'off'.
+    if logging_mode == "auto":
+        level = logging.WARNING if notebook else logging.INFO
+    else:  # 'on'
+        level = logging.INFO
+
+    logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s", force=True)
 
 def run_validation_pipeline(config: dict, notebook: bool = False, df: pd.DataFrame = None, run_id: str = None):
     """

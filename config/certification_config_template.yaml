@@ -20,7 +20,7 @@ validation:
   # ✅ Schema and content validation rules
   schema_validation:
     run: true
-    fail_on_error: true    # Hard stop if validation fails (certification mode)
+    fail_on_error: true  # Hard stop if validation fails (certification mode)
 
     rules:
       # 📐 Required column schema

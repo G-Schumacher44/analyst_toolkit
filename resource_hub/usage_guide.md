@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.1.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.0-blueviolet">
 </p>
 
 
@@ -130,12 +130,14 @@ Each stage (M01–M10) can be executed individually with full visibility.
 from analyst_toolkit.m00_utils.config_loader import load_config
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import run_outlier_detection_pipeline
 
-outlier_config = load_config("config/outlier_config_template.yaml")
-run_id = outlier_config.get("run_id")
-notebook_mode = outlier_config.get("notebook", True)
+# --- Load Config & Data ---
+config = load_config("config/outlier_config_template.yaml")
+run_id = config.get("run_id", "notebook_run_01")
+notebook_mode = config.get("notebook", True)
 
+# --- Run Outlier Detection ---
 df_outliers_flagged, results = run_outlier_detection_pipeline(
-    config=outlier_config,
+    config=config,
     df=df_deduped,
     notebook=notebook_mode,
     run_id=run_id
@@ -158,9 +160,9 @@ Use `notebooks/01_analyst_toolkit_pipeline_demo.ipynb` or run the CLI directly;
 
 **In Notebook**
 ```python
-from analyst_toolkit.run_toolkit_pipeline import run_full_pipeline
+from analyst_toolkit.run_toolkit_pipeline import run_toolkit_pipeline
 
-final_df = run_full_pipeline(config_path="config/run_toolkit_config.yaml")
+final_df = run_toolkit_pipeline(config_path="config/run_toolkit_config.yaml")
 ```
 
 **In CLI**
@@ -199,10 +201,11 @@ Then, import and use modules like any Python package:
 from analyst_toolkit.m02_validation.run_validation_pipeline import run_validation_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-validation_config = load_config("config/validation_config_template.yaml")
+# Load the full config object
+config = load_config("config/validation_config_template.yaml")
 
 validated_df = run_validation_pipeline(
-    config=validation_config,
+    config=config,
     df=df,
     run_id="demo_run",
     notebook=True

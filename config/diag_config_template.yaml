@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 # 📄 Config File: run_diagnostics_config.yaml
-# 🧩 Module: Diagnostics (M02)
+# 🧩 Module: Diagnostics (M01)
 # 📌 Purpose: Generates a high-level statistical and structural profile of a DataFrame.
 # ------------------------------------------------------------------------------
 # This module is non-destructive. It produces reports and plots without modifying data.

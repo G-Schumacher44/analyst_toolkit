@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 # ----------------------------------------
 [project]
 name = "analyst_toolkit"
-version = "0.2.0"  # Major refactor release
+version = "0.2.0"  # Stable release
 description = "A comprehensive toolkit for data analysis, validation, and diagnostics."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -51,7 +51,6 @@ dependencies = [
 dev = [
   "pytest",
   "black",
-  "build",
 ]
 
 # ----------------------------------------
@@ -62,7 +61,20 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["analyst_toolkit*"]
+include = [
+  "analyst_toolkit",
+  "analyst_toolkit.*",
+  "m00_utils*",
+  "m01_diagnostics*",      
+  "m02_validation*",       
+  "m03_normalization*",    
+  "m04_duplicates*",       
+  "m05_detect_outliers*",  
+  "m06_outlier_handling*", 
+  "m07_imputation*",       
+  "m08_visuals*",
+  "m10_final_audit*"       
+]
 
 [project.scripts]
 analyst-toolkit = "analyst_toolkit.run_toolkit_pipeline:main"
