@@ -101,29 +101,55 @@ def generate_transformation_report(
     return report_tables
 
 
-def generate_duplicates_report(df_original: pd.DataFrame, df_deduplicated: pd.DataFrame, subset_cols: list) -> dict:
+def generate_duplicates_report(df_original: pd.DataFrame, df_processed: pd.DataFrame, detection_results: dict, mode: str, df_flagged: pd.DataFrame = None) -> dict:
     """
-    Compares original and deduplicated DataFrames to generate a detailed report.
+    Compares original and deduplicated DataFrames to generate a detailed report,
+    using pre-computed detection_results for consistency.
+
+    Args:
+        df_original (pd.DataFrame): The DataFrame before processing.
+        df_processed (pd.DataFrame): The DataFrame after processing.
+        detection_results (dict): The results from the detection step.
+        mode (str): The handling mode ('remove' or 'flag').
+        df_flagged (pd.DataFrame, optional): The full DataFrame with 'is_duplicate' flag.
+
+    Returns:
+        dict: A dictionary containing report DataFrames.
     """
     report = {}
-    
-    # 1. High-Level Summary
-    summary_data = {
-        "Metric": ["Original Row Count", "Deduplicated Row Count", "Rows Removed"],
-        "Value": [len(df_original), len(df_deduplicated), len(df_original) - len(df_deduplicated)]
-    }
-    report['summary'] = pd.DataFrame(summary_data)
+    duplicate_count = detection_results.get("duplicate_count", 0)
+    clusters = detection_results.get("duplicate_clusters")
 
-    # 2. Dropped Rows Log
-    dropped_indices = df_original.index.difference(df_deduplicated.index)
-    if not dropped_indices.empty:
-        report['dropped_rows'] = df_original.loc[dropped_indices].copy()
+    if duplicate_count == 0:
+        report['summary'] = pd.DataFrame([{"Metric": "Status", "Value": "No duplicates found."}])
+        return report
 
-    # 3. Duplicate Clusters (for context)
-    if subset_cols:
-        duplicate_mask = df_original.duplicated(subset=subset_cols, keep=False)
-        if duplicate_mask.any():
-            report['duplicate_clusters'] = df_original[duplicate_mask].sort_values(by=subset_cols)
+    if mode == 'remove':
+        rows_removed = len(df_original) - len(df_processed)
+        summary_data = {
+            "Metric": ["Original Row Count", "Deduplicated Row Count", "Rows Removed"],
+            "Value": [len(df_original), len(df_processed), rows_removed]
+        }
+        report['summary'] = pd.DataFrame(summary_data)
+
+        dropped_indices = df_original.index.difference(df_processed.index)
+        if not dropped_indices.empty:
+            report['dropped_rows'] = df_original.loc[dropped_indices].copy()
+    else:  # 'flag' mode
+        summary_data = {
+            "Metric": ["Total Row Count", "Duplicate Rows Flagged"],
+            "Value": [len(df_original), duplicate_count],
+        }
+        report['summary'] = pd.DataFrame(summary_data)
+        
+        if df_flagged is not None:
+            report['flagged_dataset'] = df_flagged
+
+        if clusters is not None and not clusters.empty:
+            report['duplicate_clusters'] = clusters
+
+    if clusters is not None and not clusters.empty:
+        report['all_duplicate_instances'] = clusters
             
     return report
 

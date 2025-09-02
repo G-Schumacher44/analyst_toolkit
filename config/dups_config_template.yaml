@@ -7,8 +7,8 @@
 # ------------------------------------------------------------------------------
 
 # 📥 Execution context
-notebook_mode: true
-run_id: "0002_QA"
+notebook: true
+run_id: "removal_run"
 logging: "auto"             # Options: 'on', 'off', or 'auto'
 
 # 🔎 Duplicate detection settings
@@ -16,23 +16,24 @@ duplicates:
   run: true
 
   # 🎯 Target subset (null = use all columns)
-  subset_columns: null
+  subset_columns: ['tag_id', 'species', 'capture_date']
 
   # 🧭 Deduplication logic
-  keep: "first"           # Options: 'first', 'last', or False
-  mode: "remove"          # Options: 'remove', 'flag'
+  keep: 'first'          # Options: 'first', 'last', or False (to drop all duplicates)
+  mode: 'remove'           # Options: 'remove', 'flag'
 
   # 📂 Input source
-  input_path: "exports/joblib/{run_id}_m02_2_df_certified.joblib"
+  input_path: "exports/joblib/{run_id}/{run_id}_m02_certified.joblib"
 
   # ⚙️ Operational settings (required by pipeline)
   settings:
-    checkpoint: true
-    checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04__dupes_checkpoint.joblib"
+    checkpoint:
+      run: true
+      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04__dupes_checkpoint.joblib"
 
     export: true
     export_path: "exports/reports/duplicates/duplicates_report.xlsx"
-    export_format: "xlsx"
+    as_csv: false          # false = single XLSX report with multiple sheets
 
     show_inline: true
 
