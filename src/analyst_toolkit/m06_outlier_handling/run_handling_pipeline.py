@@ -50,12 +50,12 @@ def run_outlier_handling_pipeline(config: dict, df: pd.DataFrame = None, detecti
         detection_results = load_joblib(module_cfg["detection_results_path"].format(run_id=run_id))
 
     df_original = df.copy()
-    df_handled, handling_summary_log = handle_outliers(df, detection_results, module_cfg.get("handling_specs", {}))
+    df_handled, handling_summary_log = handle_outliers(df, detection_results, module_cfg)
     
     # 2. Generate the detailed, evidence-based report
     handling_report = generate_outlier_handling_report(df_original, df_handled, handling_summary_log)
 
-    settings = config.get("settings", {})
+    settings = module_cfg.get("settings", {})
     
     # 3. Display the summary dashboard
     if settings.get("show_inline", True) and notebook:

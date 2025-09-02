@@ -57,8 +57,8 @@ def run_duplicates_pipeline(config: dict, df: pd.DataFrame = None, notebook: boo
     else:
         dupes_cfg = config # Assume the duplicates block was passed directly.
 
-    # Logging should be configured from the top-level config if available.
-    configure_logging(notebook=notebook, logging_mode=config.get("logging", "auto"))
+    # Configure logging from the module's config block for consistency.
+    configure_logging(notebook=notebook, logging_mode=dupes_cfg.get("logging", "auto"))
     if not run_id: raise ValueError("A 'run_id' must be provided.")
     
     if df is None:

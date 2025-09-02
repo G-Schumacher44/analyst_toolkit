@@ -82,7 +82,9 @@ def run_final_audit_producer(df: pd.DataFrame, config: dict) -> tuple[pd.DataFra
     results["certification_results"] = run_validation_suite(df_edited, cert_config)
     
     # Step 3: Run the dedicated null audit
-    disallowed_nulls = cert_config.get("rules", {}).get("disallowed_null_columns", [])
+    # Correctly access nested rules for the null audit
+    rules = cert_config.get("schema_validation", {}).get("rules", {})
+    disallowed_nulls = rules.get("disallowed_null_columns", [])
     results["null_audit_results"] = _run_null_audit(df_edited, disallowed_nulls)
     
     return df_edited, results

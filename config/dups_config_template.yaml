@@ -8,11 +8,11 @@
 
 # 📥 Execution context
 notebook: true
-run_id: "0002_QA"
-logging: "auto"             # Options: 'on', 'off', or 'auto'
+run_id: "0002_QA"             # A unique ID for the run, used in export paths.
 
 # 🔎 Duplicate detection settings
 duplicates:
+  logging: "auto"           # Options: 'on', 'off', or 'auto'
   run: true
 
   # 🎯 Target subset for identifying duplicates.
@@ -23,7 +23,7 @@ duplicates:
   keep: 'first'             # In 'remove' mode, which duplicate to keep.
                             # Options: 'first', 'last', or False (to drop all duplicates).
 
-  mode: 'remove'            # 'remove': Finds and deletes duplicates, returning a smaller DataFrame.
+  mode: 'flag'            # 'remove': Finds and deletes duplicates, returning a smaller DataFrame.
                             # 'flag': Finds duplicates and adds an 'is_duplicate' boolean column,
                             #         but does not remove any rows.
 

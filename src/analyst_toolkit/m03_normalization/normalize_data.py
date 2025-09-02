@@ -18,10 +18,11 @@ def standardize_text(series: pd.Series) -> pd.Series:
     """Standardizes strings by trimming and lowercasing, preserving nulls."""
     return series.apply(lambda x: x.strip().lower() if isinstance(x, str) else x)
 
-def apply_normalization(df: pd.DataFrame, rules: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+def apply_normalization(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Applies all configured normalization rules in a defined, fail-safe order."""
     df_original = df.copy()
     df_normalized = df.copy()
+    rules = config.get("rules", {})
     changelog = {}
 
     # --- 1. Rename Columns ---

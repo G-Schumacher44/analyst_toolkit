@@ -54,7 +54,7 @@ def run_diag_pipeline(config: dict, notebook: bool = False, df: pd.DataFrame = N
     
     profile_cfg = module_cfg.get("profile", {})
     if profile_cfg.get("run", False):
-        full_profile = run_data_profile(df, config=profile_cfg)
+        full_profile = run_data_profile(df, config=module_cfg)
         settings = profile_cfg.get("settings", {})
         
         if settings.get("export", False):

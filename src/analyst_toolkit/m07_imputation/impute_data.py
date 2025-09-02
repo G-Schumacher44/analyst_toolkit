@@ -14,13 +14,14 @@ import pandas as pd
 import numpy as np
 import logging
 
-def apply_imputation(df: pd.DataFrame, rules: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def apply_imputation(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Apply column-wise imputation strategies to a DataFrame and return detailed logs.
 
     Args:
         df (pd.DataFrame): The input DataFrame with missing values.
-        rules (dict): Dictionary containing imputation strategies per column.
+        config (dict): The configuration for the imputation module,
+                       containing the 'rules'.
 
     Returns:
         tuple:
@@ -28,6 +29,7 @@ def apply_imputation(df: pd.DataFrame, rules: dict) -> tuple[pd.DataFrame, pd.Da
             - pd.DataFrame: A changelog detailing strategy, fill value, and nulls filled.
     """
     df_imputed = df.copy()
+    rules = config.get("rules", {})
     strategies = rules.get("strategies", {})
     change_log_rows = []
 
