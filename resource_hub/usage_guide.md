@@ -130,13 +130,12 @@ Each stage (M01–M10) can be executed individually with full visibility.
 from analyst_toolkit.m00_utils.config_loader import load_config
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import run_outlier_detection_pipeline
 
-config = load_config("config/outlier_config_template.yaml")
-outlier_cfg = config.get("outlier_detection", {})
-run_id = config.get("run_id")
-notebook_mode = config.get("notebook", True)
+outlier_config = load_config("config/outlier_config_template.yaml")
+run_id = outlier_config.get("run_id")
+notebook_mode = outlier_config.get("notebook", True)
 
 df_outliers_flagged, results = run_outlier_detection_pipeline(
-    config=outlier_cfg,
+    config=outlier_config,
     df=df_deduped,
     notebook=notebook_mode,
     run_id=run_id
@@ -200,11 +199,10 @@ Then, import and use modules like any Python package:
 from analyst_toolkit.m02_validation.run_validation_pipeline import run_validation_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/validation_config_template.yaml")
-validation_cfg = config.get("validation", {})
+validation_config = load_config("config/validation_config_template.yaml")
 
 validated_df = run_validation_pipeline(
-    config=validation_cfg,
+    config=validation_config,
     df=df,
     run_id="demo_run",
     notebook=True

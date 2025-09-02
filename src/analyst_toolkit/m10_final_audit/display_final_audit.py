@@ -49,9 +49,24 @@ def display_final_audit_summary(report: dict):
         for key, value in report.items():
             if key.startswith("FAILURES_") or key == "Null_Check_Failures":
                 clean_title = key.replace('_', ' ').title()
-                if isinstance(value, pd.DataFrame):
+
+                # Special handling for schema conformity failures to render a table.
+                if key.lower() == "failures_schema_conformity" and isinstance(value, dict):
+                    rows = []
+                    missing = value.get('missing_columns', [])
+                    unexpected = value.get('unexpected_columns', [])
+                    if missing:
+                        rows.append({"Issue Type": "Missing", "Columns": ', '.join(missing)})
+                    if unexpected:
+                        rows.append({"Issue Type": "Unexpected", "Columns": ', '.join(unexpected)})
+                    
+                    if rows:
+                        df_details = pd.DataFrame(rows)
+                        failure_html += f"<h4>🚦 {clean_title}</h4>{to_html_table(df_details, full_preview=True)}"
+                elif isinstance(value, pd.DataFrame):
                     failure_html += f"<h4>🚦 {clean_title}</h4>{to_html_table(value, full_preview=True)}"
                 else:
+                    # Fallback for other non-DataFrame failure details
                     pretty_dict = json.dumps(value, indent=2, default=_json_default_serializer)
                     failure_html += f"<h4>🚦 {clean_title}</h4><pre>{pretty_dict}</pre>"
 

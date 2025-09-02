@@ -28,8 +28,10 @@ def _detect_by_zscore(series, config):
     lower_bound, upper_bound = mean - (threshold * std), mean + (threshold * std)
     return ((series - mean) / std).abs() > threshold, lower_bound, upper_bound
 
-def detect_outliers(df: pd.DataFrame, detection_specs: dict, exclude_columns: list = None) -> dict:
+def detect_outliers(df: pd.DataFrame, config: dict) -> dict:
     """Detects outliers and returns a comprehensive results dictionary."""
+    detection_specs = config.get("detection_specs", {})
+    exclude_columns = config.get("exclude_columns", [])
     if exclude_columns is None: exclude_columns = []
     
     outlier_log_entries = []

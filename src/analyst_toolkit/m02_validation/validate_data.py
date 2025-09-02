@@ -55,7 +55,8 @@ def run_validation_suite(df: pd.DataFrame, config: dict) -> dict:
     """
     Runs a suite of validation checks and returns a structured, auditable results dictionary.
     """
-    rules = config.get("rules", {})
+    schema_validation_cfg = config.get("schema_validation", {})
+    rules = schema_validation_cfg.get("rules", {})
     results = {}
 
     # --- Schema Conformity ---

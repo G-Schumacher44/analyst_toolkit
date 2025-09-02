@@ -35,57 +35,59 @@ final_audit:
   certification:
     run: true
     fail_on_error: true
+    
+    # This block re-uses the validation module's structure for consistency.
+    schema_validation:
+      rules:
+        expected_columns: 
+          - "tag_id"
+          - "species"
+          - "bill_length_mm"
+          - "bill_depth_mm"
+          - "flipper_length_mm"
+          - "body_mass_g"
+          - "age_group"
+          - "sex"
+          - "colony_id"
+          - "island"
+          - "capture_date"
+          - "health_status"
+          - "study_name"
+          - "clutch_completion"
+          - "date_egg"
 
-    rules:
-      expected_columns: 
-        - "tag_id"
-        - "species"
-        - "bill_length_mm"
-        - "bill_depth_mm"
-        - "flipper_length_mm"
-        - "body_mass_g"
-        - "age_group"
-        - "sex"
-        - "colony_id"
-        - "island"
-        - "capture_date"
-        - "health_status"
-        - "study_name"
-        - "clutch_completion"
-        - "date_egg"
+        expected_types:
+          tag_id: "object"
+          species: "object"
+          bill_length_mm: "float64"
+          bill_depth_mm: "float64"
+          flipper_length_mm: "float64"
+          body_mass_g: "float64"
+          age_group: "object"
+          sex: "object"
+          colony_id: "object"
+          island: "object"
+          capture_date: "datetime64[ns]"
+          health_status: "object"
+          study_name: "object"
+          clutch_completion: "object"
+          date_egg: "datetime64[ns]"
 
-      expected_types:
-        tag_id: "object"
-        species: "object"
-        bill_length_mm: "float64"
-        bill_depth_mm: "float64"
-        flipper_length_mm: "float64"
-        body_mass_g: "float64"
-        age_group: "object"
-        sex: "object"
-        colony_id: "object"
-        island: "object"
-        capture_date: "datetime64[ns]"
-        health_status: "object"
-        study_name: "object"
-        clutch_completion: "object"
-        date_egg: "datetime64[ns]"
+        categorical_values:
+          species: ["Adelie", "Chinstrap", "Gentoo", "UNKNOWN"]
+          island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut", "UNKNOWN"]
+          sex: ["MALE", "FEMALE", "UNKNOWN"]
+          clutch_completion: ["yes", "no", "UNKNOWN"]
+          age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
+          health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
 
-      categorical_values:
-        species: ["Adelie", "Chinstrap", "Gentoo", "UNKNOWN"]
-        island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut", "UNKNOWN"]
-        sex: ["MALE", "FEMALE", "UNKNOWN"]
-        clutch_completion: ["yes", "no", "UNKNOWN"]
-        age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
-        health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
-
-      # 🚫 Columns that must not contain nulls
-      disallowed_null_columns:
-        - 'tag_id'
-        - 'species'
-        - 'island'
-        - 'sex'
-        - 'body_mass_g'
+        # 🚫 Columns that must not contain nulls
+        disallowed_null_columns:
+          - 'tag_id'
+          - 'species'
+          - 'island'
+          - 'sex'
+          - 'body_mass_g'
 
   # 📤 Reporting and checkpoint settings
   settings:

@@ -50,7 +50,7 @@ def run_outlier_detection_pipeline(config: dict, df: pd.DataFrame = None, notebo
         if not input_path: raise KeyError("Missing 'input_path' and no DataFrame provided.")
         df = load_csv(input_path.format(run_id=run_id))
 
-    detection_results = detect_outliers(df, module_cfg.get("detection_specs", {}), module_cfg.get("exclude_columns", []))
+    detection_results = detect_outliers(df, module_cfg)
     outlier_log_df = detection_results.get("outlier_log")
     
     plot_save_dir = None

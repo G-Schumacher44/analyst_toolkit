@@ -17,14 +17,15 @@ import pandas as pd
 import numpy as np
 import logging
 
-def handle_outliers(df: pd.DataFrame, detection_results: dict, handling_specs: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def handle_outliers(df: pd.DataFrame, detection_results: dict, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Apply configured outlier handling strategies to a DataFrame using detection flags.
 
     Args:
         df (pd.DataFrame): Input DataFrame with outliers previously detected.
         detection_results (dict): Dictionary with 'outlier_flags' and 'outlier_log'.
-        handling_specs (dict): Dict mapping column names or defaults to handling strategies.
+        config (dict): The configuration for the outlier handling module,
+                       containing the 'handling_specs'.
 
     Returns:
         tuple:
@@ -32,6 +33,7 @@ def handle_outliers(df: pd.DataFrame, detection_results: dict, handling_specs: d
             - pd.DataFrame: Summary log of all transformations applied
     """
     df_handled = df.copy()
+    handling_specs = config.get("handling_specs", {})
     outlier_flags = detection_results.get("outlier_flags")
     outlier_log = detection_results.get("outlier_log")
 

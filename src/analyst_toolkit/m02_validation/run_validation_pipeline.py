@@ -64,7 +64,7 @@ def run_validation_pipeline(config: dict, notebook: bool = False, df: pd.DataFra
 
     schema_validation_cfg = module_cfg.get("schema_validation", {})
     if schema_validation_cfg.get("run", False):
-        validation_results = run_validation_suite(df, config=schema_validation_cfg)
+        validation_results = run_validation_suite(df, config=module_cfg)
 
         fail_on_error = schema_validation_cfg.get("fail_on_error", False)
         if fail_on_error:

@@ -57,13 +57,12 @@ def run_imputation_pipeline(config: dict, df: pd.DataFrame = None, notebook: boo
             input_path = input_path.format(run_id=run_id)
         df = load_joblib(input_path)
 
-    rules = module_cfg.get("rules", {})
-    if not rules: 
+    if not module_cfg.get("rules"): 
         logging.warning("No imputation rules found. Returning original DataFrame.")
         return df
 
     df_original = df.copy()
-    df_imputed, detailed_changelog = apply_imputation(df, rules)
+    df_imputed, detailed_changelog = apply_imputation(df, module_cfg)
     
     imputation_report = generate_imputation_report(df_original, df_imputed, detailed_changelog)
     

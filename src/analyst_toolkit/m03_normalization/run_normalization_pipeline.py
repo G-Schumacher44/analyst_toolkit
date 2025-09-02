@@ -51,12 +51,12 @@ def run_normalization_pipeline(config: dict, notebook: bool = False, df: pd.Data
         if not input_path: raise KeyError("Missing 'input_path' in normalization config.")
         df = load_csv(input_path)
 
-    rules = module_cfg.get("rules", {})
-    if not rules:
+    if not module_cfg.get("rules"):
         logging.warning("No normalization rules found. Returning original DataFrame.")
         return df
 
-    df_original, df_normalized, changelog = apply_normalization(df, rules)
+    # Pass the entire module config to the producer
+    df_original, df_normalized, changelog = apply_normalization(df, module_cfg)
     
     settings = module_cfg.get("settings", {})
     report_tables = generate_transformation_report(
@@ -66,7 +66,7 @@ def run_normalization_pipeline(config: dict, notebook: bool = False, df: pd.Data
     )
     
     if settings.get("show_inline", True) and notebook:
-        display_normalization_summary(changelog, df_original, df_normalized, rules)
+        display_normalization_summary(changelog, df_original, df_normalized, module_cfg.get("rules", {}))
 
     if settings.get("export", True):
         export_path = settings.get("export_path", f"exports/reports/normalization/normalization_report_{run_id}.xlsx")

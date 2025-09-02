@@ -70,14 +70,13 @@ df = load_csv("data/raw/my_data.csv")
 from analyst_toolkit.m01_diagnostics import run_diag_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/diagnostics_config_template.yaml")
-diag_cfg = config.get("diagnostics", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+diag_config = load_config("config/diagnostics_config_template.yaml")
+run_id = diag_config.get("run_id", "demo_run")
+notebook_mode = diag_config.get("notebook", True)
 
 df = run_diag_pipeline(
     df=df,
-    config=diag_cfg,
+    config=diag_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -93,14 +92,13 @@ Returns unmodified `df` and outputs plots and summary data. Reports are saved to
 from analyst_toolkit.m02_validation import run_validation_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/validation_config_template.yaml")
-val_cfg = config.get("validation", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+validation_config = load_config("config/validation_config_template.yaml")
+run_id = validation_config.get("run_id", "demo_run")
+notebook_mode = validation_config.get("notebook", True)
 
 df = run_validation_pipeline(
     df=df,
-    config=val_cfg,
+    config=validation_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -117,15 +115,14 @@ from analyst_toolkit.m03_normalization import run_normalization_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
 # Load configuration and extract relevant values
-config = load_config("config/normalization_config_template.yaml")
-norm_cfg = config.get("normalization", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+norm_config = load_config("config/normalization_config_template.yaml")
+run_id = norm_config.get("run_id", "demo_run")
+notebook_mode = norm_config.get("notebook", True)
 
 # Run normalization module with notebook-specific arguments
 df = run_normalization_pipeline(
     df=df,
-    config=norm_cfg,
+    config=norm_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -141,14 +138,13 @@ Returns cleaned `df` after applying normalization steps.
 from analyst_toolkit.m04_duplicates import run_duplicates_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/duplicates_config_template.yaml")
-dupes_cfg = config.get("duplicates", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+dupes_config = load_config("config/duplicates_config_template.yaml")
+run_id = dupes_config.get("run_id", "demo_run")
+notebook_mode = dupes_config.get("notebook", True)
 
 df = run_duplicates_pipeline(
     df=df,
-    config=dupes_cfg,
+    config=dupes_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -163,14 +159,13 @@ Returns deduplicated data and an export log. Configurable to `flag`, `drop`, or 
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import run_outlier_detection_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/outlier_config_template.yaml")
-detect_cfg = config.get("outlier_detection", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+outlier_config = load_config("config/outlier_config_template.yaml")
+run_id = outlier_config.get("run_id", "demo_run")
+notebook_mode = outlier_config.get("notebook", True)
 
 df_outliers_flagged, detection_results = run_outlier_detection_pipeline(
     df=df,
-    config=detect_cfg,
+    config=outlier_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -186,14 +181,13 @@ Flags potential outliers and logs summary statistics. Outlier scores or flags ma
 from analyst_toolkit.m06_outlier_handling import run_outlier_handling_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/outlier_handle_config_template.yaml")
-handle_cfg = config.get("outlier_handling", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+handling_config = load_config("config/outlier_handle_config_template.yaml")
+run_id = handling_config.get("run_id", "demo_run")
+notebook_mode = handling_config.get("notebook", True)
 
 df = run_outlier_handling_pipeline(
     df=df,
-    config=handle_cfg,
+    config=handling_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -209,14 +203,13 @@ Applies chosen strategy (e.g., winsorization, removal, replacement) to outliers 
 from analyst_toolkit.m07_imputation import run_imputation_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/imputation_config_template.yaml")
-imp_cfg = config.get("imputation", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+imputation_config = load_config("config/imputation_config_template.yaml")
+run_id = imputation_config.get("run_id", "demo_run")
+notebook_mode = imputation_config.get("notebook", True)
 
 df = run_imputation_pipeline(
     df=df,
-    config=imp_cfg,
+    config=imputation_config,
     notebook=notebook_mode,
     run_id=run_id
 )
@@ -232,14 +225,13 @@ Fills missing values based on rule-based or statistical methods defined in the c
 from analyst_toolkit.m10_final_audit import run_final_audit_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
 
-config = load_config("config/final_audit_config_template.yaml")
-audit_cfg = config.get("final_audit", {})
-run_id = config.get("run_id", "demo_run")
-notebook_mode = config.get("notebook", True)
+audit_config = load_config("config/final_audit_config_template.yaml")
+run_id = audit_config.get("run_id", "demo_run")
+notebook_mode = audit_config.get("notebook", True)
 
 df = run_final_audit_pipeline(
     df=df,
-    config=audit_cfg,
+    config=audit_config,
     notebook=notebook_mode,
     run_id=run_id
 )
