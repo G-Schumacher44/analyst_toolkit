@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.1.3-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.0-blueviolet">
 </p>
 
 # 🧪 Analyst Toolkit
@@ -72,6 +72,13 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 
 <details>
 <summary><strong>🫆 version release notes</strong></summary>
+
+**v0.2.0**
+  - **Standardized Configuration Handling**: All modules (`diagnostics`, `validation`, `normalization`, `outliers`, `imputation`, `final_audit`) now intelligently parse their own configuration blocks.
+  - **Simplified Module API**: Module runners can now be called with the full toolkit configuration object, removing the need for manual unpacking in notebooks or scripts. This makes the API consistent across the entire toolkit.
+  - **Notebook & Documentation Updates**: The demo notebook and usage guides have been updated to reflect the simpler, more robust module-calling convention.
+  - **Bug Fixes**: Corrected several minor bugs where modules were not correctly passing or interpreting their configurations, leading to more stable and predictable behavior.
+  - **Packaging**: Corrected `pyproject.toml` to ensure proper package discovery and installation from GitHub.
 
 **v0.1.3**
   - All modules
@@ -224,23 +231,18 @@ from analyst_toolkit.m02_validation.run_validation_pipeline import run_validatio
 from analyst_toolkit.m00_utils.config_loader import load_config
 from analyst_toolkit.m00_utils.load_data import load_csv
 
-# --- Load config and unpack validation settings ---
-val_config = load_config("config/validation_config_template.yaml")
-val_cfg = val_config.get("validation", {})
-notebook_mode = val_config.get("notebook", True)
-run_id = val_config.get("run_id", "demo_run")
+# --- Load config and data ---
+config = load_config("config/validation_config_template.yaml")
+df = load_csv("path/to/your/data.csv")
 
-
-# --- Load raw data from path defined in config ---
-input_path = diag_cfg.get("input_path")
-if not input_path:
-    raise ValueError("🛑 No input_path specified in diagnostics config.")
-df_raw = load_csv(input_path)
+# --- Extract global settings ---
+notebook_mode = config.get("notebook", True)
+run_id = config.get("run_id", "demo_run")
 
 # --- Run Validation Module ---
 df_validated = run_validation_pipeline(
-    config=val_cfg,
-    df=df_profiled,
+    config=config, # Pass the full config object
+    df=df,
     notebook=notebook_mode,
     run_id=run_id
 )
