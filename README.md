@@ -81,9 +81,6 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
   - **Packaging**: Corrected `pyproject.toml` to ensure proper package discovery and installation from GitHub.
 
 **v0.1.3**
-  - All modules
-    - simpliffied notebook logic
-    - updated `notebook_usage_guide`
   
   - Refactored Duplicates Module (M04):
     - Correctly implemented distinct flag and remove modes.
@@ -186,7 +183,7 @@ Clone the repo and install locally using the provided `pyproject.toml`:
 ```bash
 git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
-pip install -e .
+pip install -e .[dev]
 ```
 **🌐 Install Directly via GitHub**
 

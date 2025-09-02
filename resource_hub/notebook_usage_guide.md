@@ -28,11 +28,11 @@ pip install -e .
 ```python
 # Example imports after installation
 from analyst_toolkit.m00_utils.load_data import load_csv
-from analyst_toolkit.m01_diagnostics import run_diag_pipeline
-from analyst_toolkit.m02_validation import run_validation_pipeline
-from analyst_toolkit.m03_normalization import run_normalization_pipeline
-from analyst_toolkit.m04_duplicates import run_duplicates_pipeline
 from analyst_toolkit.m00_utils.config_loader import load_config
+from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
+from analyst_toolkit.m02_validation.run_validation_pipeline import run_validation_pipeline
+from analyst_toolkit.m03_normalization.run_normalization_pipeline import run_normalization_pipeline
+from analyst_toolkit.m04_duplicates.run_dupes_pipeline import run_duplicates_pipeline
 ```
 
 ---

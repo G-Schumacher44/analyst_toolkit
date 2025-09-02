@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+develop-eggs/
+eggs/
+.eggs/
+*.egg-info/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+.pytest_cache/
+.coverage
+.cache
+
+# Environment variables
+.env
+
+# IDEs and editors
+.idea/
+.vscode/
+
+# OS-generated files
+.DS_Store
+
+# Project-specific output directories
+exports/reports/
+exports/plots/
+exports/joblib/
+data/processed/
