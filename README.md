@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.1.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.1.3-blueviolet">
 </p>
 
 # 🧪 Analyst Toolkit
@@ -71,7 +71,18 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 </details>
 
 <details>
-<summary><strong>🫆 version release v0.1.2</strong></summary>
+<summary><strong>🫆 version release notes</strong></summary>
+
+**v0.1.3**
+  - Refactored Duplicates Module (M04):
+    - Correctly implemented distinct flag and remove modes.
+    - Decoupled detection logic from handling logic for improved robustness and clarity.
+    - Enhanced reporting artifacts for both modes, including flagged datasets and - duplicate clusters.
+
+  - Bug Fixes & Stability:
+    - Resolved critical bug where flag mode was incorrectly removing rows.
+    - Fixed various ImportError and ModuleNotFoundError issues related to project structure and dependencies.
+    - Standardized module calls in notebooks to prevent configuration caching issues.
 
 **v0.1.2**
 - Core module scaffolding complete (M01–M10)
@@ -129,9 +140,7 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 │   └── features/                  # Optional engineered features (if extended)
 │
 ├── 📤 exports/
-│   ├── joblib/                    # All checkpointed DataFrames
-│   ├── plots/                     # Auto-generated visualizations (per module)
-│   └── reports/                   # XLSX/CSV audit reports (per module)
+│   └── samples/                   # sample media from a QA run
 │
 ├── resource_hub                   # Reference, Guidebooks, Documentation
 ├── pyproject.toml                 # Build config for TOML-based packaging

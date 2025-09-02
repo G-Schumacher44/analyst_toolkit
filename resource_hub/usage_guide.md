@@ -218,17 +218,17 @@ This allows programmatic access to every pipeline module without running the ful
 
 ## 🧭 Module Index
 
-| Stage | Module            | Description                                          |
-| ----- | ----------------- | ---------------------------------------------------- |
-| M01   | Diagnostics       | Profile data: shape, types, nulls, skew, sample      |
-| M02   | Validation        | Schema check, dtype verification, null rules         |
-| M03   | Normalization     | Clean up whitespace, case, type coercion             |
-| M04   | Duplicates        | Flag/remove exact row duplicates                     |
-| M05   | Outlier Detection | Detect outliers using IQR or Z-score                 |
-| M06   | Outlier Handling  | Transform, impute, or clip flagged outliers          |
-| M07   | Imputation        | Fill missing values via mean, median, mode, constant |
-| M08   | Visuals           | Generate profile plots, skew plots, heatmaps         |
-| M10   | Final Audit       | Final cleanup, schema cert, and export               |
+| Stage | Module Name       | Description                                                   |
+| ----- | ----------------- | ------------------------------------------------------------- |
+| M01   | Diagnostics       | Profile data: shape, types, nulls, skew, sample               |
+| M02   | Validation        | Schema check, dtype verification, null rules (soft or strict) |
+| M03   | Normalization     | Clean up whitespace, case, type coercion, and fuzzy matching  |
+| M04   | Duplicates        | Flag or remove exact row duplicates                           |
+| M05   | Outlier Detection | Detect outliers using IQR or Z-score                          |
+| M06   | Outlier Handling  | Transform, impute, or clip flagged outliers                   |
+| M07   | Imputation        | Fill missing values via mean, median, mode, or constant       |
+| M08   | Visuals           | *Utility module for generating plots (not run directly)*      |
+| M10   | Final Audit       | Final cleanup, schema certification, and export               |
 
 ---
 

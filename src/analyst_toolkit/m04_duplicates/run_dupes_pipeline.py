@@ -1,21 +1,19 @@
-
 """
 🚀 Module: run_dupes_pipeline.py
 
-Runner script for the M04 Duplicates module of the Analyst Toolkit.
-
-This pipeline detects and handles duplicate rows from a DataFrame,
-based on a decoupled detect-then-handle workflow. It supports both notebook
-and CLI contexts, and handles loading, deduplication, reporting, and checkpointing.
+This module serves as the primary runner for the M04 Duplicates pipeline.
+It orchestrates the detection and handling of duplicate rows in a DataFrame,
+adhering to a decoupled "detect-then-handle" workflow. The pipeline supports
+both notebook and CLI execution contexts, managing data loading, deduplication,
+reporting, and checkpointing based on the provided configuration.
 
 Example:
-    >>> from m04_duplicates.run_dupes_pipeline import run_duplicates_pipeline
-    >>> from m00_utils.config_loader import load_config
-    >>> config = load_config("config/run_duplicates_config.yaml")
-    >>> diag_cfg = config.get("diagnostics", {})
-    >>> notebook_mode = config.get("notebook", True)
-    >>> run_id = config.get("run_id")
-    >>> df = run_duplicates_pipeline(config=config, df=df, run_id=run_id, notebook=notebook_mode)
+    from analyst_toolkit.m04_duplicates import run_duplicates_pipeline
+    from analyst_toolkit.m00_utils.config_loader import load_config
+    
+    config = load_config("config/dups_config_template.yaml")
+    # df_processed will be either flagged or deduplicated based on config
+    df_processed = run_duplicates_pipeline(config=config, df=my_dataframe)
 """
 
 
@@ -38,7 +36,21 @@ def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
         logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s", force=True)
 
 def run_duplicates_pipeline(config: dict, df: pd.DataFrame = None, notebook: bool = False, run_id: str = None):
-    """Executes the full deduplication pipeline with decoupled reporting."""
+    """
+    Executes the full deduplication pipeline with decoupled reporting.
+
+    This function first detects all duplicates based on the configuration, then
+    either flags them by adding a boolean column or removes them. It generates
+    a comprehensive report of its actions and can save the processed DataFrame
+    as a checkpoint.
+
+    Args:
+        config (dict): The configuration dictionary, which can be the full
+                       toolkit config or just the 'duplicates' block.
+        df (pd.DataFrame, optional): The DataFrame to process. If None, it will be loaded based on 'input_path' in the config.
+        notebook (bool): If True, renders rich HTML outputs in a notebook environment.
+        run_id (str): A unique identifier for the pipeline run, used for versioning outputs.
+    """
     # This runner can now accept either the full config or just the 'duplicates' block.
     if "duplicates" in config:
         dupes_cfg = config.get("duplicates")
@@ -67,14 +79,15 @@ def run_duplicates_pipeline(config: dict, df: pd.DataFrame = None, notebook: boo
     mode = dupes_cfg.get("mode", "remove")
     logging.info(f"Duplicate processing mode: '{mode}'")
     
-    # In 'flag' mode, we simply return the dataframe with the 'is_duplicate' column.
-    # No rows are removed.
+    settings = dupes_cfg.get("settings", {})
+    
+    # In 'flag' mode, the processed DataFrame is the original with the 'is_duplicate' column added.
+    # No rows are removed, allowing for non-destructive analysis.
     if mode == 'flag':
         df_processed = df_flagged
         logging.info(f"Flagged {detection_results['duplicate_count']} rows. No rows were removed.")
-    # In 'remove' mode, we perform the destructive action.
+    # In 'remove' mode, the destructive action is performed.
     elif mode == 'remove':
-        settings = dupes_cfg.get("settings", {})
         checkpoint_cfg = settings.get("checkpoint", {})
         # As an artifact, save the flagged df before removing rows if checkpointing is on.
         if isinstance(checkpoint_cfg, dict) and checkpoint_cfg.get("run", False):
@@ -88,8 +101,6 @@ def run_duplicates_pipeline(config: dict, df: pd.DataFrame = None, notebook: boo
 
     # --- Step 3: Generate report based on detection results and final state ---
     duplicates_report = generate_duplicates_report(df_original, df_processed, detection_results, mode, df_flagged=df_flagged)
-    
-    settings = dupes_cfg.get("settings", {})
     
     plot_paths = {}
     if settings.get("plotting", {}).get("run", True):

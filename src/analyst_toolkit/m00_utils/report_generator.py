@@ -110,8 +110,9 @@ def generate_duplicates_report(df_original: pd.DataFrame, df_processed: pd.DataF
         df_original (pd.DataFrame): The DataFrame before processing.
         df_processed (pd.DataFrame): The DataFrame after processing.
         detection_results (dict): The results from the detection step.
-        mode (str): The handling mode ('remove' or 'flag').
-        df_flagged (pd.DataFrame, optional): The full DataFrame with 'is_duplicate' flag.
+        mode (str): The operational mode ('remove' or 'flag').
+        df_flagged (pd.DataFrame, optional): The full DataFrame with the 'is_duplicate'
+                                            flag, used for reporting in 'flag' mode.
 
     Returns:
         dict: A dictionary containing report DataFrames.
