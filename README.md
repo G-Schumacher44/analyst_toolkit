@@ -74,6 +74,10 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 <summary><strong>🫆 version release notes</strong></summary>
 
 **v0.1.3**
+  - All modules
+    - simpliffied notebook logic
+    - updated `notebook_usage_guide`
+  
   - Refactored Duplicates Module (M04):
     - Correctly implemented distinct flag and remove modes.
     - Decoupled detection logic from handling logic for improved robustness and clarity.
