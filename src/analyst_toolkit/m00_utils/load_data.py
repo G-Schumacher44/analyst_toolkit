@@ -9,8 +9,10 @@ serving as clean entry points for pipeline ingestion.
 
 Functions:
 - load_csv(path): Loads a CSV file into a pandas DataFrame.
+- load_joblib(path): Loads a joblib file.
 """
 import pandas as pd
+import joblib
 
 def load_csv(path: str) -> pd.DataFrame:
     """
@@ -23,3 +25,15 @@ def load_csv(path: str) -> pd.DataFrame:
         pd.DataFrame: Loaded data as a pandas DataFrame.
     """
     return pd.read_csv(path)
+
+def load_joblib(path: str):
+    """
+    Loads a joblib file from a given path.
+
+    Args:
+        path (str): Path to the joblib file.
+
+    Returns:
+        Any: The Python object stored in the file.
+    """
+    return joblib.load(path)

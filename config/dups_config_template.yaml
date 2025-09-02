@@ -7,7 +7,7 @@
 # ------------------------------------------------------------------------------
 
 # 📥 Execution context
-notebook_mode: true
+notebook: true
 run_id: "0002_QA"
 logging: "auto"             # Options: 'on', 'off', or 'auto'
 
@@ -15,24 +15,33 @@ logging: "auto"             # Options: 'on', 'off', or 'auto'
 duplicates:
   run: true
 
-  # 🎯 Target subset (null = use all columns)
-  subset_columns: null
+  # 🎯 Target subset for identifying duplicates.
+  # Use a list of column names, or set to null to use all columns.
+  subset_columns: ['tag_id', 'species', 'capture_date']
 
   # 🧭 Deduplication logic
-  keep: "first"           # Options: 'first', 'last', or False
-  mode: "remove"          # Options: 'remove', 'flag'
+  keep: 'first'             # In 'remove' mode, which duplicate to keep.
+                            # Options: 'first', 'last', or False (to drop all duplicates).
+
+  mode: 'remove'            # 'remove': Finds and deletes duplicates, returning a smaller DataFrame.
+                            # 'flag': Finds duplicates and adds an 'is_duplicate' boolean column,
+                            #         but does not remove any rows.
 
   # 📂 Input source
-  input_path: "exports/joblib/{run_id}_m02_2_df_certified.joblib"
+  input_path: "exports/joblib/{run_id}/{run_id}_m02_certified.joblib"
 
   # ⚙️ Operational settings (required by pipeline)
   settings:
-    checkpoint: true
-    checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04__dupes_checkpoint.joblib"
+    checkpoint:
+      run: true
+      # Path for the final processed DataFrame (either smaller or with flags).
+      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04_df_deduped.joblib"
+      # Optional: In 'remove' mode, save a joblib of the *flagged* DataFrame before rows are dropped.
+      flagged_checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04_df_flagged_before_removal.joblib"
 
     export: true
     export_path: "exports/reports/duplicates/duplicates_report.xlsx"
-    export_format: "xlsx"
+    as_csv: false          # false = single XLSX report with multiple sheets
 
     show_inline: true
 
