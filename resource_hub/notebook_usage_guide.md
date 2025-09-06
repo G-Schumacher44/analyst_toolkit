@@ -80,7 +80,7 @@ config = load_config("config/diagnostics_config_template.yaml")
 run_id = config.get("run_id", "demo_run")
 notebook_mode = config.get("notebook", True)
 
-df = run_diag_pipeline(
+run_diag_pipeline(
     df=df,
     config=config,
     notebook=notebook_mode,
@@ -102,7 +102,7 @@ config = load_config("config/validation_config_template.yaml")
 run_id = config.get("run_id", "demo_run")
 notebook_mode = config.get("notebook", True)
 
-df = run_validation_pipeline(
+df_validated = run_validation_pipeline(
     df=df,
     config=config,
     notebook=notebook_mode,
