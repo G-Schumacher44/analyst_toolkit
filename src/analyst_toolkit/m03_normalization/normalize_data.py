@@ -108,6 +108,10 @@ def apply_normalization(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
                     utc = settings.get('utc', None)
                     make_naive = bool(settings.get('make_naive', False))
                     multi_formats = settings.get('formats') if isinstance(settings.get('formats'), list) else None
+                    # Accept accidental list provided under 'format' and treat as 'formats'
+                    if multi_formats is None and isinstance(fmt, (list, tuple)):
+                        multi_formats = list(fmt)
+                        fmt = None
 
                     before_na = df_normalized[col].isna().sum()
 
