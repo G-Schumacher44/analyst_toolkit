@@ -73,6 +73,24 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 <details>
 <summary><strong>🫆 version release notes</strong></summary>
 
+**v0.2.1**
+**v0.2.1**
+  - **Datetime Parsing (Normalization)**:
+    - Respects YAML config (`format`, `errors`, `dayfirst`, `yearfirst`, `utc`).
+    - Treats `auto` as “no explicit format” instead of a literal string.
+    - Fix ensures no false `"auto"` failures during parsing.
+    - File: `src/analyst_toolkit/m03_normalization/normalize_data.py:98`
+  - **Excel Export (Stability)**:
+    - Explicit number formats applied for consistent cross-platform rendering.
+    - **Date:** `yyyy-mm-dd`  
+      **Datetime:** `yyyy-mm-dd hh:mm:ss`
+    - Compatible with Excel and Apple Numbers.
+    - File: `src/analyst_toolkit/m00_utils/export_utils.py:51`
+  - **Behavioral Impact**:
+    - Normalization now correctly coerces date columns per YAML.
+    - `.xlsx` reports display stable, consistent formats.
+    - No change to `.csv` exports.
+
 **v0.2.0**
   - **Standardized Configuration Handling**: All modules (`diagnostics`, `validation`, `normalization`, `outliers`, `imputation`, `final_audit`) now intelligently parse their own configuration blocks.
   - **Simplified Module API**: Module runners can now be called with the full toolkit configuration object, removing the need for manual unpacking in notebooks or scripts. This makes the API consistent across the entire toolkit.
