@@ -47,7 +47,13 @@ def export_dataframes(data_dict: dict[str, pd.DataFrame], export_path: str, file
     
         base_name = export_path.name
         path_with_run_id = export_path.with_name(f"{run_id}_{base_name}") if run_id else export_path
-        with pd.ExcelWriter(path_with_run_id, engine="xlsxwriter") as writer:
+        # Set explicit Excel number formats so spreadsheet apps render dates consistently
+        with pd.ExcelWriter(
+            path_with_run_id,
+            engine="xlsxwriter",
+            date_format="yyyy-mm-dd",
+            datetime_format="yyyy-mm-dd hh:mm:ss",
+        ) as writer:
             for name, df in data_dict.items():
                 if isinstance(df, pd.DataFrame) and not df.empty:
                     # Flatten MultiIndex columns for Excel compatibility

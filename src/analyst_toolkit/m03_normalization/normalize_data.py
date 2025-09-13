@@ -95,7 +95,35 @@ def apply_normalization(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
             parsed_info = []
             for col, settings in datetime_rules.items():
                 if col in df_normalized.columns:
-                    df_normalized[col] = pd.to_datetime(df_normalized[col], format=settings.get('format', 'auto'), errors='coerce')
+                    # Respect config and handle 'auto' format by not passing a format string
+                    fmt = settings.get('format')
+                    errors = settings.get('errors', 'coerce')
+                    dayfirst = bool(settings.get('dayfirst', False))
+                    yearfirst = bool(settings.get('yearfirst', False))
+                    utc = settings.get('utc', None)
+
+                    try:
+                        if fmt in (None, '', 'auto'):
+                            df_normalized[col] = pd.to_datetime(
+                                df_normalized[col],
+                                errors=errors,
+                                dayfirst=dayfirst,
+                                yearfirst=yearfirst,
+                                utc=utc,
+                            )
+                        else:
+                            df_normalized[col] = pd.to_datetime(
+                                df_normalized[col],
+                                format=fmt,
+                                errors=errors,
+                                dayfirst=dayfirst,
+                                yearfirst=yearfirst,
+                                utc=utc,
+                            )
+                    except TypeError:
+                        # Fallback for pandas versions without some kwargs
+                        df_normalized[col] = pd.to_datetime(df_normalized[col], format=None if fmt in (None, '', 'auto') else fmt, errors=errors)
+
                     parsed_info.append({"Column": col, "Target Type": "datetime64[ns]"})
             if parsed_info: changelog['datetimes_parsed'] = pd.DataFrame(parsed_info)
     except Exception as e:
