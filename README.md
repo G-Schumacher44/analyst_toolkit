@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.1-blueviolet">
 </p>
 
 # 🧪 Analyst Toolkit
@@ -74,22 +74,23 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 <summary><strong>🫆 version release notes</strong></summary>
 
 **v0.2.1**
-**v0.2.1**
-  - **Datetime Parsing (Normalization)**:
-    - Respects YAML config (`format`, `errors`, `dayfirst`, `yearfirst`, `utc`).
-    - Treats `auto` as “no explicit format” instead of a literal string.
-    - Fix ensures no false `"auto"` failures during parsing.
-    - File: `src/analyst_toolkit/m03_normalization/normalize_data.py:98`
-  - **Excel Export (Stability)**:
-    - Explicit number formats applied for consistent cross-platform rendering.
-    - **Date:** `yyyy-mm-dd`  
-      **Datetime:** `yyyy-mm-dd hh:mm:ss`
-    - Compatible with Excel and Apple Numbers.
-    - File: `src/analyst_toolkit/m00_utils/export_utils.py:51`
-  - **Behavioral Impact**:
-    - Normalization now correctly coerces date columns per YAML.
-    - `.xlsx` reports display stable, consistent formats.
-    - No change to `.csv` exports.
+  - **Normalization · Datetime parsing**
+    - Supports `format` or `formats` (multi-format, tried in order).
+    - Strict mode: `errors: 'raise'` fails fast with a clear error listing sample offending values.
+    - Honors `dayfirst`, `yearfirst`, `utc`; optional `make_naive` drops tz post-parse.
+    - Treats `auto` as infer (omits explicit format) to avoid false failures.
+    - File: `src/analyst_toolkit/m03_normalization/normalize_data.py`
+  - **Exports · Excel date stability**
+    - Applies explicit Excel formats for dates/datetimes for cross-platform rendering (Excel/Apple Numbers).
+    - Date: `yyyy-mm-dd`; Datetime: `yyyy-mm-dd hh:mm:ss`.
+    - File: `src/analyst_toolkit/m00_utils/export_utils.py`
+  - **Configs & Docs**
+    - Template YAML updated with `utc`, `make_naive`, and commented `formats` examples.
+    - Config and notebook guides document the new options and strict-mode behavior.
+    - Files: `config/normalization_config_template.yaml`, `resource_hub/config_guide.md`, `resource_hub/notebook_usage_guide.md`
+  - **Behavioral impact**
+    - Correct, configurable parsing with optional strict failures; stable date display in `.xlsx`.
+    - Backward-compatible defaults preserved (`utc: false`, `make_naive: true`).
 
 **v0.2.0**
   - **Standardized Configuration Handling**: All modules (`diagnostics`, `validation`, `normalization`, `outliers`, `imputation`, `final_audit`) now intelligently parse their own configuration blocks.

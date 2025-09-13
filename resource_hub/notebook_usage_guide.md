@@ -136,6 +136,34 @@ df = run_normalization_pipeline(
 
 Returns cleaned `df` after applying normalization steps.
 
+Tip: datetime parsing options
+
+- Configure under `normalization.rules.parse_datetimes` in your YAML.
+- Supported keys:
+  - `format` or `formats` (list, tried in order)
+  - `errors`: `coerce` | `raise` | `ignore`
+  - `dayfirst`, `yearfirst`
+  - `utc`: parse/normalize to UTC (tz-aware)
+  - `make_naive`: drop tz info after parsing (keeps UTC wall time)
+
+Example YAML
+
+```yaml
+normalization:
+  rules:
+    parse_datetimes:
+      capture_date:
+        # single format or omit to infer
+        format: '%Y-%m-%d'
+        # or multiple formats, tried in order
+        # formats: ['%Y-%m-%d', '%m/%d/%Y']
+        errors: 'coerce'
+        utc: false
+        make_naive: true
+        # If you want failures on any bad value:
+        # errors: 'raise'  # module stops with a clear list of offending samples
+```
+
 ---
 
 ### 5. Duplicates

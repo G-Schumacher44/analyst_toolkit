@@ -101,33 +101,92 @@ def apply_normalization(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
                     dayfirst = bool(settings.get('dayfirst', False))
                     yearfirst = bool(settings.get('yearfirst', False))
                     utc = settings.get('utc', None)
+                    make_naive = bool(settings.get('make_naive', False))
+                    multi_formats = settings.get('formats') if isinstance(settings.get('formats'), list) else None
+
+                    before_na = df_normalized[col].isna().sum()
 
                     try:
-                        if fmt in (None, '', 'auto'):
-                            df_normalized[col] = pd.to_datetime(
-                                df_normalized[col],
-                                errors=errors,
-                                dayfirst=dayfirst,
-                                yearfirst=yearfirst,
-                                utc=utc,
-                            )
+                        src = df_normalized[col]
+                        if multi_formats:
+                            # Try each format sequentially and combine results
+                            combined = None
+                            for f in multi_formats:
+                                parsed_step = pd.to_datetime(
+                                    src,
+                                    format=f,
+                                    errors='coerce',
+                                    dayfirst=dayfirst,
+                                    yearfirst=yearfirst,
+                                    utc=utc,
+                                )
+                                combined = parsed_step if combined is None else combined.fillna(parsed_step)
+                            # Fallback pass for anything still unparsed if user allowed infer
+                            if fmt in (None, '', 'auto'):
+                                auto_parsed = pd.to_datetime(src, errors='coerce', dayfirst=dayfirst, yearfirst=yearfirst, utc=utc)
+                                combined = combined.fillna(auto_parsed)
+                            parsed_series = combined
                         else:
-                            df_normalized[col] = pd.to_datetime(
-                                df_normalized[col],
-                                format=fmt,
-                                errors=errors,
-                                dayfirst=dayfirst,
-                                yearfirst=yearfirst,
-                                utc=utc,
-                            )
+                            # Single-format or infer
+                            if fmt in (None, '', 'auto'):
+                                parsed_series = pd.to_datetime(
+                                    src,
+                                    errors='coerce' if errors == 'raise' else errors,
+                                    dayfirst=dayfirst,
+                                    yearfirst=yearfirst,
+                                    utc=utc,
+                                )
+                            else:
+                                parsed_series = pd.to_datetime(
+                                    src,
+                                    format=fmt,
+                                    errors='coerce' if errors == 'raise' else errors,
+                                    dayfirst=dayfirst,
+                                    yearfirst=yearfirst,
+                                    utc=utc,
+                                )
                     except TypeError:
                         # Fallback for pandas versions without some kwargs
-                        df_normalized[col] = pd.to_datetime(df_normalized[col], format=None if fmt in (None, '', 'auto') else fmt, errors=errors)
+                        parsed_series = pd.to_datetime(src, format=None if (multi_formats or fmt in (None, '', 'auto')) else fmt, errors='coerce' if errors == 'raise' else errors)
 
-                    parsed_info.append({"Column": col, "Target Type": "datetime64[ns]"})
+                    # Apply strict/ignore/coerce policies
+                    if errors == 'raise':
+                        unparsed_mask = src.notna() & parsed_series.isna()
+                        if bool(unparsed_mask.any()):
+                            bad_vals = src[unparsed_mask].astype(str).unique().tolist()
+                            examples = bad_vals[:5]
+                            raise ValueError(f"[strict] Datetime parsing failed for column '{col}': {int(unparsed_mask.sum())} unparsable non-null values. Formats={multi_formats or fmt or 'infer'}. Examples={examples}")
+                        df_normalized[col] = parsed_series
+                    elif errors == 'ignore':
+                        # Leave column unchanged
+                        after_na = before_na
+                        parsed_info.append({"Column": col, "DType": str(df_normalized[col].dtype), "NaT Added": 0, "Policy": "ignore"})
+                        continue
+                    else:
+                        # coerce or anything else
+                        df_normalized[col] = parsed_series
+
+                    # Optional: drop timezone info after parsing (keep UTC wall time)
+                    if make_naive:
+                        try:
+                            df_normalized[col] = df_normalized[col].dt.tz_localize(None)
+                        except Exception:
+                            pass
+
+                    after_na = df_normalized[col].isna().sum()
+                    nat_added = max(0, int(after_na - before_na))
+                    parsed_info.append({
+                        "Column": col,
+                        "DType": str(df_normalized[col].dtype),
+                        "NaT Added": nat_added,
+                        "Policy": errors,
+                    })
             if parsed_info: changelog['datetimes_parsed'] = pd.DataFrame(parsed_info)
     except Exception as e:
         logging.error(f"Failed during datetime parsing: {e}")
+        # Re-raise strict parsing failures to honor errors: 'raise'
+        if isinstance(e, ValueError) and str(e).startswith("[strict]"):
+            raise
             
     # --- 6. Coerce Final Dtypes ---
     try:

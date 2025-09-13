@@ -165,6 +165,8 @@ This configuration governs the **Normalization** module, which applies rule-base
   - `master_list`: List of valid values
   - `score_cutoff`: Minimum similarity score
 - `parse_datetimes`: Force conversion of date columns
+  - Options: `format` or `formats` (list), `errors` (`coerce`|`raise`|`ignore`), `dayfirst`, `yearfirst`, `utc`, `make_naive`
+  - Strict mode: with `errors: 'raise'`, normalization stops with a clear error if any non-null values remain unparsable after trying the specified format(s). The message lists a sample of offending values.
 - `coerce_dtypes`: Enforce column data types (e.g. float64, int64)
 - `preview_columns`: Fields shown in preview output or reports
 - `settings`: Controls export, joblib checkpointing, and inline rendering
@@ -196,8 +198,14 @@ normalization:
 
     parse_datetimes:
       capture_date:
+        # Single format or let pandas infer with 'auto' (omit format)
         format: '%Y-%m-%d'
+        # Or support multiple input formats, tried in order (optional)
+        # formats: ['%Y-%m-%d', '%m/%d/%Y', '%Y.%m.%d']
         errors: 'coerce'
+        # Timezone/naive controls (optional)
+        utc: false          # set true to parse/normalize to UTC (tz-aware)
+        make_naive: true    # drop tz info after parsing, leaving UTC wall time
 
     coerce_dtypes:
       bill_length_mm: 'float64'
