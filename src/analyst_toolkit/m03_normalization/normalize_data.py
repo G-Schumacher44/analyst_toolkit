@@ -97,7 +97,12 @@ def apply_normalization(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
                 if col in df_normalized.columns:
                     # Respect config and handle 'auto' format by not passing a format string
                     fmt = settings.get('format')
-                    errors = settings.get('errors', 'coerce')
+                    # Normalize errors value to be case-insensitive and robust
+                    errors_raw = settings.get('errors', 'coerce')
+                    errors = str(errors_raw).strip().lower()
+                    # Normalize 'auto' format sentinel
+                    if isinstance(fmt, str) and fmt.strip().lower() == 'auto':
+                        fmt = 'auto'
                     dayfirst = bool(settings.get('dayfirst', False))
                     yearfirst = bool(settings.get('yearfirst', False))
                     utc = settings.get('utc', None)
