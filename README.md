@@ -84,6 +84,13 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
     - Applies explicit Excel formats for dates/datetimes for cross-platform rendering (Excel/Apple Numbers).
     - Date: `yyyy-mm-dd`; Datetime: `yyyy-mm-dd hh:mm:ss`.
     - File: `src/analyst_toolkit/m00_utils/export_utils.py`
+  - **Duplicates · Subset-focused clusters**
+    - Dashboard clusters now focus on the chosen `subset_columns` for clarity.
+    - Adds a "Duplicate Keys (subset only)" summary with counts (keys where count ≥ 2).
+    - Adds a "Duplicate Rows (subset columns only)" view to show exact duplicate keys without unrelated columns.
+    - Applies to both remove and flag modes; reduces confusion from adjacent-but-not-equal rows.
+    - Note: NaT values in subset compare equal in pandas; preview reflects that behavior.
+    - File: `src/analyst_toolkit/m04_duplicates/dup_display.py`
   - **Configs & Docs**
     - Template YAML updated with `utc`, `make_naive`, and commented `formats` examples.
     - Config and notebook guides document the new options and strict-mode behavior.

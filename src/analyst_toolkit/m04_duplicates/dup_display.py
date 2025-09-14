@@ -60,6 +60,53 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
     details_block = ""
     clusters_block = ""
 
+    def _build_subset_clusters_blocks(clusters_df: pd.DataFrame, subset_cols: list) -> str:
+        """Return HTML blocks focused on the chosen subset: key summary + subset-only rows."""
+        if clusters_df is None or clusters_df.empty:
+            return ""
+        if subset_cols:
+            # 1) Duplicate keys with counts (n >= 2)
+            try:
+                key_counts = clusters_df.groupby(subset_cols).size().reset_index(name='count')
+                key_counts = key_counts[key_counts['count'] >= 2].sort_values(
+                    by=(['count'] + subset_cols), ascending=([False] + [True]*len(subset_cols))
+                )
+            except Exception:
+                key_counts = None
+            key_counts_html = to_html_table(key_counts, max_rows=20) if key_counts is not None and not key_counts.empty else "<p><em>No duplicate keys found.</em></p>"
+
+            # 2) Row-level subset-only view
+            try:
+                subset_only = clusters_df[subset_cols].sort_values(by=subset_cols)
+            except Exception:
+                subset_only = clusters_df
+            subset_only_html = to_html_table(subset_only, max_rows=20)
+
+            return f"""
+            <details open>
+                <summary><strong>🔑 Duplicate Keys (subset only)</strong></summary>
+                <div style=\"max-height: 300px; overflow-y: auto; margin-top: 1em; padding-top: 4px;\">
+                    {key_counts_html}
+                </div>
+            </details>
+            <details>
+                <summary><strong>📋 Duplicate Rows (subset columns only)</strong></summary>
+                <div style=\"max-height: 400px; overflow-y: auto; margin-top: 1em; padding-top: 4px;\">
+                    {subset_only_html}
+                </div>
+            </details>
+            """
+        else:
+            clusters_html = to_html_table(clusters_df, max_rows=20)
+            return f"""
+            <details open>
+                <summary><strong>🔍 Duplicate Clusters Found (click to scroll)</strong></summary>
+                <div style=\"max-height: 400px; overflow-y: auto; margin-top: 1em; padding-top: 4px;\">
+                    {clusters_html}
+                </div>
+            </details>
+            """
+
     if is_remove_mode:
         # In remove mode, show what was dropped and provide full clusters for context.
         dropped_df = report.get("dropped_rows")
@@ -76,28 +123,12 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
         
         all_duplicates_df = report.get("all_duplicate_instances")
         if all_duplicates_df is not None and not all_duplicates_df.empty:
-            clusters_html = to_html_table(all_duplicates_df, max_rows=20)
-            clusters_block = f"""
-            <details>
-                <summary><strong>🔬 All Duplicate Instances Found (for context, click to expand)</strong></summary>
-                <div style="max-height: 400px; overflow-y: auto; margin-top: 1em; padding-top: 4px;">
-                    {clusters_html}
-                </div>
-            </details>
-            """
+            clusters_block = _build_subset_clusters_blocks(all_duplicates_df, subset_cols)
     else: # flag mode
         # In flag mode, the main detail to show is the clusters of duplicates found.
         clusters_df = report.get("duplicate_clusters")
         if clusters_df is not None and not clusters_df.empty:
-            clusters_html = to_html_table(clusters_df, max_rows=20)
-            details_block = f"""
-            <details open>
-                <summary><strong>🔍 Duplicate Clusters Found (click to scroll)</strong></summary>
-                <div style="max-height: 400px; overflow-y: auto; margin-top: 1em; padding-top: 4px;">
-                    {clusters_html}
-                </div>
-            </details>
-            """
+            details_block = _build_subset_clusters_blocks(clusters_df, subset_cols)
     
     # --- 4. Assemble and Display all HTML content at once ---
     final_html = f"<div>{banner_html}{summary_block}{details_block}{clusters_block}</div>"
