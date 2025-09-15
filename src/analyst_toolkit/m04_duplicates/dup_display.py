@@ -33,12 +33,20 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
     # --- 1. Banner ---
     # Determine mode from the report content to build the correct banner
     is_remove_mode = 'Rows Removed' in summary_df['Metric'].values
-    
+
+    def _safe_metric(df: pd.DataFrame, name: str) -> int:
+        try:
+            series = df.loc[df['Metric'] == name, 'Value']
+            return int(series.iloc[0]) if not series.empty else 0
+        except Exception:
+            return 0
+
     if is_remove_mode:
-        rows_changed = summary_df.loc[summary_df['Metric'] == 'Rows Removed', 'Value'].iloc[0]
+        rows_changed = _safe_metric(summary_df, 'Rows Removed')
         banner_metric = f"<strong>Rows Removed:</strong> {rows_changed}"
     else:  # flag mode
-        rows_changed = summary_df.loc[summary_df['Metric'] == 'Duplicate Rows Flagged', 'Value'].iloc[0]
+        rows_changed = _safe_metric(summary_df, 'Duplicate Rows Flagged')
+        # If no explicit metric present (e.g., no duplicates case), default nicely to 0
         banner_metric = f"<strong>Rows Flagged:</strong> {rows_changed}"
 
     status_emoji = "✅" if rows_changed == 0 else "⚠️"
