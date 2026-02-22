@@ -112,6 +112,17 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     return df
 
 
+def should_export_html(config: dict) -> bool:
+    """Return True if HTML export should run.
+
+    Defaults to True when ANALYST_REPORT_BUCKET is set (container/production).
+    Callers can explicitly override with export_html: true/false in config.
+    """
+    if "export_html" in config:
+        return bool(config["export_html"])
+    return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
+
+
 def upload_report(local_path: str, run_id: str, module: str) -> str:
     """
     Upload a local HTML report to GCS and return its public HTTPS URL.

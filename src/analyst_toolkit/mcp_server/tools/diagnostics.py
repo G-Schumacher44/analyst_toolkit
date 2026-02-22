@@ -2,7 +2,7 @@
 
 from analyst_toolkit.m00_utils.export_utils import export_html_report
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
-from analyst_toolkit.mcp_server.io import load_input, upload_report
+from analyst_toolkit.mcp_server.io import load_input, should_export_html, upload_report
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -26,7 +26,7 @@ async def _toolkit_diagnostics(
 
     artifact_path = ""
     artifact_url = ""
-    if config.get("export_html", False):
+    if should_export_html(config):
         html_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
         artifact_path = export_html_report(profile_export, html_path, "Diagnostics", run_id)
         artifact_url = upload_report(artifact_path, run_id, "diagnostics")

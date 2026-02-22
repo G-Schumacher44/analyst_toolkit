@@ -3,7 +3,7 @@
 from analyst_toolkit.m00_utils.export_utils import export_html_report
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
-from analyst_toolkit.mcp_server.io import load_input, upload_report
+from analyst_toolkit.mcp_server.io import load_input, should_export_html, upload_report
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -41,7 +41,7 @@ async def _toolkit_imputation(
 
     artifact_path = ""
     artifact_url = ""
-    if config.get("export_html", False):
+    if should_export_html(config):
         report_tables = generate_imputation_report(df_original, df_imputed, detailed_changelog)
         html_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
         artifact_path = export_html_report(report_tables, html_path, "Imputation", run_id)
