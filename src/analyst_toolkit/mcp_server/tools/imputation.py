@@ -1,7 +1,7 @@
 """MCP tool: toolkit_imputation — missing value imputation via M07."""
 
 from analyst_toolkit.mcp_server.schemas import base_input_schema
-from analyst_toolkit.mcp_server.io import load_input
+from analyst_toolkit.mcp_server.io import load_input, upload_report
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
@@ -32,10 +32,12 @@ async def _toolkit_imputation(gcs_path: str, config: dict = {}, run_id: str = "m
     nulls_filled = nulls_before - nulls_after
 
     artifact_path = ""
+    artifact_url = ""
     if config.get("export_html", False):
         report_tables = generate_imputation_report(df_original, df_imputed, detailed_changelog)
         html_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
         artifact_path = export_html_report(report_tables, html_path, "Imputation", run_id)
+        artifact_url = upload_report(artifact_path, run_id, "imputation")
 
     return {
         "status": "pass",
@@ -45,6 +47,7 @@ async def _toolkit_imputation(gcs_path: str, config: dict = {}, run_id: str = "m
         "columns_imputed": columns_imputed,
         "nulls_filled": nulls_filled,
         "artifact_path": artifact_path,
+        "artifact_url": artifact_url,
     }
 
 

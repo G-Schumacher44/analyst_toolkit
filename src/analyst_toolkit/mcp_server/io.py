@@ -1,5 +1,5 @@
 """
-io.py — Data loading for the analyst_toolkit MCP server.
+io.py — Data loading and artifact upload for the analyst_toolkit MCP server.
 
 Dispatches on path prefix:
   gs://...          → GCS pull (parquet or CSV)
@@ -9,6 +9,11 @@ Dispatches on path prefix:
 GCS auth: GOOGLE_APPLICATION_CREDENTIALS env var (mounted in Docker).
 Manifest: if _MANIFEST.json exists at the partition path, reads file list
 from it rather than globbing all parquet files (faster for large partitions).
+
+Report upload:
+  ANALYST_REPORT_BUCKET  — GCS bucket, e.g. gs://fridai-reports (no trailing slash)
+  ANALYST_REPORT_PREFIX  — optional blob prefix, default "analyst_toolkit/reports"
+  If ANALYST_REPORT_BUCKET is unset, upload_report() is a no-op returning "".
 """
 
 import json
@@ -105,3 +110,51 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     df = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
     logger.info(f"Loaded {df.shape[0]} rows × {df.shape[1]} cols from {gcs_path}")
     return df
+
+
+def upload_report(local_path: str, run_id: str, module: str) -> str:
+    """
+    Upload a local HTML report to GCS and return its public HTTPS URL.
+
+    Reads ANALYST_REPORT_BUCKET and ANALYST_REPORT_PREFIX from env.
+    If ANALYST_REPORT_BUCKET is not set, returns "" (no-op for local dev).
+
+    Blob path: {prefix}/{run_id}/{module}/{filename}
+    Public URL: https://storage.googleapis.com/{bucket}/{blob}
+
+    Args:
+        local_path: Absolute or relative path to the HTML file on disk.
+        run_id:     Run identifier (used as a path component in GCS).
+        module:     Module name (e.g. "outliers", "imputation").
+
+    Returns:
+        Public GCS HTTPS URL string, or "" if upload is disabled.
+    """
+    bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    if not bucket_uri:
+        return ""
+
+    try:
+        from google.cloud import storage
+    except ImportError:
+        logger.warning("google-cloud-storage not installed; skipping report upload.")
+        return ""
+
+    prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
+    filename = Path(local_path).name
+
+    # Parse bucket name from gs:// URI or bare name
+    bucket_name = bucket_uri.removeprefix("gs://")
+    blob_path = f"{prefix}/{run_id}/{module}/{filename}"
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        blob.upload_from_filename(local_path, content_type="text/html")
+        url = f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
+        logger.info(f"Uploaded report → {url}")
+        return url
+    except Exception as exc:
+        logger.warning(f"GCS upload failed for {local_path}: {exc}")
+        return ""

@@ -1,7 +1,7 @@
 """MCP tool: toolkit_normalization — data cleaning and standardization via M03."""
 
 from analyst_toolkit.mcp_server.schemas import base_input_schema
-from analyst_toolkit.mcp_server.io import load_input
+from analyst_toolkit.mcp_server.io import load_input, upload_report
 from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
 from analyst_toolkit.m00_utils.report_generator import generate_transformation_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
@@ -19,6 +19,7 @@ async def _toolkit_normalization(gcs_path: str, config: dict = {}, run_id: str =
     changelog_rows = changes_made
 
     artifact_path = ""
+    artifact_url = ""
     if config.get("export_html", False):
         report_tables = generate_transformation_report(
             df_original=df,
@@ -30,6 +31,7 @@ async def _toolkit_normalization(gcs_path: str, config: dict = {}, run_id: str =
         )
         html_path = f"exports/reports/normalization/{run_id}_normalization_report.html"
         artifact_path = export_html_report(report_tables, html_path, "Normalization", run_id)
+        artifact_url = upload_report(artifact_path, run_id, "normalization")
 
     return {
         "status": "pass",
@@ -39,6 +41,7 @@ async def _toolkit_normalization(gcs_path: str, config: dict = {}, run_id: str =
         "changes_made": changes_made,
         "changelog_rows": changelog_rows,
         "artifact_path": artifact_path,
+        "artifact_url": artifact_url,
     }
 
 

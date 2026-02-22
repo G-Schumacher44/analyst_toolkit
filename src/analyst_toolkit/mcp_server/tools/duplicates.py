@@ -1,7 +1,7 @@
 """MCP tool: toolkit_duplicates — duplicate detection via M04."""
 
 from analyst_toolkit.mcp_server.schemas import base_input_schema
-from analyst_toolkit.mcp_server.io import load_input
+from analyst_toolkit.mcp_server.io import load_input, upload_report
 from analyst_toolkit.m04_duplicates.detect_dupes import detect_duplicates
 from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
@@ -18,10 +18,12 @@ async def _toolkit_duplicates(gcs_path: str, config: dict = {}, run_id: str = "m
     duplicate_count = int(detection_results.get("duplicate_count", 0))
 
     artifact_path = ""
+    artifact_url = ""
     if config.get("export_html", False):
         report_tables = generate_duplicates_report(df, df_flagged, detection_results, mode, df_flagged=df_flagged)
         html_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
         artifact_path = export_html_report(report_tables, html_path, "Duplicates", run_id)
+        artifact_url = upload_report(artifact_path, run_id, "duplicates")
 
     return {
         "status": "pass" if duplicate_count == 0 else "warn",
@@ -31,6 +33,7 @@ async def _toolkit_duplicates(gcs_path: str, config: dict = {}, run_id: str = "m
         "duplicate_count": duplicate_count,
         "mode": mode,
         "artifact_path": artifact_path,
+        "artifact_url": artifact_url,
     }
 
 
