@@ -187,7 +187,7 @@ def generate_transformation_report(
     Returns:
         dict[str, pd.DataFrame]: dictionary of DataFrames for export
     """
-    report_tables = {}
+    report_tables: dict[str, pd.DataFrame | dict[str, pd.DataFrame]] = {}
 
     # 1. Detect row-level changes (align columns first)
     shared_cols = df_original.columns.intersection(df_transformed.columns)
@@ -236,8 +236,10 @@ def generate_transformation_report(
         )
 
     # 3. Column-wise change summary
+    diff_table = report_tables["diff_table"]
+    assert isinstance(diff_table, pd.DataFrame)
     col_change_summary = (
-        report_tables["diff_table"].groupby("column").size().reset_index(name="change_count")
+        diff_table.groupby("column").size().reset_index(name="change_count")
     )
     report_tables["column_changes_summary"] = col_change_summary
 
