@@ -54,6 +54,8 @@ outlier_detection:
     run: true
     export_dir: "exports/reports/outliers/detection/"
     as_csv: false                              # false = XLSX with multiple sheets
+    export_html: true
+    export_html_path: "exports/reports/outliers/detection/{run_id}_outlier_report.html"
 
   # 💾 Checkpoint results
   checkpoint:

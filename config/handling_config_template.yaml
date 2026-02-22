@@ -46,6 +46,8 @@ outlier_handling:
       run: true
       export_path: "exports/reports/outliers/handling/outlier_handling_report.xlsx"
       as_csv: false            # false = single XLSX report with multiple sheets
+      export_html: true
+      export_html_path: "exports/reports/outliers/handling/{run_id}_outlier_handling_report.html"
 
     checkpoint:
       run: true

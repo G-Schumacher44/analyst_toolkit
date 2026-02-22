@@ -22,7 +22,7 @@ Example:
 import pandas as pd
 import logging
 from analyst_toolkit.m00_utils.load_data import load_csv
-from analyst_toolkit.m00_utils.export_utils import export_dataframes, save_joblib
+from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report, save_joblib
 from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
 from analyst_toolkit.m03_normalization.display_normalization import display_normalization_summary
 from analyst_toolkit.m00_utils.report_generator import generate_transformation_report
@@ -71,6 +71,9 @@ def run_normalization_pipeline(config: dict, notebook: bool = False, df: pd.Data
     if settings.get("export", True):
         export_path = settings.get("export_path", f"exports/reports/normalization/normalization_report_{run_id}.xlsx")
         export_dataframes(report_tables, export_path)
+        if settings.get("export_html", False):
+            html_path = settings.get("export_html_path", "exports/reports/normalization/{run_id}_normalization_report.html").format(run_id=run_id)
+            export_html_report(report_tables, html_path, "Normalization", run_id)
 
     checkpoint_cfg = settings.get("checkpoint", {})
     if isinstance(checkpoint_cfg, dict) and checkpoint_cfg.get("run", False):

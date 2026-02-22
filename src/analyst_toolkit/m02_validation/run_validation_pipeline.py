@@ -23,7 +23,7 @@ import logging
 import pandas as pd
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
-from analyst_toolkit.m00_utils.export_utils import export_validation_results, save_joblib
+from analyst_toolkit.m00_utils.export_utils import export_validation_results, export_html_report, save_joblib
 from analyst_toolkit.m02_validation.validation_display import display_validation_summary
 
 def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
@@ -87,6 +87,14 @@ def run_validation_pipeline(config: dict, notebook: bool = False, df: pd.DataFra
         settings = module_cfg.get("settings", {})
         if settings.get("export", True):
             export_validation_results(validation_results, config=settings, run_id=run_id)
+            if settings.get("export_html", False):
+                html_path = settings.get("export_html_path", "exports/reports/validation/{run_id}_validation_report.html").format(run_id=run_id)
+                checks = {k: v for k, v in validation_results.items() if isinstance(v, dict) and "passed" in v}
+                report_tables = {
+                    k: pd.DataFrame([{"Rule": k, "Passed": v.get("passed"), "Description": v.get("rule_description", "")}])
+                    for k, v in checks.items()
+                }
+                export_html_report(report_tables, html_path, "Validation", run_id)
 
         if settings.get("show_inline", True) and notebook:
             display_validation_summary(validation_results, notebook=notebook)

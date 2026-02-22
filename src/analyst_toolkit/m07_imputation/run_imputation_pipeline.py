@@ -25,7 +25,7 @@ import logging
 import pandas as pd
 from pathlib import Path  # <-- CORRECTED: Added missing import
 from joblib import load as load_joblib
-from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes
+from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes, export_html_report
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m07_imputation.display_imputation import display_imputation_summary
@@ -98,6 +98,11 @@ def run_imputation_pipeline(config: dict, df: pd.DataFrame = None, notebook: boo
             file_format=file_format,
             run_id=run_id
         )
+        if export_cfg.get("export_html", False):
+            html_path = export_cfg.get("export_html_path", f"exports/reports/imputation/{run_id}_imputation_report.html")
+            if "{run_id}" in html_path:
+                html_path = html_path.format(run_id=run_id)
+            export_html_report(imputation_report, html_path, "Imputation", run_id)
     
     checkpoint_cfg = settings.get("checkpoint", {})
     if isinstance(checkpoint_cfg, dict) and checkpoint_cfg.get("run", False):

@@ -1,0 +1,36 @@
+# docker-compose.mcp.yml — analyst_toolkit MCP Server
+#
+# Usage:
+#   docker-compose -f docker-compose.mcp.yml up --build
+#
+# Environment:
+#   GOOGLE_APPLICATION_CREDENTIALS — path to GCS service account key (mounted below)
+#   ANALYST_MCP_PORT               — override default port 8001 (optional)
+#
+# fridai-core integration:
+#   Set FRIDAI_ANALYST_MCP_ENABLED=true and FRIDAI_ANALYST_MCP_URL=http://127.0.0.1:8001
+#   in fridai-core's environment. The hub will discover tools via POST /rpc.
+
+services:
+  analyst-toolkit-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    ports:
+      - "${ANALYST_MCP_PORT:-8001}:8001"
+    environment:
+      # GCS auth — set GOOGLE_APPLICATION_CREDENTIALS to point at the mounted key file
+      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp_creds
+    volumes:
+      # Mount GCS service account key (do not bake credentials into the image)
+      # Create: echo '{"type":"service_account",...}' > secrets/gcp_creds.json
+      - ./secrets/gcp_creds.json:/run/secrets/gcp_creds:ro
+      # Optional: mount local exports dir so HTML reports are accessible on host
+      - ./exports:/app/exports
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -22,7 +22,7 @@ Example:
 import logging
 import pandas as pd
 from joblib import load as load_joblib
-from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes
+from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes, export_html_report
 from analyst_toolkit.m06_outlier_handling.outlier_handler import handle_outliers
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_handling_report
 from analyst_toolkit.m06_outlier_handling.display_handling import display_handling_summary
@@ -72,6 +72,9 @@ def run_outlier_handling_pipeline(config: dict, df: pd.DataFrame = None, detecti
             file_format=file_format,
             run_id=run_id
         )
+        if export_cfg.get("export_html", False):
+            html_path = export_cfg.get("export_html_path", f"exports/reports/outliers/handling/{run_id}_outlier_handling_report.html").format(run_id=run_id)
+            export_html_report(handling_report, html_path, "Outlier Handling", run_id)
     
     # 5. Checkpoint the handled DataFrame
     checkpoint_cfg = settings.get("checkpoint", {})

@@ -69,6 +69,46 @@ def export_dataframes(data_dict: dict[str, pd.DataFrame], export_path: str, file
 
 
 
+def export_html_report(
+    report_tables: dict,
+    export_path: str,
+    module_name: str,
+    run_id: str,
+    plot_paths: dict | None = None,
+) -> str:
+    """
+    Generate a self-contained HTML report and write it to disk.
+
+    Calls generate_html_report() from report_generator and writes the result.
+    Returns the absolute path written — used by MCP tools as artifact_path.
+
+    Args:
+        report_tables: dict[str, pd.DataFrame] keyed by section name.
+        export_path: Destination file path (e.g. "exports/reports/outliers/run.html").
+        module_name: Display name for the module.
+        run_id: Pipeline run identifier.
+        plot_paths: Optional dict[str, str] of plot name → local file path.
+
+    Returns:
+        str: Absolute path of the written HTML file.
+    """
+    from analyst_toolkit.m00_utils.report_generator import generate_html_report
+
+    path = Path(export_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    html = generate_html_report(
+        report_tables=report_tables,
+        module_name=module_name,
+        run_id=run_id,
+        plot_paths=plot_paths,
+    )
+
+    path.write_text(html, encoding="utf-8")
+    logging.info(f"📄 HTML report written to {path.resolve()}")
+    return str(path.resolve())
+
+
 def export_validation_results(results: dict, config: dict, run_id: str = None):
     """
     Refactored wrapper to export structured validation results.

@@ -22,7 +22,7 @@ import logging
 import pandas as pd
 from pathlib import Path
 from analyst_toolkit.m00_utils.load_data import load_csv
-from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes
+from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes, export_html_report
 from analyst_toolkit.m05_detect_outliers.detect_outliers import detect_outliers
 from analyst_toolkit.m05_detect_outliers.plot_outliers import generate_outlier_plots
 from analyst_toolkit.m05_detect_outliers.display_detection import display_detection_summary
@@ -75,6 +75,9 @@ def run_outlier_detection_pipeline(config: dict, df: pd.DataFrame = None, notebo
     if export_cfg.get("run") and outlier_report:
         export_path_template = export_cfg.get("export_path", "exports/reports/outliers/detection/{run_id}_outlier_report.xlsx")
         export_dataframes(data_dict=outlier_report, export_path=export_path_template.format(run_id=run_id))
+        if export_cfg.get("export_html", False):
+            html_path_template = export_cfg.get("export_html_path", "exports/reports/outliers/detection/{run_id}_outlier_report.html")
+            export_html_report(outlier_report, html_path_template.format(run_id=run_id), "Outlier Detection", run_id)
     
     if plotting_cfg.get("show_plots_inline") and notebook:
         display_detection_summary(detection_results, plot_save_dir=plot_save_dir)

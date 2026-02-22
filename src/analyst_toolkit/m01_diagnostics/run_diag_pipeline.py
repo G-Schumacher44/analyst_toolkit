@@ -24,7 +24,7 @@ from pathlib import Path
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.m01_diagnostics.diag_display import display_profile_summary
 from analyst_toolkit.m00_utils.load_data import load_csv
-from analyst_toolkit.m00_utils.export_utils import export_dataframes, save_joblib
+from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report, save_joblib
 from analyst_toolkit.m08_visuals.distributions import plot_continuous_distribution, plot_categorical_distribution
 from analyst_toolkit.m08_visuals.summary_plots import plot_missingness, plot_correlation_heatmap, plot_dtype_summary
 
@@ -64,6 +64,9 @@ def run_diag_pipeline(config: dict, notebook: bool = False, df: pd.DataFrame = N
                 export_path=export_path,
                 run_id=run_id
             )
+            if settings.get("export_html", False):
+                html_path = settings.get("export_html_path", "exports/reports/diagnostics/{run_id}_diagnostics_report.html").format(run_id=run_id)
+                export_html_report(full_profile["for_export"], html_path, "Diagnostics", run_id)
 
         plot_paths = {}
         plotting_cfg = module_cfg.get("plotting", {})

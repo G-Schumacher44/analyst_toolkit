@@ -30,7 +30,7 @@ import logging
 import pandas as pd
 from joblib import load as load_joblib
 from analyst_toolkit.m00_utils.load_data import load_csv
-from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes
+from analyst_toolkit.m00_utils.export_utils import save_joblib, export_dataframes, export_html_report
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.m10_final_audit.final_audit_producer import run_final_audit_producer
 from analyst_toolkit.m10_final_audit.display_final_audit import display_final_audit_summary
@@ -129,6 +129,9 @@ def run_final_audit_pipeline(config: dict, df: pd.DataFrame = None, notebook: bo
         save_joblib(final_report, paths["report_joblib"].format(run_id=run_id))
         df_certified.to_csv(paths["checkpoint_csv"].format(run_id=run_id), index=False)
         save_joblib(df_certified, paths["checkpoint_joblib"].format(run_id=run_id))
+        if module_cfg.get("settings", {}).get("export_html", False):
+            html_path = paths.get("report_html", "exports/reports/final_audit/{run_id}_final_audit_report.html").format(run_id=run_id)
+            export_html_report(final_report, html_path, "Final Audit", run_id)
         logging.info("✅ Final artifacts exported successfully.")
         
     return df_certified

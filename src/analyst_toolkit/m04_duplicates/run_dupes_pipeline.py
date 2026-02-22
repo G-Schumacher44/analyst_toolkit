@@ -21,7 +21,7 @@ import logging
 import pandas as pd
 from pathlib import Path
 from analyst_toolkit.m00_utils.load_data import load_csv, load_joblib
-from analyst_toolkit.m00_utils.export_utils import export_duplicates_report, save_joblib
+from analyst_toolkit.m00_utils.export_utils import export_duplicates_report, export_html_report, save_joblib
 from .detect_dupes import detect_duplicates
 from .handle_dupes import handle_duplicates
 from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
@@ -119,6 +119,9 @@ def run_duplicates_pipeline(config: dict, df: pd.DataFrame = None, notebook: boo
             config=settings,
             run_id=run_id
         )
+        if settings.get("export_html", False):
+            html_path = settings.get("export_html_path", "exports/reports/duplicates/{run_id}_duplicates_report.html").format(run_id=run_id)
+            export_html_report(duplicates_report, html_path, "Duplicates", run_id)
     
     checkpoint_cfg = settings.get("checkpoint", {})
     if isinstance(checkpoint_cfg, dict) and checkpoint_cfg.get("run", False):
