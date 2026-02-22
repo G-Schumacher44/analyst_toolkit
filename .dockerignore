@@ -1,0 +1,43 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI / dev tooling
+.github/
+.pre-commit-config.yaml
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+.envrc
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Notebooks & docs (not needed in image)
+notebooks/
+demo_buildout/
+resource_hub/
+repo_files/
+
+# Data & exports (secrets/creds mounted at runtime)
+data/
+exports/
+*.csv
+*.xlsx
+*.parquet
+*.joblib
+
+# Tests (not needed in image)
+tests/
+
+# Misc
+.DS_Store
+*.log
+*.tmp
