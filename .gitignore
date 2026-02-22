@@ -56,6 +56,8 @@ exports/*
 *.pdf
 *.tsv
 *.png
+*.json
+!.vscode/settings.json
 !exports/sample/plots/
 !exports/sample/plots/*.png
 !exports/sample/reports/

@@ -17,13 +17,17 @@ async def _toolkit_infer_configs(
     modules = modules or []
     options = options or {}
     try:
-        from analyst_toolkit_deploy.infer_configs import infer_configs
-    except ImportError:
+        try:
+            from analyst_toolkit_deploy.infer_configs import infer_configs
+        except ImportError:
+            # Fallback for alternative package naming
+            from analyst_toolkit_deployment_utility.infer_configs import infer_configs
+    except ImportError as exc:
         return {
             "status": "error",
             "error": (
-                "analyst_toolkit_deploy is not installed. "
-                "Add it to requirements-mcp.txt and rebuild the container."
+                f"Deployment utility not found ({str(exc)}). "
+                "Ensure analyst-toolkit-deploy is in requirements-mcp.txt and rebuild."
             ),
             "configs": {},
             "modules_generated": [],
@@ -42,6 +46,8 @@ async def _toolkit_infer_configs(
     )
 
     return {
+        "status": "pass",
+        "module": "infer_configs",
         "configs": configs,
         "modules_generated": list(configs.keys()),
     }

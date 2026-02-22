@@ -25,7 +25,4 @@ google-cloud-storage>=2.14
 pydantic>=2.0
 
 # analyst_toolkit_deploy (for toolkit_infer_configs tool)
-# Install from local clone during development:
-#   pip install -e /path/to/analyst_toolkit_deployment_utility
-# Or from GitHub for container builds:
-# analyst-toolkit-deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git
+analyst-toolkit-deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git
