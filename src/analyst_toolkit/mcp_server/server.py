@@ -205,7 +205,12 @@ def main():
         logger.info(f"Starting Analyst Toolkit MCP Server in HTTP mode on port {args.port}")
         import uvicorn
 
-        uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="info")
+        uvicorn.run(
+            "analyst_toolkit.mcp_server.server:app",
+            host="0.0.0.0",
+            port=args.port,
+            log_level="info",
+        )
 
 
 if __name__ == "__main__":
