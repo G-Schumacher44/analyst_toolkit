@@ -6,6 +6,7 @@ from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
     run_outlier_detection_pipeline,
 )
 from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
     default_run_id,
     load_input,
     save_to_session,
@@ -58,14 +59,14 @@ async def _toolkit_outliers(
         if outlier_log is not None and not outlier_log.empty:
             export_dataframes(
                 {"outlier_log": outlier_log},
-                f"exports/reports/outliers/detection/outlier_report.xlsx",
+                "exports/reports/outliers/detection/outlier_report.xlsx",
                 file_format="xlsx",
                 run_id=run_id,
             )
             xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
             xlsx_url = upload_artifact(xlsx_path, run_id, "outliers")
 
-    return {
+    res = {
         "status": "pass" if outlier_count == 0 else "warn",
         "module": "outliers",
         "run_id": run_id,
@@ -77,6 +78,8 @@ async def _toolkit_outliers(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
     }
+    append_to_run_history(run_id, res)
+    return res
 
 
 # Self-register

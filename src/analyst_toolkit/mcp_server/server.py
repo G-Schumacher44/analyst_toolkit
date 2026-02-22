@@ -148,16 +148,17 @@ async def health() -> dict:
 # --- Tool Imports (Triggers Self-Registration) ---
 
 from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
+    auto_heal,
+    config_schema,
     diagnostics,
+    drift,
     duplicates,
     imputation,
     infer_configs,
     normalization,
     outliers,
     validation,
-    config_schema,
-    auto_heal,
-    drift,
+    cockpit,
 )
 
 # --- Entry point and transport selection ---
@@ -183,7 +184,12 @@ async def run_stdio():
 def main():
     parser = argparse.ArgumentParser(description="Analyst Toolkit MCP Server")
     parser.add_argument("--stdio", action="store_true", help="Run in stdio mode for desktop hosts")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("ANALYST_MCP_PORT", 8001)), help="HTTP port (default: 8001)")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("ANALYST_MCP_PORT", 8001)),
+        help="HTTP port (default: 8001)",
+    )
     args = parser.parse_args()
 
     if args.stdio or os.environ.get("ANALYST_MCP_STDIO", "").lower() == "true":

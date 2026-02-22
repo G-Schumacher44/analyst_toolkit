@@ -130,9 +130,7 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
             manifest_data = json.loads(manifest_blob.download_as_text())
             raw_files = manifest_data.get("files", [])
             # files entries may be bare strings or dicts with a "path" key
-            file_names: list[str] = [
-                f["path"] if isinstance(f, dict) else f for f in raw_files
-            ]
+            file_names: list[str] = [f["path"] if isinstance(f, dict) else f for f in raw_files]
             blobs = [bucket.blob(f"{prefix}/{f}") for f in file_names]
         else:
             logger.info(f"No manifest found, globbing {gcs_path}")
@@ -238,3 +236,40 @@ def upload_artifact(local_path: str, run_id: str, module: str) -> str:
 def upload_report(local_path: str, run_id: str, module: str) -> str:
     """Alias for upload_artifact — retained for backwards compatibility."""
     return upload_artifact(local_path, run_id, module)
+
+
+def append_to_run_history(run_id: str, entry: dict):
+    """
+    Append a tool result entry to the run's history ledger.
+    Saves to exports/reports/history/{run_id}_history.json
+    """
+    history_dir = Path("exports/reports/history")
+    history_dir.mkdir(parents=True, exist_ok=True)
+    
+    history_file = history_dir / f"{run_id}_history.json"
+    
+    history = []
+    if history_file.exists():
+        try:
+            with open(history_file, "r") as f:
+                history = json.load(f)
+        except Exception:
+            history = []
+            
+    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+    history.append(entry)
+    
+    with open(history_file, "w") as f:
+        json.dump(history, f, indent=2)
+    
+    # Also upload to GCS if possible
+    upload_artifact(str(history_file), run_id, "history")
+
+
+def get_run_history(run_id: str) -> list:
+    """Retrieve the history ledger for a run."""
+    history_file = Path("exports/reports/history") / f"{run_id}_history.json"
+    if history_file.exists():
+        with open(history_file, "r") as f:
+            return json.load(f)
+    return []

@@ -19,8 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir vendor/analyst_toolkit_deploy-0.2.6-py3-none-any.whl \
     && pip install --no-cache-dir -r requirements-mcp.txt
 
-# Copy toolkit source
+# Copy toolkit source and config
 COPY src/ src/
+COPY config/ config/
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8001

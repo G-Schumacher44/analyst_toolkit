@@ -1,8 +1,8 @@
 """MCP tool: toolkit_infer_configs — config generation via analyst_toolkit_deploy."""
 
-
-import tempfile
 import os
+import tempfile
+
 from analyst_toolkit.mcp_server.io import load_input, save_to_session
 
 

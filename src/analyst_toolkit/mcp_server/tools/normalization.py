@@ -4,6 +4,7 @@ from analyst_toolkit.m00_utils.export_utils import export_html_report, export_no
 from analyst_toolkit.m00_utils.report_generator import generate_transformation_report
 from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
 from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
     default_run_id,
     load_input,
     save_to_session,
@@ -50,7 +51,9 @@ async def _toolkit_normalization(
         artifact_url = upload_artifact(artifact_path, run_id, "normalization")
 
         xlsx_cfg = {"export_path": "exports/reports/normalization/normalization_report.xlsx"}
-        change_log_xlsx = change_log_df.head(10_000) if hasattr(change_log_df, "head") else change_log_df
+        change_log_xlsx = (
+            change_log_df.head(10_000) if hasattr(change_log_df, "head") else change_log_df
+        )
         export_normalization_results(
             {"change_log_df": change_log_xlsx, "null_audit_summary": None, "preview_diffs": {}},
             xlsx_cfg,
@@ -59,7 +62,7 @@ async def _toolkit_normalization(
         xlsx_path = f"exports/reports/normalization/{run_id}_normalization_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "normalization")
 
-    return {
+    res = {
         "status": "pass",
         "module": "normalization",
         "run_id": run_id,
@@ -70,6 +73,8 @@ async def _toolkit_normalization(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
     }
+    append_to_run_history(run_id, res)
+    return res
 
 
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402

@@ -3,6 +3,7 @@
 from analyst_toolkit.m00_utils.export_utils import export_html_report, export_profile_summary
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
     default_run_id,
     load_input,
     save_to_session,
@@ -46,12 +47,12 @@ async def _toolkit_diagnostics(
         artifact_path = export_html_report(profile_export, html_path, "Diagnostics", run_id)
         artifact_url = upload_artifact(artifact_path, run_id, "diagnostics")
 
-        xlsx_cfg = {"export_path": f"exports/reports/diagnostics/diagnostics_summary.xlsx"}
+        xlsx_cfg = {"export_path": "exports/reports/diagnostics/diagnostics_summary.xlsx"}
         export_profile_summary(profile_export, xlsx_cfg, run_id=run_id)
         xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_summary.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics")
 
-    return {
+    res = {
         "status": status,
         "module": "diagnostics",
         "run_id": run_id,
@@ -64,6 +65,8 @@ async def _toolkit_diagnostics(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
     }
+    append_to_run_history(run_id, res)
+    return res
 
 
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402

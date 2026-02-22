@@ -5,6 +5,7 @@ import pandas as pd
 from analyst_toolkit.m00_utils.export_utils import export_html_report, export_validation_results
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
     default_run_id,
     load_input,
     save_to_session,
@@ -64,7 +65,7 @@ async def _toolkit_validation(
         xlsx_path = f"exports/reports/validation/{run_id}_validation_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "validation")
 
-    return {
+    res = {
         "status": "pass" if passed else "fail",
         "module": "validation",
         "run_id": run_id,
@@ -77,6 +78,8 @@ async def _toolkit_validation(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
     }
+    append_to_run_history(run_id, res)
+    return res
 
 
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402

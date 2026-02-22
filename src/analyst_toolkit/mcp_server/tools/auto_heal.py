@@ -1,10 +1,16 @@
 """MCP tool: toolkit_auto_heal — infer and apply cleaning rules in one go."""
 
 import yaml
+
+from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
+    default_run_id,
+    load_input,
+    save_to_session,
+)
+from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
 from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_configs
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
-from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
-from analyst_toolkit.mcp_server.io import default_run_id, load_input, save_to_session
 
 
 async def _toolkit_auto_heal(
@@ -17,33 +23,29 @@ async def _toolkit_auto_heal(
     Returns a cleaned session_id.
     """
     run_id = run_id or default_run_id()
-    
+
     # 1. Infer configs
     infer_res = await _toolkit_infer_configs(
-        gcs_path=gcs_path,
-        session_id=session_id,
-        modules=["normalization", "imputation"]
+        gcs_path=gcs_path, session_id=session_id, modules=["normalization", "imputation"]
     )
-    
+
     if infer_res["status"] == "error":
         return infer_res
-    
+
     configs = infer_res.get("configs", {})
     current_session_id = infer_res.get("session_id")
-    
+
     summary = {}
-    
+
     # 2. Apply Normalization if inferred
     if "normalization" in configs:
         norm_cfg_str = configs["normalization"]
         norm_cfg = yaml.safe_load(norm_cfg_str)
         # The inferred config usually has a top-level 'normalization' key
         actual_cfg = norm_cfg.get("normalization", norm_cfg)
-        
+
         norm_res = await _toolkit_normalization(
-            session_id=current_session_id,
-            config=actual_cfg,
-            run_id=run_id
+            session_id=current_session_id, config=actual_cfg, run_id=run_id
         )
         current_session_id = norm_res.get("session_id")
         summary["normalization"] = norm_res.get("summary")
@@ -53,23 +55,23 @@ async def _toolkit_auto_heal(
         imp_cfg_str = configs["imputation"]
         imp_cfg = yaml.safe_load(imp_cfg_str)
         actual_cfg = imp_cfg.get("imputation", imp_cfg)
-        
+
         imp_res = await _toolkit_imputation(
-            session_id=current_session_id,
-            config=actual_cfg,
-            run_id=run_id
+            session_id=current_session_id, config=actual_cfg, run_id=run_id
         )
         current_session_id = imp_res.get("session_id")
         summary["imputation"] = imp_res.get("summary")
-        
-    return {
+
+    res = {
         "status": "pass",
         "module": "auto_heal",
         "run_id": run_id,
         "session_id": current_session_id,
         "summary": summary,
-        "message": "Auto-healing completed. Normalization and Imputation applied based on inference."
+        "message": "Auto-healing completed. Normalization and Imputation applied based on inference.",
     }
+    append_to_run_history(run_id, res)
+    return res
 
 
 _INPUT_SCHEMA = {
@@ -86,7 +88,7 @@ _INPUT_SCHEMA = {
         "run_id": {
             "type": "string",
             "description": "Optional run identifier.",
-        }
+        },
     },
     "anyOf": [
         {"required": ["gcs_path"]},

@@ -4,6 +4,7 @@ from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_htm
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
 from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
     default_run_id,
     load_input,
     save_to_session,
@@ -72,14 +73,14 @@ async def _toolkit_imputation(
 
         export_dataframes(
             {"imputation_log": detailed_changelog},
-            f"exports/reports/imputation/imputation_report.xlsx",
+            "exports/reports/imputation/imputation_report.xlsx",
             file_format="xlsx",
             run_id=run_id,
         )
         xlsx_path = f"exports/reports/imputation/{run_id}_imputation_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "imputation")
 
-    return {
+    res = {
         "status": "pass",
         "module": "imputation",
         "run_id": run_id,
@@ -91,6 +92,8 @@ async def _toolkit_imputation(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
     }
+    append_to_run_history(run_id, res)
+    return res
 
 
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
