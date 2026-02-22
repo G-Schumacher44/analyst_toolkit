@@ -31,7 +31,7 @@ async def _toolkit_diagnostics(
 
     # Robustly handle config nesting
     base_cfg = config.get("diagnostics", config) if isinstance(config, dict) else {}
-    
+
     module_cfg = {
         "diagnostics": {
             **base_cfg,
