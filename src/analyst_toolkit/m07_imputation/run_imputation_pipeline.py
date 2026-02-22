@@ -34,7 +34,7 @@ from analyst_toolkit.m00_utils.export_utils import (
     save_joblib,
 )
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
-from analyst_toolkit.m07_imputation.display_imputation import display_imputation_summary
+
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
 from analyst_toolkit.m08_visuals.comparison_plots import (
     plot_categorical_imputation_comparison,
@@ -109,6 +109,8 @@ def run_imputation_pipeline(
             plot_paths["Imputation Comparison"] = comp_plots
 
     if settings.get("show_inline", True) and notebook:
+        from analyst_toolkit.m07_imputation.display_imputation import display_imputation_summary
+
         display_imputation_summary(imputation_report, plot_paths)
 
     export_cfg = settings.get("export", {})

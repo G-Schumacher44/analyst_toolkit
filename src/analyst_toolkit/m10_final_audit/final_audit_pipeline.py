@@ -38,7 +38,7 @@ from analyst_toolkit.m00_utils.export_utils import (
 )
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
-from analyst_toolkit.m10_final_audit.display_final_audit import display_final_audit_summary
+
 from analyst_toolkit.m10_final_audit.final_audit_producer import run_final_audit_producer
 
 
@@ -143,6 +143,8 @@ def run_final_audit_pipeline(
     final_report = _generate_final_report(producer_results, df_raw, df_certified)
 
     if module_cfg.get("settings", {}).get("show_inline") and notebook:
+        from analyst_toolkit.m10_final_audit.display_final_audit import display_final_audit_summary
+
         display_final_audit_summary(final_report)
 
     if module_cfg.get("settings", {}).get("export_report"):

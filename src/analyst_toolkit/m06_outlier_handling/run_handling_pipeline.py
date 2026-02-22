@@ -31,7 +31,7 @@ from analyst_toolkit.m00_utils.export_utils import (
     save_joblib,
 )
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_handling_report
-from analyst_toolkit.m06_outlier_handling.display_handling import display_handling_summary
+
 from analyst_toolkit.m06_outlier_handling.outlier_handler import handle_outliers
 
 
@@ -80,6 +80,8 @@ def run_outlier_handling_pipeline(
 
     # 3. Display the summary dashboard
     if settings.get("show_inline", True) and notebook:
+        from analyst_toolkit.m06_outlier_handling.display_handling import display_handling_summary
+
         display_handling_summary(handling_report)
 
     # 4. Export the detailed report

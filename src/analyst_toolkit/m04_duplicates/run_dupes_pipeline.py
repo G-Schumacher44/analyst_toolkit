@@ -31,7 +31,7 @@ from analyst_toolkit.m00_utils.report_generator import generate_duplicates_repor
 from analyst_toolkit.m08_visuals.summary_plots import plot_duplication_summary
 
 from .detect_dupes import detect_duplicates
-from .dup_display import display_dupes_summary
+
 from .handle_dupes import handle_duplicates
 
 
@@ -138,6 +138,8 @@ def run_duplicates_pipeline(
             plot_paths["Duplication Summary"] = [summary_plot_path]
 
     if settings.get("show_inline", True) and notebook:
+        from analyst_toolkit.m04_duplicates.dup_display import display_dupes_summary
+
         display_dupes_summary(duplicates_report, subset_cols, plot_paths)
 
     if settings.get("export", False) and duplicates_report:
