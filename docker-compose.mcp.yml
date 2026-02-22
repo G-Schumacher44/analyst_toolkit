@@ -31,11 +31,6 @@ services:
       # Report upload — set ANALYST_REPORT_BUCKET to enable GCS upload of HTML reports
       - ANALYST_REPORT_BUCKET=${ANALYST_REPORT_BUCKET:-}
       - ANALYST_REPORT_PREFIX=${ANALYST_REPORT_PREFIX:-analyst_toolkit/reports}
-    volumes:
-      # Optional: mount local exports dir so HTML reports are accessible on host
-      - ./exports:/app/exports
-      # Optional: mount local data dir for local CSV/parquet inputs
-      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
