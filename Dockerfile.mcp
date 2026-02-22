@@ -11,9 +11,12 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Install dependencies first (layer cache)
+# vendor/ holds pre-built wheels for packages not pulled from PyPI
 COPY requirements-mcp.txt .
+COPY vendor/ vendor/
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir vendor/analyst_toolkit_deploy-0.2.6-py3-none-any.whl \
     && pip install --no-cache-dir -r requirements-mcp.txt
 
 # Copy toolkit source
