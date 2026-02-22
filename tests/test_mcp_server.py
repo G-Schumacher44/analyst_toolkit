@@ -19,8 +19,8 @@ def test_health_check():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert "toolkit_diagnostics" in data["tools"]
-    assert "toolkit_outliers" in data["tools"]
+    assert "diagnostics" in data["tools"]
+    assert "outliers" in data["tools"]
 
 
 def test_rpc_initialize():
@@ -41,8 +41,8 @@ def test_rpc_tools_list():
     result = response.json()["result"]
     assert "tools" in result
     tool_names = [t["name"] for t in result["tools"]]
-    assert "toolkit_diagnostics" in tool_names
-    assert "toolkit_outliers" in tool_names
+    assert "diagnostics" in tool_names
+    assert "outliers" in tool_names
 
 
 def test_rpc_tool_not_found():
@@ -71,7 +71,7 @@ async def test_rpc_tool_invocation_structure(mocker):
 
     # We need to mock the function in the registry since server.py already imported it
     mocker.patch.dict(
-        TOOL_REGISTRY["toolkit_diagnostics"], {"fn": mocker.AsyncMock(return_value=mock_result)}
+        TOOL_REGISTRY["diagnostics"], {"fn": mocker.AsyncMock(return_value=mock_result)}
     )
 
     payload = {
@@ -79,7 +79,7 @@ async def test_rpc_tool_invocation_structure(mocker):
         "id": 4,
         "method": "tools/call",
         "params": {
-            "name": "toolkit_diagnostics",
+            "name": "diagnostics",
             "arguments": {"gcs_path": "gs://fake/data.parquet"},
         },
     }
