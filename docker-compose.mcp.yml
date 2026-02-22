@@ -31,6 +31,9 @@ services:
       # Report upload — set ANALYST_REPORT_BUCKET to enable GCS upload of HTML reports
       - ANALYST_REPORT_BUCKET=${ANALYST_REPORT_BUCKET:-}
       - ANALYST_REPORT_PREFIX=${ANALYST_REPORT_PREFIX:-analyst_toolkit/reports}
+    volumes:
+      # Mount GCS service account key — requires GCP_CREDS_PATH to be set in shell/.envrc
+      - ${GCP_CREDS_PATH}:/run/secrets/gcp_creds:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]

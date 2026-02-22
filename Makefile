@@ -70,6 +70,7 @@ check: lint typecheck test
 
 # ─── MCP server ────────────────────────────────────────────────────────────────
 mcp-up:
+	@test -n "$$GCP_CREDS_PATH" || (echo "ERROR: GCP_CREDS_PATH is not set. Run: direnv allow" && exit 1)
 	docker-compose -f docker-compose.mcp.yml up --build -d
 
 mcp-down:

@@ -77,19 +77,24 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
-    # Check for _MANIFEST.json
-    manifest_blob = bucket.blob(f"{prefix}/_MANIFEST.json")
-    file_names: list[str] = []
-
-    if manifest_blob.exists():
-        logger.info(f"Found _MANIFEST.json at {gcs_path}")
-        manifest_data = json.loads(manifest_blob.download_as_text())
-        file_names = manifest_data.get("files", [])
-        blobs = [bucket.blob(f"{prefix}/{f}") for f in file_names]
+    # Direct file path — skip manifest/glob logic
+    if prefix.endswith(".parquet") or prefix.endswith(".csv"):
+        logger.info(f"Direct file path detected: {gcs_path}")
+        blobs = [bucket.blob(prefix)]
     else:
-        logger.info(f"No manifest found, globbing {gcs_path}")
-        blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix}/"))
-        blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
+        # Check for _MANIFEST.json
+        manifest_blob = bucket.blob(f"{prefix}/_MANIFEST.json")
+        file_names: list[str] = []
+
+        if manifest_blob.exists():
+            logger.info(f"Found _MANIFEST.json at {gcs_path}")
+            manifest_data = json.loads(manifest_blob.download_as_text())
+            file_names = manifest_data.get("files", [])
+            blobs = [bucket.blob(f"{prefix}/{f}") for f in file_names]
+        else:
+            logger.info(f"No manifest found, globbing {gcs_path}")
+            blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix}/"))
+            blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
 
     if not blobs:
         raise FileNotFoundError(f"No data files found at GCS path: {gcs_path}")
