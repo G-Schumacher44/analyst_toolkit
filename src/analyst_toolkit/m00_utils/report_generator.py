@@ -238,9 +238,7 @@ def generate_transformation_report(
     # 3. Column-wise change summary
     diff_table = report_tables["diff_table"]
     assert isinstance(diff_table, pd.DataFrame)
-    col_change_summary = (
-        diff_table.groupby("column").size().reset_index(name="change_count")
-    )
+    col_change_summary = diff_table.groupby("column").size().reset_index(name="change_count")
     report_tables["column_changes_summary"] = col_change_summary
 
     # 4. Add changelog — each entry as its own section if it's a DataFrame,
