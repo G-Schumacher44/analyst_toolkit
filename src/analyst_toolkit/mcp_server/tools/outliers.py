@@ -72,13 +72,17 @@ async def _toolkit_outliers(
             xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
             xlsx_url = upload_artifact(xlsx_path, run_id, "outliers")
 
-        # Upload plots
-        plot_dir = Path("exports/plots/outliers/detection")
-        if plot_dir.exists():
-            for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                url = upload_artifact(str(plot_file), run_id, "outliers/plots")
-                if url:
-                    plot_urls[plot_file.name] = url
+        # Upload plots - search both root and run_id subdir
+        plot_dirs = [
+            Path("exports/plots/outliers/detection"),
+            Path(f"exports/plots/outliers/{run_id}")
+        ]
+        for plot_dir in plot_dirs:
+            if plot_dir.exists():
+                for plot_file in plot_dir.glob(f"*{run_id}*.png"):
+                    url = upload_artifact(str(plot_file), run_id, "outliers/plots")
+                    if url:
+                        plot_urls[plot_file.name] = url
 
     res = {
         "status": "pass" if outlier_count == 0 else "warn",

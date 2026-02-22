@@ -88,13 +88,17 @@ async def _toolkit_imputation(
         xlsx_path = f"exports/reports/imputation/{run_id}_imputation_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "imputation")
 
-        # Upload plots
-        plot_dir = Path("exports/plots/imputation")
-        if plot_dir.exists():
-            for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                url = upload_artifact(str(plot_file), run_id, "imputation/plots")
-                if url:
-                    plot_urls[plot_file.name] = url
+        # Upload plots - search both root and run_id subdir
+        plot_dirs = [
+            Path("exports/plots/imputation"),
+            Path(f"exports/plots/imputation/{run_id}")
+        ]
+        for plot_dir in plot_dirs:
+            if plot_dir.exists():
+                for plot_file in plot_dir.glob(f"*{run_id}*.png"):
+                    url = upload_artifact(str(plot_file), run_id, "imputation/plots")
+                    if url:
+                        plot_urls[plot_file.name] = url
 
     res = {
         "status": "pass",
