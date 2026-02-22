@@ -5,7 +5,7 @@
 #
 # Environment:
 #   ANALYST_MCP_PORT               — override default port 8001 (optional)
-#   ANALYST_REPORT_BUCKET          — GCS bucket for HTML report upload, e.g. gs://gs://data-reporting
+#   ANALYST_REPORT_BUCKET          — GCS bucket for HTML report upload, e.g. gs://data-reporting
 #                                    If unset, reports are written to ./exports only (local dev)
 #   ANALYST_REPORT_PREFIX          — blob path prefix, default "analyst_toolkit/reports"
 #                                    Reports land at: {bucket}/{prefix}/{run_id}/{module}/{filename}

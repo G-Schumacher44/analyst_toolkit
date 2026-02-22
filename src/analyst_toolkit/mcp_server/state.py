@@ -12,11 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 import logging
-import uuid
-from typing import Dict, Optional
 import time
-
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +36,14 @@ class StateStore:
         If no session_id is provided, a new one is generated.
         """
         cls.cleanup()  # Run cleanup before saving new data
-        
+
         if session_id is None:
             session_id = f"sess_{uuid.uuid4().hex[:8]}"
         cls._sessions[session_id] = df
         cls._metadata[session_id] = {
             "row_count": len(df),
             "col_count": len(df.columns),
-            "updated_at": pd.Timestamp.now().isoformat()
+            "updated_at": pd.Timestamp.now().isoformat(),
         }
         cls._last_accessed[session_id] = time.time()
         logger.info(f"Saved session {session_id} (shape: {df.shape})")
@@ -76,7 +72,8 @@ class StateStore:
         """Remove sessions that have exceeded the TTL."""
         now = time.time()
         expired = [
-            sid for sid, last_ts in cls._last_accessed.items()
+            sid
+            for sid, last_ts in cls._last_accessed.items()
             if now - last_ts > SESSION_TTL_SECONDS
         ]
         for sid in expired:

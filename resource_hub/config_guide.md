@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.3.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.0-blueviolet">
 </p>
 
 ---
@@ -17,7 +17,7 @@ The Analyst Toolkit is governed entirely by modular YAML configuration files. Th
 
 Each YAML configuration file serves a specific purpose and is passed to the pipeline via CLI or notebook workflows.
 
-### Douwloadable YAML Templates
+### Downloadable YAML Templates
 
 >[Download Templates](config.zip)
 ___

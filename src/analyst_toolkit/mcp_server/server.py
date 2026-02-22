@@ -21,8 +21,8 @@ import json
 import logging
 import os
 import sys
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
-from importlib.metadata import version, PackageNotFoundError
 
 import mcp.types as types
 from fastapi import FastAPI, Request
@@ -37,7 +37,7 @@ from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
 try:
     __version__ = version("analyst_toolkit")
 except PackageNotFoundError:
-    __version__ = "0.4.0" # Fallback if not installed as package
+    __version__ = "0.4.0"  # Fallback if not installed as package
 
 logging.basicConfig(
     level=logging.INFO,

@@ -1,8 +1,7 @@
 """MCP tool: toolkit_duplicates — duplicate detection via M04."""
 
-from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
-from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
 from pathlib import Path
+
 from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
 from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
 from analyst_toolkit.m04_duplicates.detect_dupes import detect_duplicates
@@ -67,7 +66,7 @@ async def _toolkit_duplicates(
             )
             xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
             xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates")
-            
+
         # Upload plots
         plot_dir = Path("exports/plots/duplicates")
         if plot_dir.exists():

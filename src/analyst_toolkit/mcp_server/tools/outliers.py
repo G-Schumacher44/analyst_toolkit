@@ -1,6 +1,7 @@
 """MCP tool: toolkit_outliers — outlier detection via M05."""
 
 from pathlib import Path
+
 from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_report
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
@@ -70,7 +71,7 @@ async def _toolkit_outliers(
             )
             xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
             xlsx_url = upload_artifact(xlsx_path, run_id, "outliers")
-            
+
         # Upload plots
         plot_dir = Path("exports/plots/outliers/detection")
         if plot_dir.exists():

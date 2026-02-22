@@ -1,6 +1,7 @@
 """MCP tool: toolkit_imputation — missing value imputation via M07."""
 
 from pathlib import Path
+
 from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
@@ -42,7 +43,7 @@ async def _toolkit_imputation(
             "session_id": session_id,
             "summary": {
                 "message": "No imputation rules provided. Returning original DataFrame unchanged.",
-                "row_count": metadata.get("row_count")
+                "row_count": metadata.get("row_count"),
             },
             "columns_imputed": [],
             "nulls_filled": 0,
@@ -86,7 +87,7 @@ async def _toolkit_imputation(
         )
         xlsx_path = f"exports/reports/imputation/{run_id}_imputation_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "imputation")
-        
+
         # Upload plots
         plot_dir = Path("exports/plots/imputation")
         if plot_dir.exists():
@@ -101,9 +102,9 @@ async def _toolkit_imputation(
         "run_id": run_id,
         "session_id": session_id,
         "summary": {
-            "columns_imputed": columns_imputed, 
+            "columns_imputed": columns_imputed,
             "nulls_filled": nulls_filled,
-            "row_count": row_count
+            "row_count": row_count,
         },
         "columns_imputed": columns_imputed,
         "nulls_filled": nulls_filled,

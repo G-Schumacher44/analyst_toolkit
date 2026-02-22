@@ -1,0 +1,4 @@
+# Minimal dev dependencies
+-e .[dev,notebook,mcp]
+pip-tools
+uv

@@ -174,7 +174,7 @@ def run_full_pipeline(config_path: str):
     return df
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Run the full analyst_toolkit data processing pipeline."
     )
@@ -187,3 +187,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_full_pipeline(config_path=args.config)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,7 @@
 """MCP tool: toolkit_diagnostics — data profiling via M01."""
 
 from pathlib import Path
+
 from analyst_toolkit.m00_utils.export_utils import export_html_report, export_profile_summary
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.mcp_server.io import (
@@ -53,7 +54,7 @@ async def _toolkit_diagnostics(
         export_profile_summary(profile_export, xlsx_cfg, run_id=run_id)
         xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_summary.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics")
-        
+
         # Upload plots
         plot_dir = Path("exports/plots/diagnostics")
         if plot_dir.exists():
