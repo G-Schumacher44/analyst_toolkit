@@ -20,6 +20,7 @@ pyarrow>=14.0
 
 # Cloud I/O
 google-cloud-storage>=2.14
+gcsfs>=2024.2.0
 
 # Pydantic (FastAPI dep, pinned for stability)
 pydantic>=2.0
