@@ -1,12 +1,10 @@
 """MCP tool: toolkit_infer_configs — config generation via analyst_toolkit_deploy."""
 
-from analyst_toolkit.mcp_server.schemas import base_input_schema
-
 
 async def _toolkit_infer_configs(
     gcs_path: str,
-    modules: list = [],
-    options: dict = {},
+    modules: list | None = None,
+    options: dict | None = None,
 ) -> dict:
     """
     Generate YAML config strings for the specified toolkit modules by inspecting
@@ -16,6 +14,8 @@ async def _toolkit_infer_configs(
     The deploy utility's infer_configs() API is called with input_path=gcs_path
     so it handles local, parquet, and GCS inputs identically.
     """
+    modules = modules or []
+    options = options or {}
     try:
         from analyst_toolkit_deploy.infer_configs import infer_configs
     except ImportError:

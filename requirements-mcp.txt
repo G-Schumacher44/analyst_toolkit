@@ -4,6 +4,7 @@
 # Server framework
 fastapi>=0.111
 uvicorn[standard]>=0.29
+mcp>=1.2.1
 
 # Data stack (matches core toolkit requirements)
 pandas>=2.0

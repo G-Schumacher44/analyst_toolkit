@@ -1,14 +1,17 @@
 """MCP tool: toolkit_imputation — missing value imputation via M07."""
 
-from analyst_toolkit.mcp_server.schemas import base_input_schema
-from analyst_toolkit.mcp_server.io import load_input, upload_report
-from analyst_toolkit.m07_imputation.impute_data import apply_imputation
-from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
+from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
+from analyst_toolkit.m07_imputation.impute_data import apply_imputation
+from analyst_toolkit.mcp_server.io import load_input, upload_report
+from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
-async def _toolkit_imputation(gcs_path: str, config: dict = {}, run_id: str = "mcp_run") -> dict:
+async def _toolkit_imputation(
+    gcs_path: str, config: dict | None = None, run_id: str = "mcp_run"
+) -> dict:
     """Run missing value imputation on the dataset at gcs_path."""
+    config = config or {}
     df = load_input(gcs_path)
 
     if not config.get("rules"):
@@ -16,17 +19,22 @@ async def _toolkit_imputation(gcs_path: str, config: dict = {}, run_id: str = "m
             "status": "warn",
             "module": "imputation",
             "run_id": run_id,
-            "summary": {"message": "No imputation rules provided. Returning original DataFrame unchanged."},
+            "summary": {
+                "message": "No imputation rules provided. Returning original DataFrame unchanged."
+            },
             "columns_imputed": [],
             "nulls_filled": 0,
             "artifact_path": "",
+            "artifact_url": "",
         }
 
     df_original = df.copy()
     module_cfg = {**config, "logging": "off"}
     df_imputed, detailed_changelog = apply_imputation(df, module_cfg)
 
-    columns_imputed = detailed_changelog["Column"].unique().tolist() if not detailed_changelog.empty else []
+    columns_imputed = (
+        detailed_changelog["Column"].unique().tolist() if not detailed_changelog.empty else []
+    )
     nulls_before = int(df_original[columns_imputed].isnull().sum().sum()) if columns_imputed else 0
     nulls_after = int(df_imputed[columns_imputed].isnull().sum().sum()) if columns_imputed else 0
     nulls_filled = nulls_before - nulls_after

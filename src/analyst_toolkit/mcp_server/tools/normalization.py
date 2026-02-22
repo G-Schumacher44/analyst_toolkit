@@ -1,14 +1,17 @@
 """MCP tool: toolkit_normalization — data cleaning and standardization via M03."""
 
-from analyst_toolkit.mcp_server.schemas import base_input_schema
-from analyst_toolkit.mcp_server.io import load_input, upload_report
-from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
-from analyst_toolkit.m00_utils.report_generator import generate_transformation_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
+from analyst_toolkit.m00_utils.report_generator import generate_transformation_report
+from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
+from analyst_toolkit.mcp_server.io import load_input, upload_report
+from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
-async def _toolkit_normalization(gcs_path: str, config: dict = {}, run_id: str = "mcp_run") -> dict:
+async def _toolkit_normalization(
+    gcs_path: str, config: dict | None = None, run_id: str = "mcp_run"
+) -> dict:
     """Run normalization (rename, value mapping, type conversion) on the dataset at gcs_path."""
+    config = config or {}
     df = load_input(gcs_path)
 
     module_cfg = {**config, "logging": "off"}
@@ -16,7 +19,6 @@ async def _toolkit_normalization(gcs_path: str, config: dict = {}, run_id: str =
     df_normalized, change_log_df, changelog = apply_normalization(df, config=module_cfg)
 
     changes_made = int(len(change_log_df)) if hasattr(change_log_df, "__len__") else 0
-    changelog_rows = changes_made
 
     artifact_path = ""
     artifact_url = ""
@@ -37,9 +39,8 @@ async def _toolkit_normalization(gcs_path: str, config: dict = {}, run_id: str =
         "status": "pass",
         "module": "normalization",
         "run_id": run_id,
-        "summary": {"changes_made": changes_made, "changelog_rows": changelog_rows},
+        "summary": {"changes_made": changes_made},
         "changes_made": changes_made,
-        "changelog_rows": changelog_rows,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
     }

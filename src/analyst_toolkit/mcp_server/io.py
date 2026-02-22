@@ -98,11 +98,11 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     frames = []
     with tempfile.TemporaryDirectory() as tmpdir:
         for blob in blobs:
-            local_name = Path(blob.name).name
-            local_path = Path(tmpdir) / local_name
+            sanitized_name = blob.name.replace("/", "_")
+            local_path = Path(tmpdir) / sanitized_name
             blob.download_to_filename(str(local_path))
             logger.info(f"Downloaded {blob.name} → {local_path}")
-            if local_name.endswith(".parquet"):
+            if sanitized_name.endswith(".parquet"):
                 frames.append(pd.read_parquet(local_path))
             else:
                 frames.append(pd.read_csv(local_path, low_memory=False))

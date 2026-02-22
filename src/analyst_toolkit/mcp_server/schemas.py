@@ -5,11 +5,12 @@ All MCP tools return a dict matching ToolResponse (plus module-specific keys).
 The inputSchema dicts here are passed to tools/list so fridai-core can validate
 and document tool inputs.
 """
+
 from typing import TypedDict
 
 
 class ToolResponse(TypedDict):
-    status: str        # "pass" | "warn" | "fail" | "error"
+    status: str  # "pass" | "warn" | "fail" | "error"
     module: str
     run_id: str
     summary: dict
@@ -60,8 +61,9 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
 # Module-specific response TypedDicts (extend ToolResponse)
 # ------------------------------------------------------------------
 
+
 class DiagnosticsResponse(ToolResponse):
-    profile_shape: list       # [rows, cols]
+    profile_shape: list  # [rows, cols]
     null_rate: float
     column_count: int
 
@@ -79,7 +81,6 @@ class OutliersResponse(ToolResponse):
 
 class NormalizationResponse(ToolResponse):
     changes_made: int
-    changelog_rows: int
 
 
 class DuplicatesResponse(ToolResponse):
@@ -93,5 +94,5 @@ class ImputationResponse(ToolResponse):
 
 
 class InferConfigsResponse(TypedDict):
-    configs: dict   # module_name → YAML string
+    configs: dict  # module_name → YAML string
     modules_generated: list[str]

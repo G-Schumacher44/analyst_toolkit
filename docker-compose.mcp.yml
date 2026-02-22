@@ -29,9 +29,10 @@ services:
       - ANALYST_REPORT_BUCKET=${ANALYST_REPORT_BUCKET:-}
       - ANALYST_REPORT_PREFIX=${ANALYST_REPORT_PREFIX:-analyst_toolkit/reports}
     volumes:
-      # Mount GCS service account key (do not bake credentials into the image)
-      # Create: echo '{"type":"service_account",...}' > secrets/gcp_creds.json
-      - ./secrets/gcp_creds.json:/run/secrets/gcp_creds:ro
+      # Mount GCS service account key from outside the repo (never commit credentials)
+      # Set GCP_CREDS_PATH in your shell or .envrc, e.g.:
+      #   export GCP_CREDS_PATH=~/.secrets/analyst-toolkit-mcp.json
+      - ${GCP_CREDS_PATH:-~/.secrets/gcp_creds.json}:/run/secrets/gcp_creds:ro
       # Optional: mount local exports dir so HTML reports are accessible on host
       - ./exports:/app/exports
     restart: unless-stopped
