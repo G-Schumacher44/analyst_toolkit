@@ -56,6 +56,9 @@ def apply_imputation(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.D
                 fill_value = spec.get("value") if isinstance(spec, dict) else None
             elif strategy == "none":
                 fill_value = "None"
+            else:
+                # Treat any unrecognised string as a constant fill value
+                fill_value = strategy
 
             # Handle datetime fill coercion safely
             if pd.api.types.is_datetime64_any_dtype(col_dtype):
