@@ -33,10 +33,13 @@ async def _toolkit_diagnostics(
     module_cfg = {
         **config,
         "logging": "off",
-        "profile": {"run": True, "settings": {"export": True, "export_html": should_export_html(config)}},
-        "plotting": {"run": True}
+        "profile": {
+            "run": True,
+            "settings": {"export": True, "export_html": should_export_html(config)},
+        },
+        "plotting": {"run": True},
     }
-    
+
     # run_diag_pipeline handles profiling, plotting and report generation
     run_diag_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
 
@@ -51,7 +54,7 @@ async def _toolkit_diagnostics(
     artifact_url = ""
     xlsx_url = ""
     plot_urls = {}
-    
+
     if should_export_html(config):
         # Paths where run_diag_pipeline saves its reports
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
@@ -61,10 +64,7 @@ async def _toolkit_diagnostics(
         xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics")
 
         # Upload plots - search both root and run_id subdir
-        plot_dirs = [
-            Path("exports/plots/diagnostics"),
-            Path(f"exports/plots/diagnostics/{run_id}")
-        ]
+        plot_dirs = [Path("exports/plots/diagnostics"), Path(f"exports/plots/diagnostics/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):

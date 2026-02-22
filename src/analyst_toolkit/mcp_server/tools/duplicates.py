@@ -40,21 +40,23 @@ async def _toolkit_duplicates(
             "settings": {
                 "export": True,
                 "export_html": should_export_html(config),
-                "plotting": {"run": True}
-            }
+                "plotting": {"run": True},
+            },
         }
     }
 
     # run_duplicates_pipeline returns the processed dataframe (flagged or removed)
     df_processed = run_duplicates_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
 
-    # We still need the duplicate count for the MCP response. 
-    # Since we don't have the results dict from the runner here easily, 
+    # We still need the duplicate count for the MCP response.
+    # Since we don't have the results dict from the runner here easily,
     # we'll look at the difference in row counts if removed, or the 'is_duplicate' column if flagged.
     if mode == "remove":
         duplicate_count = len(df) - len(df_processed)
     else:
-        duplicate_count = int(df_processed["is_duplicate"].sum()) if "is_duplicate" in df_processed.columns else 0
+        duplicate_count = (
+            int(df_processed["is_duplicate"].sum()) if "is_duplicate" in df_processed.columns else 0
+        )
 
     # Save to session
     session_id = save_to_session(df_processed, session_id=session_id)
@@ -65,7 +67,7 @@ async def _toolkit_duplicates(
     artifact_url = ""
     xlsx_url = ""
     plot_urls = {}
-    
+
     if should_export_html(config):
         artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
         artifact_url = upload_artifact(artifact_path, run_id, "duplicates")
@@ -74,10 +76,7 @@ async def _toolkit_duplicates(
         xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates")
 
         # Upload plots - search both root and run_id subdir
-        plot_dirs = [
-            Path("exports/plots/duplicates"),
-            Path(f"exports/plots/duplicates/{run_id}")
-        ]
+        plot_dirs = [Path("exports/plots/duplicates"), Path(f"exports/plots/duplicates/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):

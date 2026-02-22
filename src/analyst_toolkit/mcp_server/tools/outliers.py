@@ -75,7 +75,7 @@ async def _toolkit_outliers(
         # Upload plots - search both root and run_id subdir
         plot_dirs = [
             Path("exports/plots/outliers/detection"),
-            Path(f"exports/plots/outliers/{run_id}")
+            Path(f"exports/plots/outliers/{run_id}"),
         ]
         for plot_dir in plot_dirs:
             if plot_dir.exists():

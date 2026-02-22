@@ -33,8 +33,8 @@ async def _toolkit_imputation(
             "logging": "off",
             "settings": {
                 "export": {"run": True, "export_html": should_export_html(config)},
-                "plotting": {"run": True}
-            }
+                "plotting": {"run": True},
+            },
         }
     }
 
@@ -50,7 +50,7 @@ async def _toolkit_imputation(
     nulls_before = int(df.isnull().sum().sum())
     nulls_after = int(df_imputed.isnull().sum().sum())
     nulls_filled = nulls_before - nulls_after
-    
+
     # Simple way to get columns imputed
     columns_imputed = [c for c in df.columns if df[c].isnull().sum() > df_imputed[c].isnull().sum()]
 
@@ -58,7 +58,7 @@ async def _toolkit_imputation(
     artifact_url = ""
     xlsx_url = ""
     plot_urls = {}
-    
+
     if should_export_html(config):
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
         artifact_url = upload_artifact(artifact_path, run_id, "imputation")
@@ -67,10 +67,7 @@ async def _toolkit_imputation(
         xlsx_url = upload_artifact(xlsx_path, run_id, "imputation")
 
         # Upload plots - search both root and run_id subdir
-        plot_dirs = [
-            Path("exports/plots/imputation"),
-            Path(f"exports/plots/imputation/{run_id}")
-        ]
+        plot_dirs = [Path("exports/plots/imputation"), Path(f"exports/plots/imputation/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
