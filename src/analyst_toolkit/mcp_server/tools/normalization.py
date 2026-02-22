@@ -80,7 +80,7 @@ async def _toolkit_normalization(
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_normalization",
+    name="normalization",
     fn=_toolkit_normalization,
     description="Run data normalization (rename, value mapping, dtype conversion) on a dataset.",
     input_schema=base_input_schema(),

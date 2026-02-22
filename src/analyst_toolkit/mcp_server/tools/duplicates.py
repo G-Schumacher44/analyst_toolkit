@@ -80,7 +80,7 @@ async def _toolkit_duplicates(
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_duplicates",
+    name="duplicates",
     fn=_toolkit_duplicates,
     description="Detect duplicate rows in a dataset. Returns count and optional clusters.",
     input_schema=base_input_schema(

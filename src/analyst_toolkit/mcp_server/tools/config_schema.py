@@ -39,7 +39,7 @@ _INPUT_SCHEMA = {
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_get_config_schema",
+    name="get_config_schema",
     fn=_toolkit_get_config_schema,
     description="Returns the JSON Schema for a specific module's configuration to help guide config creation.",
     input_schema=_INPUT_SCHEMA,

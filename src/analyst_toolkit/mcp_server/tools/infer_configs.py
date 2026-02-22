@@ -117,7 +117,7 @@ _INPUT_SCHEMA = {
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_infer_configs",
+    name="infer_configs",
     fn=_toolkit_infer_configs,
     description=(
         "Inspect a dataset and generate YAML config strings for toolkit modules. "

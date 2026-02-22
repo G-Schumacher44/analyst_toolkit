@@ -85,7 +85,7 @@ async def _toolkit_validation(
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_validation",
+    name="validation",
     fn=_toolkit_validation,
     description="Run schema, dtype, categorical, and range validation on a dataset.",
     input_schema=base_input_schema(),

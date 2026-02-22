@@ -99,7 +99,7 @@ _INPUT_SCHEMA = {
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_auto_heal",
+    name="auto_heal",
     fn=_toolkit_auto_heal,
     description="Automatically infer and apply cleaning rules (normalization, imputation) in one step.",
     input_schema=_INPUT_SCHEMA,

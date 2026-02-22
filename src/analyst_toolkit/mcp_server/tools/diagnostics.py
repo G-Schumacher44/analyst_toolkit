@@ -72,7 +72,7 @@ async def _toolkit_diagnostics(
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_diagnostics",
+    name="diagnostics",
     fn=_toolkit_diagnostics,
     description="Run data profiling on a dataset. Returns shape, null rate, and column summary.",
     input_schema=base_input_schema(),

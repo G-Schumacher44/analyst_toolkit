@@ -101,7 +101,7 @@ _INPUT_SCHEMA = {
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_drift_detection",
+    name="drift_detection",
     fn=_toolkit_drift_detection,
     description="Compare two datasets to detect schema drift and statistical changes.",
     input_schema=_INPUT_SCHEMA,

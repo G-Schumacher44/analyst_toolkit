@@ -86,7 +86,7 @@ async def _toolkit_outliers(
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_outliers",
+    name="outliers",
     fn=_toolkit_outliers,
     description="Run IQR/z-score outlier detection on a dataset. Returns flagged columns and count.",
     input_schema=base_input_schema(),

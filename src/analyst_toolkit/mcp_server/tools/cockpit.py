@@ -78,14 +78,14 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_get_golden_templates",
+    name="get_golden_templates",
     fn=_toolkit_get_golden_templates,
     description="Returns a library of 'Golden Config' templates for common use cases like Fraud or Migration.",
     input_schema={"type": "object", "properties": {}},
 )
 
 register_tool(
-    name="toolkit_get_run_history",
+    name="get_run_history",
     fn=_toolkit_get_run_history,
     description="Returns the 'Prescription & Healing Ledger' showing the exact sequence of changes for a run.",
     input_schema={
@@ -98,7 +98,7 @@ register_tool(
 )
 
 register_tool(
-    name="toolkit_get_data_health_report",
+    name="get_data_health_report",
     fn=_toolkit_get_data_health_report,
     description="Returns a Visual Data Health Score (0-100) and Red/Yellow/Green status for a run.",
     input_schema={

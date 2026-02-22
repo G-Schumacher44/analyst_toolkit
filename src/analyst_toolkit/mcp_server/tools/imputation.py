@@ -99,7 +99,7 @@ async def _toolkit_imputation(
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 
 register_tool(
-    name="toolkit_imputation",
+    name="imputation",
     fn=_toolkit_imputation,
     description="Run missing value imputation on a dataset using configured rules.",
     input_schema=base_input_schema(),
