@@ -14,15 +14,19 @@ Outputs:
 
 This module is called by the M10 pipeline runner and does not export files directly.
 """
+
+from typing import Any
+
 import pandas as pd
-import logging
+
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+
 
 def _apply_final_edits(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Applies final data cleaning and returns the transformed df and a changelog."""
     df_out = df.copy()
     changelog = []
-    
+
     drop_cols = config.get("drop_columns", [])
     if drop_cols:
         existing_cols = [col for col in drop_cols if col in df_out.columns]
@@ -33,14 +37,19 @@ def _apply_final_edits(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd
     rename_map = config.get("rename_columns", {})
     if rename_map:
         df_out.rename(columns=rename_map, inplace=True)
-        changelog.append({"Action": "rename_columns", "Details": f"Renamed {len(rename_map)} columns"})
+        changelog.append(
+            {"Action": "rename_columns", "Details": f"Renamed {len(rename_map)} columns"}
+        )
 
     dtype_map = config.get("coerce_dtypes", {})
     if dtype_map:
         df_out = df_out.astype(dtype_map)
-        changelog.append({"Action": "coerce_dtypes", "Details": f"Changed types for {len(dtype_map)} columns"})
+        changelog.append(
+            {"Action": "coerce_dtypes", "Details": f"Changed types for {len(dtype_map)} columns"}
+        )
 
     return df_out, pd.DataFrame(changelog)
+
 
 def _run_null_audit(df: pd.DataFrame, disallowed_columns: list) -> dict:
     """Performs a final check for nulls in critical columns."""
@@ -49,11 +58,14 @@ def _run_null_audit(df: pd.DataFrame, disallowed_columns: list) -> dict:
         if col in df.columns and df[col].isnull().any():
             null_count = int(df[col].isnull().sum())
             failures[col] = {"null_count": null_count}
-    
+
     return {
         "passed": not bool(failures),
-        "details": pd.DataFrame.from_dict(failures, orient='index').rename_axis("Column").reset_index()
+        "details": pd.DataFrame.from_dict(failures, orient="index")  # type: ignore
+        .rename_axis("Column")
+        .reset_index(),
     }
+
 
 def run_final_audit_producer(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, dict]:
     """
@@ -71,7 +83,7 @@ def run_final_audit_producer(df: pd.DataFrame, config: dict) -> tuple[pd.DataFra
                 - 'certification_results': Output from validation suite.
                 - 'null_audit_results': Audit of disallowed nulls.
     """
-    results = {}
+    results: dict[str, Any] = {}
 
     # Step 1: Apply final edits
     df_edited, edits_log = _apply_final_edits(df, config.get("final_edits", {}))
@@ -80,11 +92,11 @@ def run_final_audit_producer(df: pd.DataFrame, config: dict) -> tuple[pd.DataFra
     # Step 2: Run the final, strict validation checks
     cert_config = config.get("certification", {})
     results["certification_results"] = run_validation_suite(df_edited, cert_config)
-    
+
     # Step 3: Run the dedicated null audit
     # Correctly access nested rules for the null audit
     rules = cert_config.get("schema_validation", {}).get("rules", {})
     disallowed_nulls = rules.get("disallowed_null_columns", [])
     results["null_audit_results"] = _run_null_audit(df_edited, disallowed_nulls)
-    
+
     return df_edited, results

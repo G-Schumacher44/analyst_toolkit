@@ -8,11 +8,13 @@ or removed duplicates, includes summary statistics, and can display plots for
 visual analysis.
 """
 
-from IPython.display import display, HTML
-import pandas as pd
-from analyst_toolkit.m00_utils.rendering_utils import to_html_table
-from analyst_toolkit.m00_utils.plot_viewer import PlotViewer
 import ipywidgets as widgets
+import pandas as pd
+from IPython.display import HTML, display
+
+from analyst_toolkit.m00_utils.plot_viewer import PlotViewer
+from analyst_toolkit.m00_utils.rendering_utils import to_html_table
+
 
 def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = None):
     """
@@ -27,34 +29,38 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
     """
     summary_df = report.get("summary")
     if summary_df is None or summary_df.empty:
-        display(HTML("<h4>♻️ Deduplication Summary</h4><p><em>No duplicate handling was performed or no changes were made.</em></p>"))
+        display(
+            HTML(
+                "<h4>♻️ Deduplication Summary</h4><p><em>No duplicate handling was performed or no changes were made.</em></p>"
+            )
+        )
         return
 
     # --- 1. Banner ---
     # Determine mode from the report content to build the correct banner
-    is_remove_mode = 'Rows Removed' in summary_df['Metric'].values
+    is_remove_mode = "Rows Removed" in summary_df["Metric"].values
 
     def _safe_metric(df: pd.DataFrame, name: str) -> int:
         try:
-            series = df.loc[df['Metric'] == name, 'Value']
+            series = df.loc[df["Metric"] == name, "Value"]
             return int(series.iloc[0]) if not series.empty else 0
         except Exception:
             return 0
 
     if is_remove_mode:
-        rows_changed = _safe_metric(summary_df, 'Rows Removed')
+        rows_changed = _safe_metric(summary_df, "Rows Removed")
         banner_metric = f"<strong>Rows Removed:</strong> {rows_changed}"
     else:  # flag mode
-        rows_changed = _safe_metric(summary_df, 'Duplicate Rows Flagged')
+        rows_changed = _safe_metric(summary_df, "Duplicate Rows Flagged")
         # If no explicit metric present (e.g., no duplicates case), default nicely to 0
         banner_metric = f"<strong>Rows Flagged:</strong> {rows_changed}"
 
     status_emoji = "✅" if rows_changed == 0 else "⚠️"
-    criteria_str = f"`{'`, `'.join(subset_cols)}`" if subset_cols else 'all columns'
-    
+    criteria_str = f"`{'`, `'.join(subset_cols)}`" if subset_cols else "all columns"
+
     banner_html = f"""
     <div style="border: 1px solid #d0d7de; background-color: #eef2f7; color: #24292e; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
-        <strong>Stage:</strong> M04 Deduplication {status_emoji} | 
+        <strong>Stage:</strong> M04 Deduplication {status_emoji} |
         {banner_metric} |
         <strong>Criteria:</strong> Based on {criteria_str}
     </div>"""
@@ -64,7 +70,6 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
     summary_block = f"<details open><summary><strong>📈 Summary of Changes</strong></summary><div style='margin-top: 1em;'>{summary_table_html}</div></details>"
 
     # --- 3. Duplicate Details (Flagged or Dropped) ---
-    details_df = None
     details_block = ""
     clusters_block = ""
 
@@ -75,13 +80,17 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
         if subset_cols:
             # 1) Duplicate keys with counts (n >= 2)
             try:
-                key_counts = clusters_df.groupby(subset_cols).size().reset_index(name='count')
-                key_counts = key_counts[key_counts['count'] >= 2].sort_values(
-                    by=(['count'] + subset_cols), ascending=([False] + [True]*len(subset_cols))
+                key_counts = clusters_df.groupby(subset_cols).size().reset_index(name="count")
+                key_counts = key_counts[key_counts["count"] >= 2].sort_values(
+                    by=(["count"] + subset_cols), ascending=([False] + [True] * len(subset_cols))
                 )
             except Exception:
                 key_counts = None
-            key_counts_html = to_html_table(key_counts, max_rows=20) if key_counts is not None and not key_counts.empty else "<p><em>No duplicate keys found.</em></p>"
+            key_counts_html = (
+                to_html_table(key_counts, max_rows=20)
+                if key_counts is not None and not key_counts.empty
+                else "<p><em>No duplicate keys found.</em></p>"
+            )
 
             # 2) Row-level subset-only view
             try:
@@ -128,16 +137,16 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
                 </div>
             </details>
             """
-        
+
         all_duplicates_df = report.get("all_duplicate_instances")
         if all_duplicates_df is not None and not all_duplicates_df.empty:
             clusters_block = _build_subset_clusters_blocks(all_duplicates_df, subset_cols)
-    else: # flag mode
+    else:  # flag mode
         # In flag mode, the main detail to show is the clusters of duplicates found.
         clusters_df = report.get("duplicate_clusters")
         if clusters_df is not None and not clusters_df.empty:
             details_block = _build_subset_clusters_blocks(clusters_df, subset_cols)
-    
+
     # --- 4. Assemble and Display all HTML content at once ---
     final_html = f"<div>{banner_html}{summary_block}{details_block}{clusters_block}</div>"
     display(HTML(final_html))
@@ -146,6 +155,6 @@ def display_dupes_summary(report: dict, subset_cols: list, plot_paths: dict = No
     if plot_paths:
         viewer = PlotViewer(plot_paths, title="Visual Summary")
         accordion = widgets.Accordion(children=[viewer.widget_box])
-        accordion.set_title(0, '🖼️ Duplication Visual Summary')
-        accordion.selected_index = 0 # Start open
+        accordion.set_title(0, "🖼️ Duplication Visual Summary")
+        accordion.selected_index = 0  # Start open
         display(accordion)

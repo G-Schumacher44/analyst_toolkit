@@ -7,6 +7,9 @@ __pycache__/
 *.pyo
 *.pyd
 *.dll
+.mypy_cache/*
+.pytest_cache/*
+.ruff_cache/*
 
 # ===============================
 # Virtual Environments

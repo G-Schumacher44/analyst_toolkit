@@ -4,8 +4,11 @@
 This module contains the destructive logic for removing duplicate rows from a
 DataFrame. It is designed to be called after the detection step.
 """
-import pandas as pd
+
 import logging
+
+import pandas as pd
+
 
 def handle_duplicates(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     """

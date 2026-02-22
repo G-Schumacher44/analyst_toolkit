@@ -4,7 +4,9 @@ config_loader.py
 Utility for loading structured YAML configuration files used across modules
 like ETL, diagnostics, and modeling.
 """
+
 import yaml
+
 
 def load_config(config_path: str):
     """

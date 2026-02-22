@@ -11,8 +11,9 @@ Includes:
 Used across the Analyst Toolkit for consistent inline diagnostics, QA summaries, and output visualization.
 """
 
-from IPython.display import HTML, display, Markdown
 import pandas as pd
+from IPython.display import Markdown, display
+
 
 def to_html_table(df, max_rows=25, full_preview=False):
     """
@@ -30,7 +31,8 @@ def to_html_table(df, max_rows=25, full_preview=False):
         return "<p><em>No data available.</em></p>"
 
     display_df = df if full_preview else df.head(max_rows)
-    return display_df.to_html(classes='table table-striped', escape=False, index=False)
+    return display_df.to_html(classes="table table-striped", escape=False, index=False)
+
 
 def display_markdown_summary(title: str, df: pd.DataFrame, max_rows: int = 10):
     """
@@ -44,6 +46,7 @@ def display_markdown_summary(title: str, df: pd.DataFrame, max_rows: int = 10):
     trimmed_df = df.head(max_rows)
     markdown = f"### {title}\n\n" + trimmed_df.to_markdown(index=False)
     display(Markdown(markdown))
+
 
 def display_warnings(warning_list: list, title: str = "⚠️ Warnings"):
     """
