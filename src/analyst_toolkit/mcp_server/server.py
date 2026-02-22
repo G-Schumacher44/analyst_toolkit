@@ -30,6 +30,8 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
+from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -43,28 +45,11 @@ mcp_server = Server("analyst-toolkit")
 # FastAPI app for HTTP transport
 app = FastAPI(title="analyst-toolkit MCP Server", version="0.1.0")
 
-# Tool registry: tool_name → {fn, description, inputSchema}
-TOOL_REGISTRY: dict[str, dict[str, Any]] = {}
-
 SERVER_INFO = {
     "protocolVersion": "2024-05-01",
     "serverInfo": {"name": "analyst-toolkit", "version": "0.1.0"},
     "capabilities": {"tools": {}},
 }
-
-
-def register_tool(name: str, fn, description: str, input_schema: dict) -> None:
-    """
-    Register an async callable as an MCP tool.
-    Binds the function to the HTTP registry.
-    The official MCP SDK transport uses a centralized dispatcher (handle_call_tool).
-    """
-    TOOL_REGISTRY[name] = {
-        "fn": fn,
-        "description": description,
-        "inputSchema": input_schema,
-    }
-    logger.info(f"Registered tool: {name}")
 
 
 @mcp_server.list_tools()
@@ -170,6 +155,9 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     normalization,
     outliers,
     validation,
+    config_schema,
+    auto_heal,
+    drift,
 )
 
 # --- Entry point and transport selection ---
