@@ -24,7 +24,14 @@ class ToolResponse(TypedDict):
 _GCS_PATH_PROP = {
     "gcs_path": {
         "type": "string",
-        "description": "Local file path (.csv / .parquet) or GCS URI (gs://bucket/path) to load data from.",
+        "description": "Local file path (.csv / .parquet) or GCS URI (gs://bucket/path) to load data from. Optional if session_id is used.",
+    }
+}
+
+_SESSION_ID_PROP = {
+    "session_id": {
+        "type": "string",
+        "description": "Optional: In-memory session identifier from a previous tool run. If provided, gcs_path is ignored.",
     }
 }
 
@@ -47,13 +54,16 @@ _RUN_ID_PROP = {
 
 def base_input_schema(extra_props: dict | None = None) -> dict:
     """Return a JSON Schema object for standard toolkit tool inputs."""
-    props = {**_GCS_PATH_PROP, **_CONFIG_PROP, **_RUN_ID_PROP}
+    props = {**_GCS_PATH_PROP, **_SESSION_ID_PROP, **_CONFIG_PROP, **_RUN_ID_PROP}
     if extra_props:
         props.update(extra_props)
     return {
         "type": "object",
         "properties": props,
-        "required": ["gcs_path"],
+        "anyOf": [
+            {"required": ["gcs_path"]},
+            {"required": ["session_id"]},
+        ],
     }
 
 

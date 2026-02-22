@@ -20,23 +20,44 @@ import json
 import logging
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
+
+from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
 
 
-def load_input(path: str) -> pd.DataFrame:
+def default_run_id() -> str:
+    """Return a UTC timestamp-based run ID, e.g. '20260222_153045'."""
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
+def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> pd.DataFrame:
     """
-    Dispatch on path type and return a DataFrame.
+    Dispatch on path type or session_id and return a DataFrame.
 
     Args:
         path: Local file path or gs:// URI.
+        session_id: In-memory session identifier.
 
     Returns:
         pd.DataFrame loaded from the specified source.
     """
+    if session_id:
+        df = StateStore.get(session_id)
+        if df is not None:
+            logger.info(f"Loaded from session: {session_id}")
+            return df
+        elif not path:
+            raise ValueError(f"Session {session_id} not found and no path provided.")
+
+    if not path:
+        raise ValueError("Either 'path' (gcs_path) or 'session_id' must be provided.")
+
     if path.startswith("gs://"):
         return load_from_gcs(path)
     elif path.endswith(".parquet"):
@@ -45,6 +66,20 @@ def load_input(path: str) -> pd.DataFrame:
     else:
         logger.info(f"Loading CSV: {path}")
         return pd.read_csv(path, low_memory=False)
+
+
+def save_to_session(df: pd.DataFrame, session_id: Optional[str] = None) -> str:
+    """
+    Save a DataFrame to the in-memory state store.
+
+    Args:
+        df: The DataFrame to save.
+        session_id: Optional session ID to use/overwrite.
+
+    Returns:
+        The session_id.
+    """
+    return StateStore.save(df, session_id)
 
 
 def load_from_gcs(gcs_path: str) -> pd.DataFrame:
@@ -136,9 +171,18 @@ def should_export_html(config: dict) -> bool:
     return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
 
 
-def upload_report(local_path: str, run_id: str, module: str) -> str:
+_CONTENT_TYPES = {
+    ".html": "text/html",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+    ".joblib": "application/octet-stream",
+    ".json": "application/json",
+}
+
+
+def upload_artifact(local_path: str, run_id: str, module: str) -> str:
     """
-    Upload a local HTML report to GCS and return its public HTTPS URL.
+    Upload any local artifact to GCS and return its public HTTPS URL.
 
     Reads ANALYST_REPORT_BUCKET and ANALYST_REPORT_PREFIX from env.
     If ANALYST_REPORT_BUCKET is not set, returns "" (no-op for local dev).
@@ -146,39 +190,51 @@ def upload_report(local_path: str, run_id: str, module: str) -> str:
     Blob path: {prefix}/{run_id}/{module}/{filename}
     Public URL: https://storage.googleapis.com/{bucket}/{blob}
 
+    Supports HTML, XLSX, CSV, joblib, and JSON — content type is inferred
+    from the file extension.
+
     Args:
-        local_path: Absolute or relative path to the HTML file on disk.
+        local_path: Absolute or relative path to the file on disk.
         run_id:     Run identifier (used as a path component in GCS).
         module:     Module name (e.g. "outliers", "imputation").
 
     Returns:
-        Public GCS HTTPS URL string, or "" if upload is disabled.
+        Public GCS HTTPS URL string, or "" if upload is disabled or file missing.
     """
     bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     if not bucket_uri:
         return ""
 
+    p = Path(local_path)
+    if not p.exists():
+        logger.warning(f"Artifact not found, skipping upload: {local_path}")
+        return ""
+
     try:
         from google.cloud import storage
     except ImportError:
-        logger.warning("google-cloud-storage not installed; skipping report upload.")
+        logger.warning("google-cloud-storage not installed; skipping artifact upload.")
         return ""
 
     prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
-    filename = Path(local_path).name
+    content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
-    # Parse bucket name from gs:// URI or bare name
     bucket_name = bucket_uri.removeprefix("gs://")
-    blob_path = f"{prefix}/{run_id}/{module}/{filename}"
+    blob_path = f"{prefix}/{run_id}/{module}/{p.name}"
 
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
-        blob.upload_from_filename(local_path, content_type="text/html")
+        blob.upload_from_filename(str(p), content_type=content_type)
         url = f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
-        logger.info(f"Uploaded report → {url}")
+        logger.info(f"Uploaded {p.suffix} artifact → {url}")
         return url
     except Exception as exc:
         logger.warning(f"GCS upload failed for {local_path}: {exc}")
         return ""
+
+
+def upload_report(local_path: str, run_id: str, module: str) -> str:
+    """Alias for upload_artifact — retained for backwards compatibility."""
+    return upload_artifact(local_path, run_id, module)
