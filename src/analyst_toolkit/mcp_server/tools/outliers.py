@@ -1,5 +1,6 @@
 """MCP tool: toolkit_outliers — outlier detection via M05."""
 
+from pathlib import Path
 from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_report
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
@@ -8,6 +9,7 @@ from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    get_session_metadata,
     load_input,
     save_to_session,
     should_export_html,
@@ -36,6 +38,8 @@ async def _toolkit_outliers(
 
     # Save to session
     session_id = save_to_session(df_out, session_id=session_id)
+    metadata = get_session_metadata(session_id) or {}
+    row_count = metadata.get("row_count", len(df_out))
 
     outlier_log = detection_results.get("outlier_log")
     outlier_count = (
@@ -50,6 +54,7 @@ async def _toolkit_outliers(
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
+    plot_urls = {}
     if should_export_html(config):
         report_tables = generate_outlier_report(detection_results)
         html_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
@@ -65,18 +70,31 @@ async def _toolkit_outliers(
             )
             xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
             xlsx_url = upload_artifact(xlsx_path, run_id, "outliers")
+            
+        # Upload plots
+        plot_dir = Path("exports/plots/outliers/detection")
+        if plot_dir.exists():
+            for plot_file in plot_dir.glob(f"*{run_id}*.png"):
+                url = upload_artifact(str(plot_file), run_id, "outliers/plots")
+                if url:
+                    plot_urls[plot_file.name] = url
 
     res = {
         "status": "pass" if outlier_count == 0 else "warn",
         "module": "outliers",
         "run_id": run_id,
         "session_id": session_id,
-        "summary": {"outlier_count": outlier_count, "flagged_columns": flagged_columns},
+        "summary": {
+            "outlier_count": outlier_count,
+            "flagged_columns": flagged_columns,
+            "row_count": row_count,
+        },
         "flagged_columns": flagged_columns,
         "outlier_count": outlier_count,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
+        "plot_urls": plot_urls,
     }
     append_to_run_history(run_id, res)
     return res

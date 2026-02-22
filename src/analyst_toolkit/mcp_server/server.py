@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 from typing import Any
+from importlib.metadata import version, PackageNotFoundError
 
 import mcp.types as types
 from fastapi import FastAPI, Request
@@ -31,6 +32,12 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
+
+# Get package version dynamically
+try:
+    __version__ = version("analyst_toolkit")
+except PackageNotFoundError:
+    __version__ = "0.4.0" # Fallback if not installed as package
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,11 +50,11 @@ logger = logging.getLogger("analyst_toolkit.mcp_server")
 mcp_server = Server("analyst-toolkit")
 
 # FastAPI app for HTTP transport
-app = FastAPI(title="analyst-toolkit MCP Server", version="0.1.0")
+app = FastAPI(title="analyst-toolkit MCP Server", version=__version__)
 
 SERVER_INFO = {
     "protocolVersion": "2024-05-01",
-    "serverInfo": {"name": "analyst-toolkit", "version": "0.1.0"},
+    "serverInfo": {"name": "analyst-toolkit", "version": __version__},
     "capabilities": {"tools": {}},
 }
 

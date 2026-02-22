@@ -7,6 +7,7 @@ from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    get_session_metadata,
     load_input,
     save_to_session,
     should_export_html,
@@ -29,6 +30,8 @@ async def _toolkit_validation(
     # Ensure it's in a session for the pipeline
     if not session_id:
         session_id = save_to_session(df)
+    metadata = get_session_metadata(session_id) or {}
+    row_count = metadata.get("row_count", len(df))
 
     module_cfg = {**config, "logging": "off"}
     validation_results = run_validation_suite(df, config=module_cfg)
@@ -70,7 +73,12 @@ async def _toolkit_validation(
         "module": "validation",
         "run_id": run_id,
         "session_id": session_id,
-        "summary": {"passed": passed, "failed_rules": failed_rules, "issue_count": issue_count},
+        "summary": {
+            "passed": passed,
+            "failed_rules": failed_rules,
+            "issue_count": issue_count,
+            "row_count": row_count,
+        },
         "passed": passed,
         "failed_rules": failed_rules,
         "issue_count": issue_count,

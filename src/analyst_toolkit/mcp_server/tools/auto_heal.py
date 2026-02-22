@@ -5,6 +5,7 @@ import yaml
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    get_session_metadata,
     load_input,
     save_to_session,
 )
@@ -62,12 +63,15 @@ async def _toolkit_auto_heal(
         current_session_id = imp_res.get("session_id")
         summary["imputation"] = imp_res.get("summary")
 
+    metadata = get_session_metadata(current_session_id) or {}
+    row_count = metadata.get("row_count")
+
     res = {
         "status": "pass",
         "module": "auto_heal",
         "run_id": run_id,
         "session_id": current_session_id,
-        "summary": summary,
+        "summary": {**summary, "row_count": row_count},
         "message": "Auto-healing completed. Normalization and Imputation applied based on inference.",
     }
     append_to_run_history(run_id, res)

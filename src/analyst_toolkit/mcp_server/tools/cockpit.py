@@ -35,24 +35,29 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
         "duplicate_ratio": 0.0,
     }
 
-    for entry in history:
-        module = entry.get("module")
-        summary = entry.get("summary", {})
-
-        if module == "diagnostics":
-            metrics["null_rate"] = summary.get("null_rate", 0.0)
-        elif module == "validation":
-            passed = summary.get("passed", True)
-            metrics["validation_pass_rate"] = 1.0 if passed else 0.5  # Simple heuristic
-        elif module == "duplicates":
-            # We don't have total rows here easily, so we use a small penalty per duplicate
-            count = summary.get("duplicate_count", 0)
-            if count > 0:
-                metrics["duplicate_ratio"] = min(0.2, count / 1000)
-        elif module == "outliers":
-            count = summary.get("outlier_count", 0)
-            if count > 0:
-                metrics["outlier_ratio"] = min(0.2, count / 1000)
+        for entry in history:
+            module = entry.get("module")
+            summary = entry.get("summary", {})
+            row_count = summary.get("row_count")
+            
+            if module == "diagnostics":
+                metrics["null_rate"] = summary.get("null_rate", 0.0)
+            elif module == "validation":
+                passed = summary.get("passed", True)
+                metrics["validation_pass_rate"] = 1.0 if passed else 0.5 
+            elif module == "duplicates":
+                count = summary.get("duplicate_count", 0)
+                if row_count and row_count > 0:
+                    metrics["duplicate_ratio"] = count / row_count
+                else:
+                    metrics["duplicate_ratio"] = min(0.2, count / 1000)
+            elif module == "outliers":
+                count = summary.get("outlier_count", 0)
+                if row_count and row_count > 0:
+                    metrics["outlier_ratio"] = count / row_count
+                else:
+                    metrics["outlier_ratio"] = min(0.2, count / 1000)
+    
 
     score_res = calculate_health_score(metrics)
 

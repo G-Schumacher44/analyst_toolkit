@@ -82,6 +82,11 @@ def save_to_session(df: pd.DataFrame, session_id: Optional[str] = None) -> str:
     return StateStore.save(df, session_id)
 
 
+def get_session_metadata(session_id: str) -> Optional[dict]:
+    """Retrieve metadata for a session."""
+    return StateStore.get_metadata(session_id)
+
+
 def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     """
     Pull data from a GCS path into a DataFrame.
@@ -175,6 +180,7 @@ _CONTENT_TYPES = {
     ".csv": "text/csv",
     ".joblib": "application/octet-stream",
     ".json": "application/json",
+    ".png": "image/png",
 }
 
 

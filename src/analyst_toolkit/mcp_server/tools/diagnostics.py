@@ -1,5 +1,6 @@
 """MCP tool: toolkit_diagnostics — data profiling via M01."""
 
+from pathlib import Path
 from analyst_toolkit.m00_utils.export_utils import export_html_report, export_profile_summary
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.mcp_server.io import (
@@ -42,6 +43,7 @@ async def _toolkit_diagnostics(
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
+    plot_urls = {}
     if should_export_html(config):
         html_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
         artifact_path = export_html_report(profile_export, html_path, "Diagnostics", run_id)
@@ -51,19 +53,33 @@ async def _toolkit_diagnostics(
         export_profile_summary(profile_export, xlsx_cfg, run_id=run_id)
         xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_summary.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics")
+        
+        # Upload plots
+        plot_dir = Path("exports/plots/diagnostics")
+        if plot_dir.exists():
+            for plot_file in plot_dir.glob(f"*{run_id}*.png"):
+                url = upload_artifact(str(plot_file), run_id, "diagnostics/plots")
+                if url:
+                    plot_urls[plot_file.name] = url
 
     res = {
         "status": status,
         "module": "diagnostics",
         "run_id": run_id,
         "session_id": session_id,
-        "summary": {"shape": shape, "null_rate": null_rate, "column_count": shape[1]},
+        "summary": {
+            "shape": shape,
+            "null_rate": null_rate,
+            "column_count": shape[1],
+            "row_count": shape[0],
+        },
         "profile_shape": shape,
         "null_rate": null_rate,
         "column_count": shape[1],
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
+        "plot_urls": plot_urls,
     }
     append_to_run_history(run_id, res)
     return res

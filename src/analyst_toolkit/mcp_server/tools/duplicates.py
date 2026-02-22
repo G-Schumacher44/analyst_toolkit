@@ -2,10 +2,14 @@
 
 from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
 from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
+from pathlib import Path
+from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
+from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
 from analyst_toolkit.m04_duplicates.detect_dupes import detect_duplicates
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    get_session_metadata,
     load_input,
     save_to_session,
     should_export_html,
@@ -34,10 +38,13 @@ async def _toolkit_duplicates(
 
     # Save to session
     session_id = save_to_session(df_flagged, session_id=session_id)
+    metadata = get_session_metadata(session_id) or {}
+    row_count = metadata.get("row_count", len(df_flagged))
 
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
+    plot_urls = {}
     if should_export_html(config):
         report_tables = generate_duplicates_report(
             df, df_flagged, detection_results, mode, df_flagged=df_flagged
@@ -60,18 +67,31 @@ async def _toolkit_duplicates(
             )
             xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
             xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates")
+            
+        # Upload plots
+        plot_dir = Path("exports/plots/duplicates")
+        if plot_dir.exists():
+            for plot_file in plot_dir.glob(f"*{run_id}*.png"):
+                url = upload_artifact(str(plot_file), run_id, "duplicates/plots")
+                if url:
+                    plot_urls[plot_file.name] = url
 
     res = {
         "status": "pass" if duplicate_count == 0 else "warn",
         "module": "duplicates",
         "run_id": run_id,
         "session_id": session_id,
-        "summary": {"duplicate_count": duplicate_count, "mode": mode},
+        "summary": {
+            "duplicate_count": duplicate_count,
+            "mode": mode,
+            "row_count": row_count,
+        },
         "duplicate_count": duplicate_count,
         "mode": mode,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
+        "plot_urls": plot_urls,
     }
     append_to_run_history(run_id, res)
     return res
