@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 # ----------------------------------------
 [project]
 name = "analyst_toolkit"
-version = "0.2.0"  # Stable release
+version = "0.3.0"
 description = "A comprehensive toolkit for data analysis, validation, and diagnostics."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -49,6 +49,14 @@ dependencies = [
 notebook = [
   "ipython",
   "ipywidgets",
+]
+mcp = [
+  "fastapi>=0.111",
+  "uvicorn[standard]>=0.29",
+  "mcp>=1.2.1",
+  "pyarrow>=14.0",
+  "google-cloud-storage>=2.14",
+  "pydantic>=2.0",
 ]
 dev = [
   "pytest>=7.0",
@@ -106,16 +114,6 @@ where = ["src"]
 include = [
   "analyst_toolkit",
   "analyst_toolkit.*",
-  "m00_utils*",
-  "m01_diagnostics*",      
-  "m02_validation*",       
-  "m03_normalization*",    
-  "m04_duplicates*",       
-  "m05_detect_outliers*",  
-  "m06_outlier_handling*", 
-  "m07_imputation*",       
-  "m08_visuals*",
-  "m10_final_audit*"       
 ]
 
 [project.scripts]
