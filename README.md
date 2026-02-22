@@ -1,12 +1,12 @@
 <p align="center">
   <img src="repo_files/analyst_toolkit_banner.png" alt="Analyst Toolkit Logo" width="1000"/>
   <br>
-  <em>Data QA + Cleaning Engine &nbsp;·&nbsp; MCP Server</em>
+  <em>Self-Healing Data Audit &nbsp;·&nbsp; Data QA + Cleaning Engine &nbsp;·&nbsp; MCP Server</em>
 </p>
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.3.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -17,13 +17,25 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
+## 🆕 Version 0.4.0: The "Self-Healing" Audit
+
+This major update transforms the toolkit from a collection of utilities into a cohesive, autonomous auditing engine.
+
+1.  **Listen (Inference):** Predict data needs automatically using `toolkit_infer_configs`.
+2.  **Diagnose (Validation):** Detect holes (nulls) and bumps (outliers) with a single score.
+3.  **Heal (Auto-Apply):** Automatically repair data based on inferred rules using `toolkit_auto_heal`.
+4.  **Certify (Audit):** Generate a tamper-proof health report and sequence ledger.
+
+---
 
 ## 👀 MCP Ecosystem (New)
 
 Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or any JSON-RPC 2.0 client.
 
-- [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — setup, tool reference, and host integrations
-- Pull the container: `docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest`
+- **⛓️ Pipeline Mode:** Chain multiple tools in memory using `session_id`.
+- **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score** and a detailed **Healing Ledger**.
+- **📀 Golden Templates:** Mountable library of industry-standard configurations for Fraud, Migration, and Compliance.
+- [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — full setup, tool reference, and host integrations
 
 ---
 
@@ -34,8 +46,7 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - Full pipeline execution (notebook or CLI)
 - YAML-configurable logic per module
 - Checkpointing and joblib persistence
-- MCP server — expose all toolkit modules as tools to any MCP-compatible host (Claude Desktop, FridAI, VS Code)
-- 🐧 Built using synthetic data from the [dirty_birds_data_generator](https://github.com/G-Schumacher44/dirty_birds_data_generator)
+- MCP server — expose all toolkit modules as tools to any MCP-compatible host
 - 📂 [Sample output](exports/sample/) (plots, reports, cleaned dataset)
 
 ---
@@ -46,375 +57,23 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - [🧭 Config Guide](resource_hub/config_guide.md) — Overview of all YAML configuration files
 - [📦 Config Template Bundle (ZIP)](resource_hub/config.zip) — Full set of starter YAMLs for each module
 - [📘 Usage Guide](resource_hub/usage_guide.md) — Running the toolkit via notebooks or CLI
-- [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) — Full breakdown of how each module is used in notebooks
 
 ---
-
-### 📚 Quick Start Notebooks
-
-<p align="left">
-  <a href="notebooks/00_analyst_toolkit_modular_demo.ipynb" style="margin-right: 10px;">
-    <img alt="Modular Demo" src="https://img.shields.io/badge/Demo%20Notebook-Modular-blue?style=for-the-badge&logo=jupyter" />
-  </a>
-  &nbsp;&nbsp;
-  <a href="notebooks/01_analyst_toolkit_pipeline_demo.ipynb">
-    <img alt="Pipeline Demo" src="https://img.shields.io/badge/Demo%20Notebook-Full%20Pipeline-green?style=for-the-badge&logo=python" />
-  </a>
-</p>
-
----
-
-<details>
-<summary><strong>📝 Notes from the Dev Team</strong></summary>
-<br>
-
-**Why build a toolkit for analysts?**
-
-I built the Analyst Toolkit to eliminate the most frustrating part of the analytics workflow — wasting hours on boilerplate cleaning when we should be exploring, validating, and learning. This system gives you:
-
-- A one-stop first-pass QA and cleaning run, fully executable in a single notebook
-- Total modularity — run stage by stage or all at once
-- YAML-driven control over everything from null handling to audit thresholds
-
- Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don't just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. Giving the user **auditable automation**, and the insights needed to solve downsteam problems.
-
-It is overbuilt in the ways that matter: transparency, reproducibility, trust. It's designed for team collaboration, for portfolio projects, for production QA. It's for your current self — and your future self — when you need to revisit a workflow six months from now.
-
-The system is human readable and YAML-driven — for your team, stakeholders, and yourself.
-
-</details>
 
 <details>
 <summary><strong>🫆 version release notes</strong></summary>
 
+**v0.4.0 — The Cockpit Upgrade**
+- **State Management:** Introduced `StateStore` for in-memory DataFrame persistence between tool calls via `session_id`.
+- **Data Health Score:** Every run now generates a weighted 0-100 score (Completeness, Validity, Uniqueness, Consistency).
+- **Healing Ledger:** Persistent JSON/GCS history tracking every transformation made during a run.
+- **Golden Templates:** A library of "best-practice" configs for Fraud, Migration, and Compliance (mountable via `config/golden_templates/`).
+- **Autonomous Tools:** Added `auto_heal` (one-click cleaning) and `drift_detection` (schema/statistical comparison).
+- **Configuration Intelligence:** Added `get_config_schema` to return JSON Schemas for every module.
+
 **v0.3.0**
-- **MCP Server**
-  - New `analyst_toolkit/mcp_server/` package exposes all toolkit modules as MCP tools over JSON-RPC 2.0 (HTTP `/rpc`) and stdio transport.
-  - Tools: `toolkit_diagnostics`, `toolkit_validation`, `toolkit_outliers`, `toolkit_normalization`, `toolkit_duplicates`, `toolkit_imputation`, `toolkit_infer_configs`.
-  - Containerized via `Dockerfile.mcp` + `docker-compose.mcp.yml`. GCS data I/O — stateless, no shared volumes.
-  - Compatible with FridAI hub (`remote_manager` HTTP transport), Claude Desktop (stdio), and any JSON-RPC 2.0 client.
-  - GCS report upload: set `ANALYST_REPORT_BUCKET` to push HTML artifacts to GCS automatically.
-- **Docker / GHCR**
-  - Image published to `ghcr.io/g-schumacher44/analyst-toolkit-mcp` on every push to main, tagged `:latest` and `:0.3.0`.
-- **HTML Reports**
-  - All modules can emit self-contained single-page HTML reports alongside Excel exports.
-  - `generate_html_report()` in `report_generator.py` — inline CSS, TOC, 50-row preview cap, base64 plot embedding.
-  - `export_html_report()` in `export_utils.py` — writes to disk, returns absolute path for MCP `artifact_path`.
-  - HTML export auto-enables when `ANALYST_REPORT_BUCKET` is set; override with `export_html: true/false` in config.
-- **CI + Quality**
-  - GitHub Actions workflow: ruff lint, mypy type check, pytest, Docker build + GHCR push on main.
-  - Pre-commit hooks: nbstripout, ruff, mypy, pytest.
-  - Test suite: MCP server smoke tests, outlier detection unit tests, validation unit tests.
-- **Dependencies**
-  - `ipython` and `ipywidgets` moved from core deps to `[notebook]` optional extra. MCP server and CI installs are no longer bloated by notebook deps.
-  - New `[mcp]` optional extra: `pip install analyst_toolkit[mcp]`
-  - Install notebook extras: `pip install -e ".[notebook]"`
-
-**v0.2.1**
-  - **Normalization · Datetime parsing**
-    - Supports `format` or `formats` (multi-format, tried in order).
-    - Strict mode: `errors: 'raise'` fails fast with a clear error listing sample offending values.
-    - Honors `dayfirst`, `yearfirst`, `utc`; optional `make_naive` drops tz post-parse.
-    - Treats `auto` as infer (omits explicit format) to avoid false failures.
-    - File: `src/analyst_toolkit/m03_normalization/normalize_data.py`
-  - **Exports · Excel date stability**
-    - Applies explicit Excel formats for dates/datetimes for cross-platform rendering (Excel/Apple Numbers).
-    - Date: `yyyy-mm-dd`; Datetime: `yyyy-mm-dd hh:mm:ss`.
-    - File: `src/analyst_toolkit/m00_utils/export_utils.py`
-  - **Duplicates · Subset-focused clusters**
-    - Dashboard clusters now focus on the chosen `subset_columns` for clarity.
-    - Adds a "Duplicate Keys (subset only)" summary with counts (keys where count ≥ 2).
-    - Adds a "Duplicate Rows (subset columns only)" view to show exact duplicate keys without unrelated columns.
-    - Applies to both remove and flag modes; reduces confusion from adjacent-but-not-equal rows.
-    - Note: NaT values in subset compare equal in pandas; preview reflects that behavior.
-    - File: `src/analyst_toolkit/m04_duplicates/dup_display.py`
-  - **Configs & Docs**
-    - Template YAML updated with `utc`, `make_naive`, and commented `formats` examples.
-    - Config and notebook guides document the new options and strict-mode behavior.
-    - Files: `config/normalization_config_template.yaml`, `resource_hub/config_guide.md`, `resource_hub/notebook_usage_guide.md`
-  - **Behavioral impact**
-    - Correct, configurable parsing with optional strict failures; stable date display in `.xlsx`.
-    - Backward-compatible defaults preserved (`utc: false`, `make_naive: true`).
-
-**v0.2.0**
-  - **Standardized Configuration Handling**: All modules (`diagnostics`, `validation`, `normalization`, `outliers`, `imputation`, `final_audit`) now intelligently parse their own configuration blocks.
-  - **Simplified Module API**: Module runners can now be called with the full toolkit configuration object, removing the need for manual unpacking in notebooks or scripts. This makes the API consistent across the entire toolkit.
-  - **Notebook & Documentation Updates**: The demo notebook and usage guides have been updated to reflect the simpler, more robust module-calling convention.
-  - **Bug Fixes**: Corrected several minor bugs where modules were not correctly passing or interpreting their configurations, leading to more stable and predictable behavior.
-  - **Packaging**: Corrected `pyproject.toml` to ensure proper package discovery and installation from GitHub.
-
-**v0.1.3**
-
-  - Refactored Duplicates Module (M04):
-    - Correctly implemented distinct flag and remove modes.
-    - Decoupled detection logic from handling logic for improved robustness and clarity.
-    - Enhanced reporting artifacts for both modes, including flagged datasets and - duplicate clusters.
-
-  - Bug Fixes & Stability:
-    - Resolved critical bug where flag mode was incorrectly removing rows.
-    - Fixed various ImportError and ModuleNotFoundError issues related to project structure and dependencies.
-    - Standardized module calls in notebooks to prevent configuration caching issues.
-
-**v0.1.2**
-- Core module scaffolding complete (M01–M10)
-- Full pipeline execution works in notebook and CLI mode
-- Dashboard rendering with inline or exportable options
-- Joblib-based checkpointing and YAML-driven behavior
-
-</details>
-
-<details>
-<summary>📂 Project Structure</summary>
-
-```
-📦 src/                              # Source root
-│
-├── analyst_toolkit/                # 🔧 Main toolkit package
-│   ├── run_toolkit_pipeline.py     # CLI + notebook entrypoint
-│
-│   ├── m00_utils/                  # Shared utilities (config, loading, exporting, rendering)
-│   ├── m01_diagnostics/           # Data profiling and structural diagnostics
-│   ├── m02_validation/            # Schema validation and certification gate
-│   ├── m03_normalization/         # Data cleaning and standardization
-│   ├── m04_duplicates/            # Duplicate detection and removal
-│   ├── m05_detect_outliers/       # Outlier detection (IQR, z-score)
-│   ├── m06_outlier_handling/      # Outlier imputation or transformation
-│   ├── m07_imputation/            # Missing data imputation
-│   ├── m08_visuals/               # Plotting utilities and dashboard rendering
-│   ├── m10_final_audit/           # Final audit, edits, and pipeline certification
-│   └── mcp_server/                # MCP server — exposes toolkit as tools over JSON-RPC/stdio
-│       ├── server.py              # FastAPI /rpc dispatcher + stdio transport
-│       ├── io.py                  # GCS/parquet/CSV data loading + report upload
-│       ├── schemas.py             # TypedDicts and JSON Schema for tool I/O
-│       └── tools/                 # Self-registering tool modules (one per toolkit module)
-│
-├── 🧪 notebooks/                   # Interactive tutorial notebooks (modular & full run)
-│
-├── ⚙️ config/                     # YAML configuration files (one per module + full run)
-│
-├── 📂 data/
-│   ├── raw/                       # Original input datasets (e.g., synthetic_penguins_v3.5.csv)
-│   ├── processed/                 # Final certified outputs (.csv)
-│   └── features/                  # Optional engineered features (if extended)
-│
-├── 📤 exports/
-│   └── samples/                   # sample media from a QA run
-│
-├── resource_hub                   # Reference, Guidebooks, Documentation
-├── Makefile                       # Common dev and ops commands
-├── pyproject.toml                 # Build config and optional extras
-├── Dockerfile.mcp                 # MCP server container
-├── docker-compose.mcp.yml         # Docker Compose for local MCP server
-└── README.md
-```
-</details>
-
-<details>
-<summary><strong>🐧 Dirty Birds: Palmer Penguins Synthetic Dataset v3.5</strong></summary>
-<br>
-
-This toolkit is developed and tested using the <strong>Dirty Birds v3.5</strong> dataset — a fully synthetic recreation of the Palmer Penguins dataset, purposefully enriched with ambiguity, anomalies, and missing data. The dataset is generated using <a href="https://github.com/G-Schumacher44/dirty_birds_data_generator">penguin_synthetic_data_generator.py</a>, a synthentic data generator that simulates viable research data and injects realistic biological variance and field collection noise for robust QA testing.
-
-
-🐧 Features include:
-- Categorical anomalies (typos, whitespace, & swaps)
-- Numeric outliers and skew (both in error and in biological boundaries)
-- Nullable fields in both wide and narrow formats
-- Simulated noise to match real-world field data collection
-
-</details>
-
-## 🧰 Installation
-
-**🔧 Local Development**
-
-```bash
-git clone https://github.com/G-Schumacher44/analyst_toolkit.git
-cd analyst_toolkit
-make install-dev       # editable install + pre-commit hooks
-```
-
-**With MCP server deps**
-
-```bash
-pip install "analyst_toolkit[mcp] @ git+https://github.com/G-Schumacher44/analyst_toolkit.git"
-```
-
-**With notebook extras**
-
-```bash
-pip install "analyst_toolkit[notebook] @ git+https://github.com/G-Schumacher44/analyst_toolkit.git"
-```
-
-**Install from GitHub (bare)**
-
-```bash
-pip install git+https://github.com/G-Schumacher44/analyst_toolkit.git
-```
-
----
-
-## 🤖 MCP Server
-
-The toolkit ships with a built-in MCP server that exposes every module as a tool callable by any MCP-compatible host — Claude Desktop, FridAI, VS Code, or any JSON-RPC 2.0 client.
-
-**Pull from GHCR:**
-
-```bash
-docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
-```
-
-**Or build and start locally:**
-
-```bash
-make mcp-up        # docker-compose up --build -d
-make mcp-health    # curl /health and pretty-print response
-make mcp-logs      # tail logs
-make mcp-down      # stop
-```
-
-**Call a tool:**
-
-```bash
-curl -X POST http://localhost:8001/rpc \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"toolkit_outliers","arguments":{"gcs_path":"gs://my-bucket/data/"}}}'
-```
-
-Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure. HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set, or explicitly with `export_html: true` in the config.
-
-> See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
-
----
-
-## 🧾 Configuration
-
-Each module is controlled by a YAML file stored in `config/`.
-
-Example:
-
-```yaml
-validation:
-  input_path: "data/raw/synthetic_penguins_v3.5.csv"
-  schema_validation:
-    run: true
-    rules:
-      expected_columns: [...]
-```
-
-For full structure and explanation, [📘 Read the Full Configuration Guide](resource_hub/config_guide.md)
-
-
----
-
-## 🧪 Usage
-
-<details>
-<summary>📓 Notebook Use (Modular)</summary>
-
-Run each module interactively inside a Jupyter notebook.
-
-**Example**
-
-```python
-from analyst_toolkit.m02_validation.run_validation_pipeline import run_validation_pipeline
-from analyst_toolkit.m00_utils.config_loader import load_config
-from analyst_toolkit.m00_utils.load_data import load_csv
-
-# --- Load config and data ---
-config = load_config("config/validation_config_template.yaml")
-df = load_csv("path/to/your/data.csv")
-
-# --- Extract global settings ---
-notebook_mode = config.get("notebook", True)
-run_id = config.get("run_id", "demo_run")
-
-# --- Run Validation Module ---
-df_validated = run_validation_pipeline(
-    config=config, # Pass the full config object
-    df=df,
-    notebook=notebook_mode,
-    run_id=run_id
-)
-```
-
-Modules render dashboards inline if `notebook: true` is set in the YAML config.
-
->See [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) for a full breakdown
-
-</details>
-
-<details>
-<summary>📓 Notebook Use (Full Pipeline)</summary>
-
-Run the full pipeline interactively inside a Jupyter notebook.
-
-**Example**
-
-```python
-from analyst_toolkit.run_toolkit_pipeline import run_full_pipeline
-
-final_df = run_full_pipeline(config_path="config/run_toolkit_config.yaml")
-
-```
-
-Modules render dashboards inline if `notebook: true` is set in the YAML config.
-
-Each module reads its own YAML config file, with optional global overrides in `config/run_toolkit_config.yaml`. Example:
-
-```YAML
-# --- Global Run Settings ---
-run_id: "CLI_2_QA"
-notebook: false
-
-# --- Pipeline Entry Point ---
-pipeline_entry_path: "data/raw/synthetic_penguins_v3.5.csv"
-
-modules:
-  diagnostics:
-    run: true
-    config_path: "config/diag_config_template.yaml"
-
-  validation:
-    run: true
-    config_path: "config/validation_config_template.yaml"
-
-```
-
->See [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) for a full breakdown
-
-</details>
-
-<details>
-<summary>🔁 Full Pipeline (CLI)</summary>
-
-```bash
-make pipeline                              # uses config/run_toolkit_config.yaml
-make pipeline CONFIG=config/my_config.yaml # custom config
-# or directly:
-python -m analyst_toolkit.run_toolkit_pipeline --config config/run_toolkit_config.yaml
-```
-
->For full structure and explanation, [📘 Read the Full Usage Guide](resource_hub/usage_guide.md)
-
-</details>
-
-<details>
-<summary>📃 Dashboard Snapshots</summary>
-
-<div align="center">
-  <table>
-    <tr>
-      <td><img src="repo_files/db_screen_00.png" width="400"/></td>
-      <td><img src="repo_files/db_screen_1.png" width="400"/></td>
-    </tr>
-    <tr>
-      <td><img src="repo_files/db_screen_2.png" width="400"/></td>
-      <td><img src="repo_files/db_screen_3.png" width="400"/></td>
-    </tr>
-  </table>
-</div>
-
+- **MCP Server:** New `analyst_toolkit/mcp_server/` package exposes all toolkit modules as MCP tools.
+- **HTML Reports:** All modules can emit self-contained single-page HTML reports.
 </details>
 
 ---
