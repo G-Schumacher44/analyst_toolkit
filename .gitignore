@@ -120,3 +120,5 @@ pytest_cache/
 *.rar
 *.7z
 !resource_hub/config.zip
+.claude
+.claude/*
