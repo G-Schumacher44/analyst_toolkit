@@ -4,12 +4,14 @@
 #   docker-compose -f docker-compose.mcp.yml up --build
 #
 # Environment:
-#   GOOGLE_APPLICATION_CREDENTIALS — path to GCS service account key (mounted below)
 #   ANALYST_MCP_PORT               — override default port 8001 (optional)
-#   ANALYST_REPORT_BUCKET          — GCS bucket for HTML report upload, e.g. gs://fridai-reports
+#   ANALYST_REPORT_BUCKET          — GCS bucket for HTML report upload, e.g. gs://gs://data-reporting
 #                                    If unset, reports are written to ./exports only (local dev)
 #   ANALYST_REPORT_PREFIX          — blob path prefix, default "analyst_toolkit/reports"
 #                                    Reports land at: {bucket}/{prefix}/{run_id}/{module}/{filename}
+#   GCP_CREDS_PATH                 — path to GCS service account key on host (optional)
+#                                    e.g. export GCP_CREDS_PATH=~/.secrets/analyst-toolkit-mcp.json
+#                                    If unset, GCS upload is disabled (local-only mode)
 #
 # fridai-core integration:
 #   Set FRIDAI_ANALYST_MCP_ENABLED=true and FRIDAI_ANALYST_MCP_URL=http://127.0.0.1:8001
@@ -23,22 +25,21 @@ services:
     ports:
       - "${ANALYST_MCP_PORT:-8001}:8001"
     environment:
-      # GCS auth — set GOOGLE_APPLICATION_CREDENTIALS to point at the mounted key file
-      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp_creds
+      - ANALYST_MCP_PORT=8001
+      # GCS auth — only set if GCP_CREDS_PATH is provided
+      - GOOGLE_APPLICATION_CREDENTIALS=${GCP_CREDS_PATH:+/run/secrets/gcp_creds}
       # Report upload — set ANALYST_REPORT_BUCKET to enable GCS upload of HTML reports
       - ANALYST_REPORT_BUCKET=${ANALYST_REPORT_BUCKET:-}
       - ANALYST_REPORT_PREFIX=${ANALYST_REPORT_PREFIX:-analyst_toolkit/reports}
     volumes:
-      # Mount GCS service account key from outside the repo (never commit credentials)
-      # Set GCP_CREDS_PATH in your shell or .envrc, e.g.:
-      #   export GCP_CREDS_PATH=~/.secrets/analyst-toolkit-mcp.json
-      - ${GCP_CREDS_PATH:-~/.secrets/gcp_creds.json}:/run/secrets/gcp_creds:ro
       # Optional: mount local exports dir so HTML reports are accessible on host
       - ./exports:/app/exports
+      # Optional: mount local data dir for local CSV/parquet inputs
+      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
