@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from analyst_toolkit.m00_utils.export_utils import export_html_report, export_profile_summary
-from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
+from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
@@ -30,9 +29,16 @@ async def _toolkit_diagnostics(
     if not session_id:
         session_id = save_to_session(df)
 
-    module_cfg = {**config, "logging": "off"}
-    full_profile = run_data_profile(df, config=module_cfg)
-    profile_export = full_profile.get("for_export", {})
+    # Ensure plotting and export are enabled in the pipeline runner
+    module_cfg = {
+        **config,
+        "logging": "off",
+        "profile": {"run": True, "settings": {"export": True, "export_html": should_export_html(config)}},
+        "plotting": {"run": True}
+    }
+    
+    # run_diag_pipeline handles profiling, plotting and report generation
+    run_diag_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
 
     shape = [int(df.shape[0]), int(df.shape[1])]
     null_rate = round(float(df.isnull().mean().mean()), 4)
@@ -45,14 +51,13 @@ async def _toolkit_diagnostics(
     artifact_url = ""
     xlsx_url = ""
     plot_urls = {}
+    
     if should_export_html(config):
-        html_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
-        artifact_path = export_html_report(profile_export, html_path, "Diagnostics", run_id)
+        # Paths where run_diag_pipeline saves its reports
+        artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
         artifact_url = upload_artifact(artifact_path, run_id, "diagnostics")
 
-        xlsx_cfg = {"export_path": "exports/reports/diagnostics/diagnostics_summary.xlsx"}
-        export_profile_summary(profile_export, xlsx_cfg, run_id=run_id)
-        xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_summary.xlsx"
+        xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics")
 
         # Upload plots - search both root and run_id subdir

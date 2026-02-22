@@ -2,9 +2,7 @@
 
 from pathlib import Path
 
-from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
-from analyst_toolkit.m00_utils.report_generator import generate_duplicates_report
-from analyst_toolkit.m04_duplicates.detect_dupes import detect_duplicates
+from analyst_toolkit.m04_duplicates.run_dupes_pipeline import run_duplicates_pipeline
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
@@ -32,40 +30,48 @@ async def _toolkit_duplicates(
     subset_cols = subset_columns or config.get("subset_columns")
     mode = config.get("mode", "flag")
 
-    df_flagged, detection_results = detect_duplicates(df.copy(), subset_cols)
-    duplicate_count = int(detection_results.get("duplicate_count", 0))
+    # Build module config for the pipeline runner
+    module_cfg = {
+        "duplicates": {
+            **config,
+            "subset_columns": subset_cols,
+            "mode": mode,
+            "logging": "off",
+            "settings": {
+                "export": True,
+                "export_html": should_export_html(config),
+                "plotting": {"run": True}
+            }
+        }
+    }
+
+    # run_duplicates_pipeline returns the processed dataframe (flagged or removed)
+    df_processed = run_duplicates_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
+
+    # We still need the duplicate count for the MCP response. 
+    # Since we don't have the results dict from the runner here easily, 
+    # we'll look at the difference in row counts if removed, or the 'is_duplicate' column if flagged.
+    if mode == "remove":
+        duplicate_count = len(df) - len(df_processed)
+    else:
+        duplicate_count = int(df_processed["is_duplicate"].sum()) if "is_duplicate" in df_processed.columns else 0
 
     # Save to session
-    session_id = save_to_session(df_flagged, session_id=session_id)
+    session_id = save_to_session(df_processed, session_id=session_id)
     metadata = get_session_metadata(session_id) or {}
-    row_count = metadata.get("row_count", len(df_flagged))
+    row_count = metadata.get("row_count", len(df_processed))
 
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
     plot_urls = {}
+    
     if should_export_html(config):
-        report_tables = generate_duplicates_report(
-            df, df_flagged, detection_results, mode, df_flagged=df_flagged
-        )
-        html_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
-        artifact_path = export_html_report(report_tables, html_path, "Duplicates", run_id)
+        artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
         artifact_url = upload_artifact(artifact_path, run_id, "duplicates")
 
-        xlsx_tables = {
-            k: (v.head(10_000) if hasattr(v, "head") else v)
-            for k, v in report_tables.items()
-            if hasattr(v, "to_excel") and k != "flagged_dataset"
-        }
-        if xlsx_tables:
-            export_dataframes(
-                xlsx_tables,
-                "exports/reports/duplicates/duplicates_report.xlsx",
-                file_format="xlsx",
-                run_id=run_id,
-            )
-            xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
-            xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates")
+        xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
+        xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates")
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [
