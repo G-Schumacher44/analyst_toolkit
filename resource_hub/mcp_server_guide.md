@@ -24,15 +24,22 @@ The server is stateless. Data comes in via a path (GCS URI or local file), resul
 **Prerequisites:** Docker or Podman. GCS credentials if reading from GCS.
 
 ```bash
-# Clone and build
+# Clone and start
 git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
 
-# Start the server
-docker-compose -f docker-compose.mcp.yml up --build
+# Start the server (Docker)
+make mcp-up
+make mcp-health
 ```
 
-The server starts on port `8001`. Verify:
+Optional: pull the prebuilt image (for your own orchestration):
+
+```bash
+docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
+```
+
+The server starts on port `8001` by default. You can also verify directly:
 
 ```bash
 curl http://localhost:8001/health
@@ -53,6 +60,11 @@ curl http://localhost:8001/health
 }
 ```
 
+Useful commands:
+
+- `make mcp-logs` — tail server logs
+- `make mcp-down` — stop the server
+
 ---
 
 ## Environment Variables
@@ -61,7 +73,8 @@ Set these in your shell, `.envrc`, or Docker environment before starting the ser
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GCP_CREDS_PATH` | For GCS data | `~/.secrets/gcp_creds.json` | Path to GCS service account key on the host. Mounted into the container at `/run/secrets/gcp_creds`. |
+| `GCP_CREDS_PATH` | For GCS data (Docker) | `~/.secrets/gcp_creds.json` | Host path to service account key. Mounted into the container at `/run/secrets/gcp_creds`. |
+| `GOOGLE_APPLICATION_CREDENTIALS` | For GCS data (no Docker) | _(unset)_ | Path to service account key for local Python runs. |
 | `ANALYST_MCP_PORT` | No | `8001` | Host port to bind. |
 | `ANALYST_REPORT_BUCKET` | No | _(unset — local only)_ | GCS bucket for HTML report upload, e.g. `gs://my-reports`. If unset, reports are written to `./exports` only. |
 | `ANALYST_REPORT_PREFIX` | No | `analyst_toolkit/reports` | Blob path prefix within `ANALYST_REPORT_BUCKET`. Reports land at `{prefix}/{run_id}/{module}/{filename}`. |
@@ -72,6 +85,8 @@ Set these in your shell, `.envrc`, or Docker environment before starting the ser
 export GCP_CREDS_PATH=~/.secrets/analyst-toolkit-mcp.json
 export ANALYST_REPORT_BUCKET=gs://my-fridai-reports
 ```
+
+If running without Docker, set `GOOGLE_APPLICATION_CREDENTIALS` instead of `GCP_CREDS_PATH`.
 
 ---
 
@@ -98,9 +113,9 @@ All tools return a JSON object with at minimum:
 }
 ```
 
-`artifact_path` is the local path to the HTML report (empty string if `export_html` is not set). `artifact_url` is the GCS public URL if `ANALYST_REPORT_BUCKET` is configured, otherwise empty.
+`artifact_path` is the local path to the HTML report (empty string if HTML export is disabled). `artifact_url` is the GCS public URL if `ANALYST_REPORT_BUCKET` is configured, otherwise empty.
 
-To enable HTML report generation, pass `"export_html": true` in `config`:
+HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set. Override per call with `export_html: true/false` in `config`:
 
 ```json
 { "gcs_path": "gs://bucket/table/", "config": { "export_html": true } }
@@ -262,7 +277,7 @@ Fills missing values using per-column strategies. Returns immediately with `stat
 
 Inspects a dataset and generates YAML config strings for the specified toolkit modules. Useful for bootstrapping a new dataset's config without manually authoring YAML.
 
-Requires `analyst_toolkit_deploy` to be installed in the container (see [requirements-mcp.txt](../requirements-mcp.txt)).
+Requires the deployment utility package to be installed in the container (see [requirements-mcp.txt](../requirements-mcp.txt)).
 
 **Input parameters** (different shape from other tools — no `config` or `run_id`):
 
@@ -324,9 +339,8 @@ The hub will call `POST /rpc` with standard JSON-RPC 2.0 payloads. Tools are pro
 Claude Desktop uses stdio transport. Run the server directly without Docker:
 
 ```bash
-# Install dependencies
-pip install -e ".[dev]"
-pip install -r requirements-mcp.txt
+# Install MCP extras
+pip install -e ".[mcp]"
 
 # Start in stdio mode
 python -m analyst_toolkit.mcp_server.server --stdio
@@ -407,7 +421,7 @@ The server dispatches on path prefix:
 
 ## HTML Report Artifacts
 
-When `export_html: true` is set in the tool config:
+HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set, or explicitly with `export_html: true` in the tool config.
 
 1. The tool generates a self-contained HTML report and writes it to `exports/reports/{module}/{run_id}_report.html` inside the container.
 2. If `ANALYST_REPORT_BUCKET` is set, the file is uploaded to GCS at `{prefix}/{run_id}/{module}/{filename}` and the public URL is returned in `artifact_url`.
@@ -423,8 +437,7 @@ For local development or stdio hosts:
 
 ```bash
 # Install
-pip install -e ".[dev]"
-pip install -r requirements-mcp.txt
+pip install -e ".[mcp]"
 
 # HTTP mode (default, port 8001)
 python -m analyst_toolkit.mcp_server.server

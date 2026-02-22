@@ -1,30 +1,33 @@
 <p align="center">
   <img src="repo_files/analyst_toolkit_banner.png" alt="Analyst Toolkit Logo" width="1000"/>
   <br>
-  <em>Data QA + Cleaning Engine</em>
+  <em>Data QA + Cleaning Engine &nbsp;·&nbsp; MCP Server</em>
 </p>
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
   <img alt="Version" src="https://img.shields.io/badge/version-v0.3.0-blueviolet">
+  <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
+    <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
+  </a>
+  <img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-analyst--toolkit--mcp-blue?logo=docker">
 </p>
 
 # 🧪 Analyst Toolkit
 
-A modular, end-to-end data QA and preprocessing pipeline designed for analysts and data scientists.
+Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
 
-## 👀 Ecosystem Improvements(NEW)
+## 👀 MCP Ecosystem (New)
 
-To make getting started even easier, two companion projects are available:
+Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or any JSON-RPC 2.0 client.
 
--   [**Deployment Utility**](https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility): A utility to automate project setup, manage configurations, and run pipelines from a simple interface. Spend less time on scaffolding and more time analyzing data.
-
--   [**Starter Kit (Zip)**](https://github.com/G-Schumacher44/analyst_toolkit_starter_kit): A portable, one-stop project builder. Download the zip to get a ready-to-use project structure with pre-configured templates, making it easier than ever to use the toolkit.
+- [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — setup, tool reference, and host integrations
+- Pull the container: `docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest`
 
 ---
 
-## TLDR;
+## TL;DR
 
 - Modular execution by stage (diagnostics, validation, normalization, etc.)
 - Inline dashboards and exportable HTML + Excel reports
@@ -33,7 +36,17 @@ To make getting started even easier, two companion projects are available:
 - Checkpointing and joblib persistence
 - MCP server — expose all toolkit modules as tools to any MCP-compatible host (Claude Desktop, FridAI, VS Code)
 - 🐧 Built using synthetic data from the [dirty_birds_data_generator](https://github.com/G-Schumacher44/dirty_birds_data_generator)
-- 📂 [Sample output](exports/sample/)(plots, reports, cleaned dataset)
+- 📂 [Sample output](exports/sample/) (plots, reports, cleaned dataset)
+
+---
+
+## 📎 Resource Hub (Start Here)
+
+- [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — Setup, tool reference, FridAI + Claude Desktop integration
+- [🧭 Config Guide](resource_hub/config_guide.md) — Overview of all YAML configuration files
+- [📦 Config Template Bundle (ZIP)](resource_hub/config.zip) — Full set of starter YAMLs for each module
+- [📘 Usage Guide](resource_hub/usage_guide.md) — Running the toolkit via notebooks or CLI
+- [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) — Full breakdown of how each module is used in notebooks
 
 ---
 
@@ -63,9 +76,9 @@ I built the Analyst Toolkit to eliminate the most frustrating part of the analyt
 - Total modularity — run stage by stage or all at once
 - YAML-driven control over everything from null handling to audit thresholds
 
- Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don’t just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. Giving the user **auditable automation**, and the insights needed to solve downsteam problems.
+ Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don't just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. Giving the user **auditable automation**, and the insights needed to solve downsteam problems.
 
-It is overbuilt in the ways that matter: transparency, reproducibility, trust. It’s designed for team collaboration, for portfolio projects, for production QA. It’s for your current self — and your future self — when you need to revisit a workflow six months from now.
+It is overbuilt in the ways that matter: transparency, reproducibility, trust. It's designed for team collaboration, for portfolio projects, for production QA. It's for your current self — and your future self — when you need to revisit a workflow six months from now.
 
 The system is human readable and YAML-driven — for your team, stakeholders, and yourself.
 
@@ -81,17 +94,20 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
   - Containerized via `Dockerfile.mcp` + `docker-compose.mcp.yml`. GCS data I/O — stateless, no shared volumes.
   - Compatible with FridAI hub (`remote_manager` HTTP transport), Claude Desktop (stdio), and any JSON-RPC 2.0 client.
   - GCS report upload: set `ANALYST_REPORT_BUCKET` to push HTML artifacts to GCS automatically.
+- **Docker / GHCR**
+  - Image published to `ghcr.io/g-schumacher44/analyst-toolkit-mcp` on every push to main, tagged `:latest` and `:0.3.0`.
 - **HTML Reports**
   - All modules can emit self-contained single-page HTML reports alongside Excel exports.
   - `generate_html_report()` in `report_generator.py` — inline CSS, TOC, 50-row preview cap, base64 plot embedding.
   - `export_html_report()` in `export_utils.py` — writes to disk, returns absolute path for MCP `artifact_path`.
-  - Enable per-call with `export_html: true` in the tool config dict.
+  - HTML export auto-enables when `ANALYST_REPORT_BUCKET` is set; override with `export_html: true/false` in config.
 - **CI + Quality**
-  - GitHub Actions workflow: ruff lint, mypy type check, pytest, Docker image dry-run.
-  - Pre-commit hooks: ruff, mypy, pytest.
+  - GitHub Actions workflow: ruff lint, mypy type check, pytest, Docker build + GHCR push on main.
+  - Pre-commit hooks: nbstripout, ruff, mypy, pytest.
   - Test suite: MCP server smoke tests, outlier detection unit tests, validation unit tests.
 - **Dependencies**
   - `ipython` and `ipywidgets` moved from core deps to `[notebook]` optional extra. MCP server and CI installs are no longer bloated by notebook deps.
+  - New `[mcp]` optional extra: `pip install analyst_toolkit[mcp]`
   - Install notebook extras: `pip install -e ".[notebook]"`
 
 **v0.2.1**
@@ -128,7 +144,7 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
   - **Packaging**: Corrected `pyproject.toml` to ensure proper package discovery and installation from GitHub.
 
 **v0.1.3**
-  
+
   - Refactored Duplicates Module (M04):
     - Correctly implemented distinct flag and remove modes.
     - Decoupled detection logic from handling logic for improved robustness and clarity.
@@ -145,21 +161,6 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 - Dashboard rendering with inline or exportable options
 - Joblib-based checkpointing and YAML-driven behavior
 
-**Plans for v0.2.0**
-- Add dynamic changelog to track transformations end-to-end
-- Reporting systems and exporting refractor 
-- Expand visual EDA and statistical audit tools
-- Add streaming-friendly dashboard format (e.g., Streamlit or Voila prototype)
-
-</details>
-
-<details><summary>📎 Resource Hub Links</summary>
-
-- [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — Setup, tool reference, FridAI + Claude Desktop integration
-- [🧭 Config Guide](resource_hub/config_guide.md) — Overview of all YAML configuration files
-- [📦 Config Template Bundle (ZIP)](resource_hub/config.zip) — Full set of starter YAMLs for each module
-- [📘 Usage Guide](resource_hub/usage_guide.md) — Running the toolkit via notebooks or CLI
-- [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) — Full breakdown of how each module is used in notebooks
 </details>
 
 <details>
@@ -168,10 +169,7 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 ```
 📦 src/                              # Source root
 │
-├── __init__.py                     # (Optional) top-level init
-│
 ├── analyst_toolkit/                # 🔧 Main toolkit package
-│   ├── __init__.py
 │   ├── run_toolkit_pipeline.py     # CLI + notebook entrypoint
 │
 │   ├── m00_utils/                  # Shared utilities (config, loading, exporting, rendering)
@@ -189,7 +187,6 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 │       ├── io.py                  # GCS/parquet/CSV data loading + report upload
 │       ├── schemas.py             # TypedDicts and JSON Schema for tool I/O
 │       └── tools/                 # Self-registering tool modules (one per toolkit module)
-└── archive/                        # Legacy or prototype modules (optional, safe to ignore)
 │
 ├── 🧪 notebooks/                   # Interactive tutorial notebooks (modular & full run)
 │
@@ -204,11 +201,11 @@ The system is human readable and YAML-driven — for your team, stakeholders, an
 │   └── samples/                   # sample media from a QA run
 │
 ├── resource_hub                   # Reference, Guidebooks, Documentation
-├── pyproject.toml                 # Build config for TOML-based packaging
-├── requirements.txt              # Required packages for pip installs
-├── .env / .env.template           # Environment variables (if needed)
-├── .gitignore                    # Standard ignore patterns
-└── README.md                     # Project overview and usage instructions
+├── Makefile                       # Common dev and ops commands
+├── pyproject.toml                 # Build config and optional extras
+├── Dockerfile.mcp                 # MCP server container
+├── docker-compose.mcp.yml         # Docker Compose for local MCP server
+└── README.md
 ```
 </details>
 
@@ -226,24 +223,34 @@ This toolkit is developed and tested using the <strong>Dirty Birds v3.5</strong>
 - Simulated noise to match real-world field data collection
 
 </details>
- 
+
 ## 🧰 Installation
 
 **🔧 Local Development**
 
-Clone the repo and install locally using the provided `pyproject.toml`:
-
 ```bash
 git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
-pip install -e .[dev]
+make install-dev       # editable install + pre-commit hooks
 ```
-**🌐 Install Directly via GitHub**
+
+**With MCP server deps**
+
+```bash
+pip install "analyst_toolkit[mcp] @ git+https://github.com/G-Schumacher44/analyst_toolkit.git"
+```
+
+**With notebook extras**
+
+```bash
+pip install "analyst_toolkit[notebook] @ git+https://github.com/G-Schumacher44/analyst_toolkit.git"
+```
+
+**Install from GitHub (bare)**
 
 ```bash
 pip install git+https://github.com/G-Schumacher44/analyst_toolkit.git
 ```
-This installs the latest version from main. To target a specific branch or tag, append @branchname or @v0.1.0 to the URL.
 
 ---
 
@@ -251,28 +258,30 @@ This installs the latest version from main. To target a specific branch or tag, 
 
 The toolkit ships with a built-in MCP server that exposes every module as a tool callable by any MCP-compatible host — Claude Desktop, FridAI, VS Code, or any JSON-RPC 2.0 client.
 
-**Start with Docker:**
+**Pull from GHCR:**
 
 ```bash
-docker-compose -f docker-compose.mcp.yml up --build
+docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
 ```
 
-**Verify it's running:**
+**Or build and start locally:**
 
 ```bash
-curl http://localhost:8001/health
-# {"status":"ok","tools":["toolkit_diagnostics","toolkit_validation","toolkit_outliers",...]}
+make mcp-up        # docker-compose up --build -d
+make mcp-health    # curl /health and pretty-print response
+make mcp-logs      # tail logs
+make mcp-down      # stop
 ```
 
-**Call a tool (example):**
+**Call a tool:**
 
 ```bash
 curl -X POST http://localhost:8001/rpc \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"toolkit_outliers","arguments":{"gcs_path":"gs://my-bucket/data/","config":{"export_html":true}}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"toolkit_outliers","arguments":{"gcs_path":"gs://my-bucket/data/"}}}'
 ```
 
-Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure. All tools return JSON; set `export_html: true` in config to also generate an HTML report artifact.
+Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure. HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set, or explicitly with `export_html: true` in the config.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
@@ -303,7 +312,7 @@ For full structure and explanation, [📘 Read the Full Configuration Guide](res
 <details>
 <summary>📓 Notebook Use (Modular)</summary>
 
-Run each module interactively inside a Jupyter notebook. 
+Run each module interactively inside a Jupyter notebook.
 
 **Example**
 
@@ -359,10 +368,8 @@ run_id: "CLI_2_QA"
 notebook: false
 
 # --- Pipeline Entry Point ---
-# The single, explicit path for the initial raw data load.
 pipeline_entry_path: "data/raw/synthetic_penguins_v3.5.csv"
 
-#individual module entry points
 modules:
   diagnostics:
     run: true
@@ -381,15 +388,14 @@ modules:
 <details>
 <summary>🔁 Full Pipeline (CLI)</summary>
 
-Run the pipeline in `CLI` using the fallowing command.
-
 ```bash
-
+make pipeline                              # uses config/run_toolkit_config.yaml
+make pipeline CONFIG=config/my_config.yaml # custom config
+# or directly:
 python -m analyst_toolkit.run_toolkit_pipeline --config config/run_toolkit_config.yaml
-
 ```
 
->For full structure and explanation, [📘 Read the Full Usage Guide](resource_hub/usage_guide.md) 
+>For full structure and explanation, [📘 Read the Full Usage Guide](resource_hub/usage_guide.md)
 
 </details>
 
@@ -411,13 +417,11 @@ python -m analyst_toolkit.run_toolkit_pipeline --config config/run_toolkit_confi
 
 </details>
 
-</details>
-
 ---
 
 ## 🤝 On Generative AI Use
 
-Generative AI tools (Gemini 2.5-PRO, ChatGPT 4o - 4.1) were used throughout this project as part of an integrated workflow — supporting code generation, documentation refinement, and idea testing. These tools accelerated development, but the logic, structure, and documentation reflect intentional, human-led design. This repository reflects a collaborative process: where automation supports clarity, and iteration deepens understanding.
+Generative AI tools (Gemini 2.5-PRO, ChatGPT 4o - 4.1, Claude Sonnet) were used throughout this project as part of an integrated workflow — supporting code generation, documentation refinement, and idea testing. These tools accelerated development, but the logic, structure, and documentation reflect intentional, human-led design. This repository reflects a collaborative process: where automation supports clarity, and iteration deepens understanding.
 
 ---
 
