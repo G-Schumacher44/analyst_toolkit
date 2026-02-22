@@ -31,7 +31,7 @@ from analyst_toolkit.m00_utils.export_utils import (
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_report
 from analyst_toolkit.m05_detect_outliers.detect_outliers import detect_outliers
-from analyst_toolkit.m05_detect_outliers.display_detection import display_detection_summary
+
 from analyst_toolkit.m05_detect_outliers.plot_outliers import generate_outlier_plots
 
 
@@ -107,6 +107,8 @@ def run_outlier_detection_pipeline(
             )
 
     if plotting_cfg.get("show_plots_inline") and notebook:
+        from analyst_toolkit.m05_detect_outliers.display_detection import display_detection_summary
+
         display_detection_summary(detection_results, plot_save_dir=plot_save_dir)
 
     # This block will now execute correctly.

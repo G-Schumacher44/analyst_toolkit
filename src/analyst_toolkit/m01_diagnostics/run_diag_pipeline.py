@@ -30,7 +30,7 @@ from analyst_toolkit.m00_utils.export_utils import (
 )
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
-from analyst_toolkit.m01_diagnostics.diag_display import display_profile_summary
+
 from analyst_toolkit.m08_visuals.distributions import (
     plot_categorical_distribution,
     plot_continuous_distribution,
@@ -126,6 +126,8 @@ def run_diag_pipeline(
             # --- END OF CORRECTION ---
 
         if settings.get("show_inline", False) and notebook:
+            from analyst_toolkit.m01_diagnostics.diag_display import display_profile_summary
+
             display_profile_summary(
                 full_profile["for_display"], plot_paths=plot_paths, settings=settings
             )

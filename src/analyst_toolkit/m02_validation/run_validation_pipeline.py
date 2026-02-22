@@ -31,7 +31,7 @@ from analyst_toolkit.m00_utils.export_utils import (
 )
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
-from analyst_toolkit.m02_validation.validation_display import display_validation_summary
+
 
 
 def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
@@ -132,6 +132,8 @@ def run_validation_pipeline(
                 export_html_report(report_tables, html_path, "Validation", run_id)
 
         if settings.get("show_inline", True) and notebook:
+            from analyst_toolkit.m02_validation.validation_display import display_validation_summary
+
             display_validation_summary(validation_results, notebook=notebook)
 
         if settings.get("checkpoint", False):
