@@ -3,7 +3,8 @@ config_models.py — Pydantic models for module configurations.
 Used to generate JSON Schemas for the MCP server.
 """
 
-from typing import Dict, List, Optional, Any, Union
+from typing import Any, Dict, List, Optional, Union
+
 from pydantic import BaseModel, Field
 
 
@@ -24,8 +25,12 @@ class ValidationConfig(BaseModel):
 
 class NormalizationRules(BaseModel):
     rename_columns: Dict[str, str] = Field({}, description="Mapping of old names to new names.")
-    standardize_text_columns: List[str] = Field([], description="List of columns to trim and lowercase.")
-    value_mappings: Dict[str, Dict[str, Any]] = Field({}, description="Explicit value replacements per column.")
+    standardize_text_columns: List[str] = Field(
+        [], description="List of columns to trim and lowercase."
+    )
+    value_mappings: Dict[str, Dict[str, Any]] = Field(
+        {}, description="Explicit value replacements per column."
+    )
     fuzzy_matching: Dict[str, Any] = Field({}, description="Fuzzy matching settings.")
     parse_datetimes: Dict[str, Any] = Field({}, description="Datetime parsing rules.")
     coerce_dtypes: Dict[str, str] = Field({}, description="Final type coercion mapping.")
@@ -49,7 +54,9 @@ class OutliersConfig(BaseModel):
 
 
 class DuplicatesConfig(BaseModel):
-    subset_columns: Optional[List[str]] = Field(None, description="Columns to consider for duplicate detection.")
+    subset_columns: Optional[List[str]] = Field(
+        None, description="Columns to consider for duplicate detection."
+    )
     mode: str = Field("flag", description="Action: 'flag' or 'drop'.")
     export_html: bool = Field(True, description="Whether to export an HTML report.")
 

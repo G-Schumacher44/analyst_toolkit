@@ -33,7 +33,6 @@ from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 
 
-
 def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
     """Configures logging based on execution mode."""
     if logging_mode == "off":

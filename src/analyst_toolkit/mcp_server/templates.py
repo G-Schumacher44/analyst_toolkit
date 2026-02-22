@@ -3,8 +3,10 @@ templates.py — Dynamically loads Golden Configuration Templates from the confi
 """
 
 import os
-import yaml
 from pathlib import Path
+
+import yaml
+
 
 def get_golden_configs() -> dict:
     """
@@ -13,7 +15,7 @@ def get_golden_configs() -> dict:
     templates = {}
     # Path relative to the project root (where server usually runs)
     template_dir = Path("config/golden_templates")
-    
+
     if not template_dir.exists():
         return {}
 
@@ -22,11 +24,12 @@ def get_golden_configs() -> dict:
             with open(file, "r") as f:
                 name = file.stem
                 templates[name] = yaml.safe_load(f)
-        except Exception as e:
+        except Exception:
             # Skip malformed templates
             continue
-            
+
     return templates
+
 
 # For backwards compatibility if imported as a constant
 GOLDEN_CONFIGS = get_golden_configs()

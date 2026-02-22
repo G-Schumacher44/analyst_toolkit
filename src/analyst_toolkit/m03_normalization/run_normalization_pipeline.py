@@ -30,7 +30,6 @@ from analyst_toolkit.m00_utils.export_utils import (
 )
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m00_utils.report_generator import generate_transformation_report
-
 from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
 
 
@@ -84,7 +83,9 @@ def run_normalization_pipeline(
     )
 
     if settings.get("show_inline", True) and notebook:
-        from analyst_toolkit.m03_normalization.display_normalization import display_normalization_summary
+        from analyst_toolkit.m03_normalization.display_normalization import (
+            display_normalization_summary,
+        )
 
         display_normalization_summary(
             changelog, df_original, df_normalized, module_cfg.get("rules", {})

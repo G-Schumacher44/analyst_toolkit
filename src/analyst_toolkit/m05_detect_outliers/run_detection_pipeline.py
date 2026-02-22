@@ -31,7 +31,6 @@ from analyst_toolkit.m00_utils.export_utils import (
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_report
 from analyst_toolkit.m05_detect_outliers.detect_outliers import detect_outliers
-
 from analyst_toolkit.m05_detect_outliers.plot_outliers import generate_outlier_plots
 
 

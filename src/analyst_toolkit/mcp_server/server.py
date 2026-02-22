@@ -149,6 +149,7 @@ async def health() -> dict:
 
 from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     auto_heal,
+    cockpit,
     config_schema,
     diagnostics,
     drift,
@@ -158,7 +159,6 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     normalization,
     outliers,
     validation,
-    cockpit,
 )
 
 # --- Entry point and transport selection ---

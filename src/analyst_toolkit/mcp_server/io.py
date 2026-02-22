@@ -245,9 +245,9 @@ def append_to_run_history(run_id: str, entry: dict):
     """
     history_dir = Path("exports/reports/history")
     history_dir.mkdir(parents=True, exist_ok=True)
-    
+
     history_file = history_dir / f"{run_id}_history.json"
-    
+
     history = []
     if history_file.exists():
         try:
@@ -255,13 +255,13 @@ def append_to_run_history(run_id: str, entry: dict):
                 history = json.load(f)
         except Exception:
             history = []
-            
+
     entry["timestamp"] = datetime.now(timezone.utc).isoformat()
     history.append(entry)
-    
+
     with open(history_file, "w") as f:
         json.dump(history, f, indent=2)
-    
+
     # Also upload to GCS if possible
     upload_artifact(str(history_file), run_id, "history")
 
