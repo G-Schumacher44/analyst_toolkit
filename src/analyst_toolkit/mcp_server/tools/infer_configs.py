@@ -3,24 +3,18 @@
 
 async def _toolkit_infer_configs(
     gcs_path: str,
-    modules: list | None = None,
     options: dict | None = None,
 ) -> dict:
     """
-    Generate YAML config strings for the specified toolkit modules by inspecting
-    the dataset at gcs_path.
+    Generate YAML config strings for toolkit modules by inspecting the dataset.
 
-    Returns a dict of module_name → YAML string ready for direct use or editing.
-    The deploy utility's infer_configs() API is called with input_path=gcs_path
-    so it handles local, parquet, and GCS inputs identically.
+    Returns a dict with the generated YAML config string.
     """
-    modules = modules or []
     options = options or {}
     try:
         try:
             from analyst_toolkit_deploy.infer_configs import infer_configs
         except ImportError:
-            # Fallback for alternative package naming
             from analyst_toolkit_deployment_utility.infer_configs import infer_configs
     except ImportError as exc:
         return {
@@ -29,14 +23,12 @@ async def _toolkit_infer_configs(
                 f"Deployment utility not found ({str(exc)}). "
                 "Ensure analyst-toolkit-deploy is in requirements-mcp.txt and rebuild."
             ),
-            "configs": {},
-            "modules_generated": [],
+            "config_yaml": "",
         }
 
-    configs = infer_configs(
-        root=None,
+    config_yaml = infer_configs(
+        root=options.get("root", "."),
         input_path=gcs_path,
-        modules=modules or None,
         outdir=options.get("outdir"),
         sample_rows=options.get("sample_rows"),
         max_unique=options.get("max_unique", 30),
@@ -48,8 +40,7 @@ async def _toolkit_infer_configs(
     return {
         "status": "pass",
         "module": "infer_configs",
-        "configs": configs,
-        "modules_generated": list(configs.keys()),
+        "config_yaml": config_yaml,
     }
 
 
@@ -59,16 +50,6 @@ _INPUT_SCHEMA = {
         "gcs_path": {
             "type": "string",
             "description": "Path to the dataset (local CSV/parquet or gs:// URI).",
-        },
-        "modules": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": (
-                "Module names to generate configs for "
-                "(e.g. ['validation', 'outliers', 'normalization']). "
-                "Empty list = all inferrable."
-            ),
-            "default": [],
         },
         "options": {
             "type": "object",
