@@ -14,7 +14,10 @@ async def _toolkit_imputation(
     config = config or {}
     df = load_input(gcs_path)
 
-    if not config.get("rules"):
+    # Accept config either as {"rules": ...} (flat) or {"imputation": {"rules": ...}} (nested)
+    module_config = config.get("imputation", config)
+
+    if not module_config.get("rules"):
         return {
             "status": "warn",
             "module": "imputation",
@@ -29,7 +32,7 @@ async def _toolkit_imputation(
         }
 
     df_original = df.copy()
-    module_cfg = {**config, "logging": "off"}
+    module_cfg = {**module_config, "logging": "off"}
     df_imputed, detailed_changelog = apply_imputation(df, module_cfg)
 
     columns_imputed = (

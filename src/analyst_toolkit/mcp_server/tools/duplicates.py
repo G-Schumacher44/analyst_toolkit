@@ -8,13 +8,16 @@ from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
 async def _toolkit_duplicates(
-    gcs_path: str, config: dict | None = None, run_id: str = "mcp_run"
+    gcs_path: str,
+    config: dict | None = None,
+    run_id: str = "mcp_run",
+    subset_columns: list[str] | None = None,
 ) -> dict:
     """Run duplicate detection on the dataset at gcs_path."""
     config = config or {}
     df = load_input(gcs_path)
 
-    subset_cols = config.get("subset_columns")
+    subset_cols = subset_columns or config.get("subset_columns")
     mode = config.get("mode", "flag")
 
     df_flagged, detection_results = detect_duplicates(df.copy(), subset_cols)

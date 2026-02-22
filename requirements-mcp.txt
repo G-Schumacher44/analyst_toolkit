@@ -26,4 +26,4 @@ gcsfs>=2024.2.0
 pydantic>=2.0
 
 # analyst_toolkit_deploy (for toolkit_infer_configs tool)
-analyst-toolkit-deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git
+analyst-toolkit-deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git@feat/infer-configs-expansion

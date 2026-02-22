@@ -84,12 +84,20 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     else:
         # Check for _MANIFEST.json
         manifest_blob = bucket.blob(f"{prefix}/_MANIFEST.json")
-        file_names: list[str] = []
+        has_manifest = False
+        try:
+            has_manifest = manifest_blob.exists()
+        except Exception:
+            pass
 
-        if manifest_blob.exists():
+        if has_manifest:
             logger.info(f"Found _MANIFEST.json at {gcs_path}")
             manifest_data = json.loads(manifest_blob.download_as_text())
-            file_names = manifest_data.get("files", [])
+            raw_files = manifest_data.get("files", [])
+            # files entries may be bare strings or dicts with a "path" key
+            file_names: list[str] = [
+                f["path"] if isinstance(f, dict) else f for f in raw_files
+            ]
             blobs = [bucket.blob(f"{prefix}/{f}") for f in file_names]
         else:
             logger.info(f"No manifest found, globbing {gcs_path}")

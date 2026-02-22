@@ -53,7 +53,9 @@ def apply_imputation(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.D
             elif strategy == "mode":
                 fill_value = df_imputed[column].mode()[0]
             elif strategy == "constant":
-                fill_value = spec.get("value")
+                fill_value = spec.get("value") if isinstance(spec, dict) else None
+            elif strategy == "none":
+                fill_value = "None"
 
             # Handle datetime fill coercion safely
             if pd.api.types.is_datetime64_any_dtype(col_dtype):

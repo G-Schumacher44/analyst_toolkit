@@ -101,10 +101,13 @@ def generate_data_profile(
         ]
     )
     duplicated_rows_df = df[df.duplicated(keep=False)].head(max_rows)
-    describe_df = numeric_cols.describe().T  # type: ignore
-    describe_df["skew"] = numeric_cols.skew()
-    describe_df["kurtosis"] = numeric_cols.kurt()
-    describe_df = describe_df.reset_index().rename(columns={"index": "Metric"})
+    if numeric_cols.empty:
+        describe_df = pd.DataFrame(columns=["Metric"])
+    else:
+        describe_df = numeric_cols.describe().T  # type: ignore
+        describe_df["skew"] = numeric_cols.skew()
+        describe_df["kurtosis"] = numeric_cols.kurt()
+        describe_df = describe_df.reset_index().rename(columns={"index": "Metric"})
     sample_head_df = df.head(max_rows)
     shape_df = pd.DataFrame([{"Rows": df.shape[0], "Columns": df.shape[1]}])
     mem_mb = df.memory_usage(deep=True).sum() / (1024**2)

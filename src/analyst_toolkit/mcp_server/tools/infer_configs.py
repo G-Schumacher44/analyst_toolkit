@@ -4,6 +4,8 @@
 async def _toolkit_infer_configs(
     gcs_path: str,
     options: dict | None = None,
+    modules: list[str] | None = None,
+    sample_rows: int | None = None,
 ) -> dict:
     """
     Generate YAML config strings for toolkit modules by inspecting the dataset.
@@ -26,11 +28,12 @@ async def _toolkit_infer_configs(
             "config_yaml": "",
         }
 
-    config_yaml = infer_configs(
+    configs = infer_configs(
         root=options.get("root", "."),
         input_path=gcs_path,
+        modules=modules or options.get("modules"),
         outdir=options.get("outdir"),
-        sample_rows=options.get("sample_rows"),
+        sample_rows=sample_rows or options.get("sample_rows"),
         max_unique=options.get("max_unique", 30),
         exclude_patterns=options.get("exclude_patterns", "id|uuid|tag"),
         detect_datetimes=options.get("detect_datetimes", True),
@@ -40,7 +43,7 @@ async def _toolkit_infer_configs(
     return {
         "status": "pass",
         "module": "infer_configs",
-        "config_yaml": config_yaml,
+        "configs": configs,
     }
 
 
@@ -51,9 +54,25 @@ _INPUT_SCHEMA = {
             "type": "string",
             "description": "Path to the dataset (local CSV/parquet or gs:// URI).",
         },
+        "modules": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Module names to generate configs for. Defaults to all. "
+                "Valid: validation, certification, outliers, diagnostics, "
+                "normalization, duplicates, handling, imputation, final_audit."
+            ),
+        },
+        "sample_rows": {
+            "type": "integer",
+            "description": "Read only the first N rows for speed. Defaults to all rows.",
+        },
         "options": {
             "type": "object",
-            "description": "Optional overrides: sample_rows, max_unique, exclude_patterns, detect_datetimes, datetime_hints, outdir.",
+            "description": (
+                "Advanced overrides: max_unique, exclude_patterns, detect_datetimes, "
+                "datetime_hints, outdir."
+            ),
             "default": {},
         },
     },
