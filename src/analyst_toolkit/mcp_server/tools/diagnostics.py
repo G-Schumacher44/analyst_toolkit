@@ -29,15 +29,19 @@ async def _toolkit_diagnostics(
     if not session_id:
         session_id = save_to_session(df)
 
-    # Ensure plotting and export are enabled in the pipeline runner
+    # Robustly handle config nesting
+    base_cfg = config.get("diagnostics", config) if isinstance(config, dict) else {}
+    
     module_cfg = {
-        **config,
-        "logging": "off",
-        "profile": {
-            "run": True,
-            "settings": {"export": True, "export_html": should_export_html(config)},
-        },
-        "plotting": {"run": True},
+        "diagnostics": {
+            **base_cfg,
+            "logging": "off",
+            "profile": {
+                "run": True,
+                "settings": {"export": True, "export_html": should_export_html(config)},
+            },
+            "plotting": {"run": True},
+        }
     }
 
     # run_diag_pipeline handles profiling, plotting and report generation

@@ -30,10 +30,13 @@ async def _toolkit_duplicates(
     subset_cols = subset_columns or config.get("subset_columns")
     mode = config.get("mode", "flag")
 
+    # Robustly handle config nesting
+    base_cfg = config.get("duplicates", config) if isinstance(config, dict) else {}
+
     # Build module config for the pipeline runner
     module_cfg = {
         "duplicates": {
-            **config,
+            **base_cfg,
             "subset_columns": subset_cols,
             "mode": mode,
             "logging": "off",

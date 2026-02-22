@@ -30,8 +30,18 @@ async def _toolkit_outliers(
     config = config or {}
     df = load_input(gcs_path, session_id=session_id)
 
-    # Build a minimal module config that won't trigger file-based IO
-    module_cfg = {"outlier_detection": {**config, "logging": "off"}}
+    # Robustly handle config nesting
+    base_cfg = config.get("outlier_detection", config) if isinstance(config, dict) else {}
+
+    # Build a module config that ensures plotting and export are on
+    module_cfg = {
+        "outlier_detection": {
+            **base_cfg,
+            "logging": "off",
+            "plotting": {"run": True},
+            "export": {"run": True, "export_html": should_export_html(config)},
+        }
+    }
 
     df_out, detection_results = run_outlier_detection_pipeline(
         config=module_cfg, df=df, notebook=False, run_id=run_id

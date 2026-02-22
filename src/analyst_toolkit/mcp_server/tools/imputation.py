@@ -26,10 +26,13 @@ async def _toolkit_imputation(
     config = config or {}
     df = load_input(gcs_path, session_id=session_id)
 
+    # Robustly handle config nesting
+    base_cfg = config.get("imputation", config) if isinstance(config, dict) else {}
+
     # Build module config for the pipeline runner
     module_cfg = {
         "imputation": {
-            **config,
+            **base_cfg,
             "logging": "off",
             "settings": {
                 "export": {"run": True, "export_html": should_export_html(config)},
