@@ -241,11 +241,16 @@ def generate_transformation_report(
     )
     report_tables["column_changes_summary"] = col_change_summary
 
-    # 4. Add changelog as a flat table
-    changelog_flat = []
-    for key, val in changelog.items():
-        changelog_flat.append({"step": key, "details": str(val)})
-    report_tables["changelog"] = pd.DataFrame(changelog_flat)
+    # 4. Add changelog — each entry as its own section if it's a DataFrame,
+    # otherwise collapse to a flat key/details table for scalar values.
+    changelog_dfs = {k: v for k, v in changelog.items() if isinstance(v, pd.DataFrame)}
+    changelog_scalars = {k: v for k, v in changelog.items() if not isinstance(v, pd.DataFrame)}
+    if changelog_dfs:
+        report_tables["changelog"] = changelog_dfs  # rendered as nested sub-sections
+    if changelog_scalars:
+        report_tables["changelog_summary"] = pd.DataFrame(
+            [{"step": k, "details": str(v)} for k, v in changelog_scalars.items()]
+        )
 
     # 5. Optional metadata
     meta_info = {
