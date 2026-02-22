@@ -42,6 +42,7 @@ ENV/
 data/raw/*
 !data/raw/synthetic_penguins_v3.5.csv
 !data/raw/.gitkeep
+data/processed/
 
 exports/*
 !exports/sample/
@@ -72,6 +73,7 @@ exports/*
 *.log
 *.tmp
 *.bak
+*.joblib
 
 # ===============================
 # System Files
