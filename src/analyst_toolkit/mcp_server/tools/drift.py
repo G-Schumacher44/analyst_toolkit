@@ -21,15 +21,14 @@ async def _toolkit_drift_detection(
     df_base = load_input(base_path, session_id=base_session_id)
     df_target = load_input(target_path, session_id=target_session_id)
 
-        # 1. Schema comparison
-        base_cols = set(df_base.columns)
-        target_cols = set(df_target.columns)
-        
-        base_row_count = len(df_base)
-        target_row_count = len(df_target)
-        
-        added_cols = list(target_cols - base_cols)
-    
+    # 1. Schema comparison
+    base_cols = set(df_base.columns)
+    target_cols = set(df_target.columns)
+
+    base_row_count = len(df_base)
+    target_row_count = len(df_target)
+
+    added_cols = list(target_cols - base_cols)
     removed_cols = list(base_cols - target_cols)
     common_cols = list(base_cols & target_cols)
 
