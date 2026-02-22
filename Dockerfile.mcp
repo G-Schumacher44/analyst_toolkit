@@ -1,0 +1,32 @@
+# Dockerfile.mcp — analyst_toolkit MCP Server
+#
+# Build:  docker build -f Dockerfile.mcp -t analyst-toolkit-mcp .
+# Run:    docker-compose -f docker-compose.mcp.yml up
+#
+# The server exposes a JSON-RPC 2.0 /rpc endpoint on port 8001,
+# compatible with fridai-core's HTTPRemoteClient.
+
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install dependencies first (layer cache)
+COPY requirements-mcp.txt .
+RUN pip install --no-cache-dir -r requirements-mcp.txt
+
+# Copy the analyst_toolkit_deployment_utility source so infer_configs tool works.
+# In production, replace with a pinned git install in requirements-mcp.txt.
+# COPY ../analyst_toolkit_deployment_utility/src/ /opt/deploy_utility/src/
+# ENV PYTHONPATH=/app/src:/opt/deploy_utility/src
+
+# Copy toolkit source
+COPY src/ src/
+ENV PYTHONPATH=/app/src
+
+EXPOSE 8001
+
+# Health check — hits the /health endpoint after a short delay
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
+
+CMD ["python", "-m", "analyst_toolkit.mcp_server.server"]

@@ -35,8 +35,6 @@ dependencies = [
   "pandas",
   "matplotlib",
   "seaborn",
-  "ipython",
-  "ipywidgets",
   "joblib",
   "PyYAML",
   "thefuzz",
@@ -45,13 +43,57 @@ dependencies = [
 ]
 
 # ----------------------------------------
-# Optional Developer Dependencies
+# Optional Dependencies
 # ----------------------------------------
 [project.optional-dependencies]
-dev = [
-  "pytest",
-  "black",
+notebook = [
+  "ipython",
+  "ipywidgets",
 ]
+dev = [
+  "pytest>=7.0",
+  "pytest-asyncio",
+  "pytest-mock",
+  "ruff",
+  "pre-commit",
+  "httpx",
+  "mypy",
+  "pandas-stubs",
+  "types-PyYAML",
+]
+
+# ----------------------------------------
+# Tool Configurations
+# ----------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+exclude = [".git", "__pycache__", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = [
+    "E501", # Line length handled by formatter
+    "E402", # Module level import not at top of file (common in our toolkit for display logic)
+    "F401", # Unused import (common in our self-registration modules)
+]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+ignore_missing_imports = true
+check_untyped_defs = false
+implicit_optional = true
+strict_optional = false
+exclude = ["tests/"]
 
 # ----------------------------------------
 # Setuptools Package Discovery

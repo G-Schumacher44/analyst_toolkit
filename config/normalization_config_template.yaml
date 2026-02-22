@@ -132,6 +132,8 @@ normalization:
   settings:
     show_inline: true
     export: true
+    export_html: true
+    export_html_path: "exports/reports/normalization/{run_id}_normalization_report.html"
     as_csv: false
     export_path: "exports/reports/normalization/normalization_report.xlsx"
 

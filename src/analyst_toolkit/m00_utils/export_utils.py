@@ -2,27 +2,29 @@
 📦 export_utils.py
 
 Standardized export utilities for Analyst Toolkit pipeline modules.
-
-Includes:
-- Dictionary-to-Excel/CSV export (multi-sheet, MultiIndex-aware)
-- Joblib-based checkpoint serialization
-- Wrapper functions for exporting summaries and reports from diagnostics, validation, duplicates, etc.
-
-All exports are configuration-driven and respect run-specific paths.
-
-Part of the analyst_toolkit system.
 """
-from pathlib import Path
-import pandas as pd
-from joblib import dump, load
+
+# mypy: ignore-errors
+
 import logging
+from pathlib import Path
+
+import pandas as pd
+from joblib import dump
 
 
-def export_dataframes(data_dict: dict[str, pd.DataFrame], export_path: str, file_format: str = "excel", encoding: str = "utf-8", run_id: str = None, logging_mode: str = "on"):
+def export_dataframes(
+    data_dict: dict[str, pd.DataFrame],
+    export_path: str,
+    file_format: str = "excel",
+    encoding: str = "utf-8",
+    run_id: str = None,
+    logging_mode: str = "on",
+):
     """
     Export a dictionary of DataFrames. (Updated to accept 'xlsx' as a valid format).
     """
-    export_path = Path(export_path)
+    export_path = Path(export_path)  # type: ignore
     normalized_format = file_format.lower()
 
     # The export path's parent directory should always exist.
@@ -36,15 +38,15 @@ def export_dataframes(data_dict: dict[str, pd.DataFrame], export_path: str, file
         for name, df in data_dict.items():
             if isinstance(df, pd.DataFrame) and not df.empty:
                 # Construct a unique filename for each dataframe
-                filename = f"{run_id}_{base_stem}_{name}.csv" if run_id else f"{base_stem}_{name}.csv"
+                filename = (
+                    f"{run_id}_{base_stem}_{name}.csv" if run_id else f"{base_stem}_{name}.csv"
+                )
                 df.to_csv(base_dir / filename, index=False, encoding=encoding)
         if logging_mode != "off":
             logging.info(f"📊 Exported {len(data_dict)} CSV files to directory {base_dir}")
 
-  
     # Accept both 'excel' and 'xlsx' as valid identifiers for an Excel file.
     elif normalized_format in ["excel", "xlsx"]:
-    
         base_name = export_path.name
         path_with_run_id = export_path.with_name(f"{run_id}_{base_name}") if run_id else export_path
         # Set explicit Excel number formats so spreadsheet apps render dates consistently
@@ -58,15 +60,56 @@ def export_dataframes(data_dict: dict[str, pd.DataFrame], export_path: str, file
                 if isinstance(df, pd.DataFrame) and not df.empty:
                     # Flatten MultiIndex columns for Excel compatibility
                     if isinstance(df.columns, pd.MultiIndex):
-                        df.columns = ['__'.join(map(str, col)).strip() for col in df.columns.values]
+                        df.columns = ["__".join(map(str, col)).strip() for col in df.columns.values]
                         if logging_mode != "off":
-                            logging.info(f"⚠️ Flattened MultiIndex columns in sheet '{name}' for Excel compatibility.")
+                            logging.info(
+                                f"⚠️ Flattened MultiIndex columns in sheet '{name}' for Excel compatibility."
+                            )
                     df.to_excel(writer, sheet_name=name[:31], index=False)
         if logging_mode != "off":
             logging.info(f"📊 Exported {len(data_dict)} sheets to {path_with_run_id}")
     else:
         raise ValueError(f"Unsupported file format: {file_format}")
 
+
+def export_html_report(
+    report_tables: dict,
+    export_path: str,
+    module_name: str,
+    run_id: str,
+    plot_paths: dict | None = None,
+) -> str:
+    """
+    Generate a self-contained HTML report and write it to disk.
+
+    Calls generate_html_report() from report_generator and writes the result.
+    Returns the absolute path written — used by MCP tools as artifact_path.
+
+    Args:
+        report_tables: dict[str, pd.DataFrame] keyed by section name.
+        export_path: Destination file path (e.g. "exports/reports/outliers/run.html").
+        module_name: Display name for the module.
+        run_id: Pipeline run identifier.
+        plot_paths: Optional dict[str, str] of plot name → local file path.
+
+    Returns:
+        str: Absolute path of the written HTML file.
+    """
+    from analyst_toolkit.m00_utils.report_generator import generate_html_report
+
+    path = Path(export_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    html = generate_html_report(
+        report_tables=report_tables,
+        module_name=module_name,
+        run_id=run_id,
+        plot_paths=plot_paths,
+    )
+
+    path.write_text(html, encoding="utf-8")
+    logging.info(f"📄 HTML report written to {path.resolve()}")
+    return str(path.resolve())
 
 
 def export_validation_results(results: dict, config: dict, run_id: str = None):
@@ -78,44 +121,55 @@ def export_validation_results(results: dict, config: dict, run_id: str = None):
         raise ValueError("A 'run_id' must be provided for export traceability.")
 
     export_payload = {}
-    
+
     # --- Create the main summary DataFrame ---
     summary_data = []
-    checks = {k: v for k, v in results.items() if isinstance(v, dict) and 'passed' in v}
+    checks = {k: v for k, v in results.items() if isinstance(v, dict) and "passed" in v}
     for name, check in checks.items():
-        rule_name = name.replace('_', ' ').title()
-        issue_count = len(check['details'])
-        status = "Pass" if check['passed'] else f"Fail ({issue_count} issues)"
-        summary_data.append({
-            "Validation Rule": rule_name,
-            "Description": check['rule_description'],
-            "Status": status
-        })
-    export_payload['validation_summary'] = pd.DataFrame(summary_data)
+        rule_name = name.replace("_", " ").title()
+        issue_count = len(check["details"])
+        status = "Pass" if check["passed"] else f"Fail ({issue_count} issues)"
+        summary_data.append(
+            {
+                "Validation Rule": rule_name,
+                "Description": check["rule_description"],
+                "Status": status,
+            }
+        )
+    export_payload["validation_summary"] = pd.DataFrame(summary_data)
 
     # --- Extract DataFrames from failure details ---
     for name, check in checks.items():
-        if not check['passed']:
-            details = check['details']
-            if name == 'schema_conformity':
-                df = pd.DataFrame([
-                    {"type": "Missing", "columns": ', '.join(details.get('missing_columns', []))},
-                    {"type": "Unexpected", "columns": ', '.join(details.get('unexpected_columns', []))}
-                ])
-                export_payload['schema_failures'] = df
-            elif name == 'dtype_enforcement':
-                export_payload['dtype_failures'] = pd.DataFrame.from_dict(details, orient='index')
-            elif name in ['categorical_values', 'numeric_ranges']:
+        if not check["passed"]:
+            details = check["details"]
+            if name == "schema_conformity":
+                df = pd.DataFrame(
+                    [
+                        {
+                            "type": "Missing",
+                            "columns": ", ".join(details.get("missing_columns", [])),
+                        },
+                        {
+                            "type": "Unexpected",
+                            "columns": ", ".join(details.get("unexpected_columns", [])),
+                        },
+                    ]
+                )
+                export_payload["schema_failures"] = df
+            elif name == "dtype_enforcement":
+                export_payload["dtype_failures"] = pd.DataFrame.from_dict(details, orient="index")
+            elif name in ["categorical_values", "numeric_ranges"]:
                 for col, violation_info in details.items():
                     # Create a separate sheet for each column's violations
-                    export_payload[f"failures_{col}"] = violation_info['violating_rows']
+                    export_payload[f"failures_{col}"] = violation_info["violating_rows"]
 
     export_dataframes(
         data_dict=export_payload,
         export_path=config.get("export_path", "exports/reports/validation/validation_report.xlsx"),
         file_format="csv" if config.get("as_csv", False) else "excel",
-        run_id=run_id
+        run_id=run_id,
     )
+
 
 def export_profile_summary(profile: dict, config: dict, notebook: bool = True, run_id: str = None):
     """
@@ -139,7 +193,7 @@ def export_profile_summary(profile: dict, config: dict, notebook: bool = True, r
         data_dict=export_payload,
         export_path=config.get("export_path", "exports/reports/diagnostics/profile_summary.xlsx"),
         file_format="csv" if config.get("as_csv", False) else "excel",
-        run_id=run_id
+        run_id=run_id,
     )
 
 
@@ -162,7 +216,8 @@ def save_joblib(obj, path: str):
     path.parent.mkdir(parents=True, exist_ok=True)
     dump(obj, path)
     logging.info(f"💾 Checkpoint saved to {path}")
- 
+
+
 def export_duplicates_report(report: dict, config: dict, run_id: str):
     """
     Exports the report generated by the duplicates module.
@@ -188,10 +243,12 @@ def export_duplicates_report(report: dict, config: dict, run_id: str):
         data_dict=export_payload,
         export_path=config.get("export_path", "exports/reports/duplicates/duplicates_summary.xlsx"),
         file_format="csv" if config.get("as_csv") else "excel",
-        run_id=run_id
+        run_id=run_id,
     )
 
+
 # ------- Normalization Reports ----------
+
 
 def export_normalization_results(results: dict, config: dict, run_id: str = None):
     """
@@ -199,20 +256,22 @@ def export_normalization_results(results: dict, config: dict, run_id: str = None
     """
     if not run_id:
         raise ValueError("A 'run_id' must be provided for export traceability.")
-    
+
     # Prepare the main artifacts for export
     export_payload = {
         "change_log": results.get("change_log_df"),
-        "null_value_audit": results.get("null_audit_summary")
+        "null_value_audit": results.get("null_audit_summary"),
     }
 
     # Add before/after diff previews as individual sheets
     for col, diff_df in results.get("preview_diffs", {}).items():
         export_payload[f"preview_{col}"] = diff_df
-    
+
     export_dataframes(
         data_dict=export_payload,
-        export_path=config.get("export_path", "exports/reports/normalization/normalization_report.xlsx"),
+        export_path=config.get(
+            "export_path", "exports/reports/normalization/normalization_report.xlsx"
+        ),
         file_format="csv" if config.get("as_csv", False) else "excel",
-        run_id=run_id
+        run_id=run_id,
     )

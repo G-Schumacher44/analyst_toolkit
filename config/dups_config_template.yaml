@@ -42,6 +42,8 @@ duplicates:
     export: true
     export_path: "exports/reports/duplicates/duplicates_report.xlsx"
     as_csv: false          # false = single XLSX report with multiple sheets
+    export_html: true
+    export_html_path: "exports/reports/duplicates/{run_id}_duplicates_report.html"
 
     show_inline: true
 

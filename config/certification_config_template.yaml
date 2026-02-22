@@ -92,4 +92,6 @@ validation:
     export: true
     as_csv: false
     export_path: "exports/reports/certification/certification_report.xlsx"
+    export_html: true
+    export_html_path: "exports/reports/certification/{run_id}_certification_report.html"
     show_inline: true

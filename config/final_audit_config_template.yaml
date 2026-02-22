@@ -93,10 +93,12 @@ final_audit:
   settings:
     show_inline: true
     export_report: true
+    export_html: true
 
     paths:
       report_excel: "exports/reports/final_audit/{run_id}_FinalAuditReport.xlsx"
       report_joblib: "exports/reports/final_audit/{run_id}_FinalAuditReport.joblib"
+      report_html: "exports/reports/final_audit/{run_id}_final_audit_report.html"
       checkpoint_csv: "data/processed/{run_id}_penguins_certified.csv"
       checkpoint_joblib: "exports/joblib/{run_id}/{run_id}_penguins_certified.joblib"
       plot_save_dir: "exports/plots/final_audit/{run_id}/"

@@ -5,7 +5,9 @@ This module contains the non-destructive logic for detecting duplicate rows
 in a DataFrame. It identifies duplicates based on a subset of columns (or all),
 flags them, and returns both a flagged DataFrame and a summary of findings.
 """
+
 import pandas as pd
+
 
 def detect_duplicates(df: pd.DataFrame, subset: list = None) -> tuple[pd.DataFrame, dict]:
     """
@@ -28,10 +30,12 @@ def detect_duplicates(df: pd.DataFrame, subset: list = None) -> tuple[pd.DataFra
     """
     df_flagged = df.copy()
     duplicate_mask = df.duplicated(subset=subset, keep=False)
-    df_flagged['is_duplicate'] = duplicate_mask
-    duplicate_clusters = df[duplicate_mask].sort_values(by=subset if subset else df.columns.tolist())
+    df_flagged["is_duplicate"] = duplicate_mask
+    duplicate_clusters = df[duplicate_mask].sort_values(
+        by=subset if subset else df.columns.tolist()
+    )
     detection_results = {
-        'duplicate_count': int(duplicate_mask.sum()),
-        'duplicate_clusters': duplicate_clusters
+        "duplicate_count": int(duplicate_mask.sum()),
+        "duplicate_clusters": duplicate_clusters,
     }
     return df_flagged, detection_results

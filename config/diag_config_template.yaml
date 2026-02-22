@@ -21,6 +21,8 @@ diagnostics:
     settings:
       # 📤 Output controls
       export: true
+      export_html: true
+      export_html_path: "exports/reports/diagnostics/{run_id}_diagnostics_report.html"
       as_csv: false          # Export format: false = XLSX, true = CSV
       export_path: "exports/reports/diagnostics/diagnostics_summary.xlsx"
       checkpoint: false
