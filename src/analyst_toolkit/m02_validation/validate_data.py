@@ -54,12 +54,21 @@ def run_validation_suite(df: pd.DataFrame, config: dict) -> dict:
     # --- Schema Conformity ---
     expected_cols = set(rules.get("expected_columns", []))
     actual_cols = set(df.columns)
+    # Only enforce when expected_columns is explicitly provided; vacuously pass otherwise
+    if expected_cols:
+        schema_passed = actual_cols == expected_cols
+        missing = list(expected_cols - actual_cols)
+        unexpected = list(actual_cols - expected_cols)
+    else:
+        schema_passed = True
+        missing = []
+        unexpected = []
     results["schema_conformity"] = {
         "rule_description": "Verify column names match the expected schema.",
-        "passed": actual_cols == expected_cols,
+        "passed": schema_passed,
         "details": {
-            "missing_columns": list(expected_cols - actual_cols),
-            "unexpected_columns": list(actual_cols - expected_cols),
+            "missing_columns": missing,
+            "unexpected_columns": unexpected,
         },
     }
 
