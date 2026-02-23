@@ -161,6 +161,7 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     diagnostics,
     drift,
     duplicates,
+    final_audit,
     imputation,
     infer_configs,
     normalization,

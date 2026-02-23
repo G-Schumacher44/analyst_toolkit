@@ -40,28 +40,34 @@ async def _toolkit_auto_heal(
 
     # 2. Apply Normalization if inferred
     if "normalization" in configs:
-        norm_cfg_str = configs["normalization"]
-        norm_cfg = yaml.safe_load(norm_cfg_str)
-        # The inferred config usually has a top-level 'normalization' key
-        actual_cfg = norm_cfg.get("normalization", norm_cfg)
+        try:
+            norm_cfg_str = configs["normalization"]
+            norm_cfg = yaml.safe_load(norm_cfg_str)
+            # The inferred config usually has a top-level 'normalization' key
+            actual_cfg = norm_cfg.get("normalization", norm_cfg)
 
-        norm_res = await _toolkit_normalization(
-            session_id=current_session_id, config=actual_cfg, run_id=run_id
-        )
-        current_session_id = norm_res.get("session_id")
-        summary["normalization"] = norm_res.get("summary")
+            norm_res = await _toolkit_normalization(
+                session_id=current_session_id, config=actual_cfg, run_id=run_id
+            )
+            current_session_id = norm_res.get("session_id")
+            summary["normalization"] = norm_res.get("summary")
+        except Exception as e:
+            summary["normalization"] = {"error": str(e)}
 
     # 3. Apply Imputation if inferred
     if "imputation" in configs:
-        imp_cfg_str = configs["imputation"]
-        imp_cfg = yaml.safe_load(imp_cfg_str)
-        actual_cfg = imp_cfg.get("imputation", imp_cfg)
+        try:
+            imp_cfg_str = configs["imputation"]
+            imp_cfg = yaml.safe_load(imp_cfg_str)
+            actual_cfg = imp_cfg.get("imputation", imp_cfg)
 
-        imp_res = await _toolkit_imputation(
-            session_id=current_session_id, config=actual_cfg, run_id=run_id
-        )
-        current_session_id = imp_res.get("session_id")
-        summary["imputation"] = imp_res.get("summary")
+            imp_res = await _toolkit_imputation(
+                session_id=current_session_id, config=actual_cfg, run_id=run_id
+            )
+            current_session_id = imp_res.get("session_id")
+            summary["imputation"] = imp_res.get("summary")
+        except Exception as e:
+            summary["imputation"] = {"error": str(e)}
 
     metadata = get_session_metadata(current_session_id) or {}
     row_count = metadata.get("row_count")
