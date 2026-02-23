@@ -70,8 +70,33 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
     }
 
 
+async def _toolkit_get_agent_instructions() -> dict:
+    """
+    Returns the 'Flight Checklist' and recommended protocol for agents using this toolkit.
+    """
+    try:
+        with open("MESSAGES.md", "r") as f:
+            content = f.read()
+        return {
+            "status": "pass",
+            "instructions": content
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Could not load instructions: {str(e)}"
+        }
+
+
 # Registration
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
+
+register_tool(
+    name="get_agent_instructions",
+    fn=_toolkit_get_agent_instructions,
+    description="Returns the 'Flight Checklist' and protocol for agents to follow when conducting a data audit.",
+    input_schema={"type": "object", "properties": {}},
+)
 
 register_tool(
     name="get_golden_templates",
