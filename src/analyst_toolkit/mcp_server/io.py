@@ -68,18 +68,24 @@ def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> 
         return pd.read_csv(path, low_memory=False)
 
 
-def save_to_session(df: pd.DataFrame, session_id: Optional[str] = None) -> str:
+def save_to_session(df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None) -> str:
     """
     Save a DataFrame to the in-memory state store.
 
     Args:
         df: The DataFrame to save.
         session_id: Optional session ID to use/overwrite.
+        run_id: Optional run_id to associate with the session.
 
     Returns:
         The session_id.
     """
-    return StateStore.save(df, session_id)
+    return StateStore.save(df, session_id, run_id=run_id)
+
+
+def get_session_run_id(session_id: str) -> Optional[str]:
+    """Retrieve the run_id associated with a session."""
+    return StateStore.get_run_id(session_id)
 
 
 def get_session_metadata(session_id: str) -> Optional[dict]:

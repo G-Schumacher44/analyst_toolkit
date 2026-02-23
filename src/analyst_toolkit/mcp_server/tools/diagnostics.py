@@ -7,6 +7,7 @@ from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
     generate_default_export_path,
+    get_session_run_id,
     load_input,
     save_output,
     save_to_session,
@@ -24,13 +25,20 @@ async def _toolkit_diagnostics(
     **kwargs
 ) -> dict:
     """Run data profiling and structural diagnostics on the dataset at gcs_path or session_id."""
+    # Resolve run_id: 1. Explicitly provided, 2. Existing session run_id, 3. Default timestamp
+    if not run_id and session_id:
+        run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
+
     config = config or {}
     df = load_input(gcs_path, session_id=session_id)
 
     # If it came from a path, save it to a session so downstream tools can use it
     if not session_id:
-        session_id = save_to_session(df)
+        session_id = save_to_session(df, run_id=run_id)
+    else:
+        # Update session with current run_id if it changed or was missing
+        save_to_session(df, session_id=session_id, run_id=run_id)
 
     # Handle explicit or default export
     export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "diagnostics")

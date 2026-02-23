@@ -28,9 +28,10 @@ class StateStore:
     _sessions: Dict[str, pd.DataFrame] = {}
     _metadata: Dict[str, dict] = {}
     _last_accessed: Dict[str, float] = {}
+    _session_run_ids: Dict[str, str] = {}
 
     @classmethod
-    def save(cls, df: pd.DataFrame, session_id: Optional[str] = None) -> str:
+    def save(cls, df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None) -> str:
         """
         Save a DataFrame to the store.
         If no session_id is provided, a new one is generated.
@@ -39,6 +40,7 @@ class StateStore:
 
         if session_id is None:
             session_id = f"sess_{uuid.uuid4().hex[:8]}"
+        
         cls._sessions[session_id] = df
         cls._metadata[session_id] = {
             "row_count": len(df),
@@ -46,8 +48,17 @@ class StateStore:
             "updated_at": pd.Timestamp.now().isoformat(),
         }
         cls._last_accessed[session_id] = time.time()
-        logger.info(f"Saved session {session_id} (shape: {df.shape})")
+        
+        if run_id:
+            cls._session_run_ids[session_id] = run_id
+            
+        logger.info(f"Saved session {session_id} (run_id: {run_id}, shape: {df.shape})")
         return session_id
+
+    @classmethod
+    def get_run_id(cls, session_id: str) -> Optional[str]:
+        """Retrieve the run_id associated with a session."""
+        return cls._session_run_ids.get(session_id)
 
     @classmethod
     def get(cls, session_id: str) -> Optional[pd.DataFrame]:
@@ -87,7 +98,9 @@ class StateStore:
             cls._sessions.pop(session_id, None)
             cls._metadata.pop(session_id, None)
             cls._last_accessed.pop(session_id, None)
+            cls._session_run_ids.pop(session_id, None)
         else:
             cls._sessions.clear()
             cls._metadata.clear()
             cls._last_accessed.clear()
+            cls._session_run_ids.clear()

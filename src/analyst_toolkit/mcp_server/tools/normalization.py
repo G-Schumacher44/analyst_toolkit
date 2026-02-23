@@ -8,6 +8,7 @@ from analyst_toolkit.mcp_server.io import (
     default_run_id,
     generate_default_export_path,
     get_session_metadata,
+    get_session_run_id,
     load_input,
     save_output,
     save_to_session,
@@ -25,7 +26,10 @@ async def _toolkit_normalization(
     **kwargs
 ) -> dict:
     """Run normalization (rename, value mapping, dtype conversion) on the dataset at gcs_path or session_id."""
+    if not run_id and session_id:
+        run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
+
     config = config or {}
     df = load_input(gcs_path, session_id=session_id)
 
@@ -50,7 +54,7 @@ async def _toolkit_normalization(
     )
 
     # Save to session
-    session_id = save_to_session(df_normalized, session_id=session_id)
+    session_id = save_to_session(df_normalized, session_id=session_id, run_id=run_id)
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count")
 
