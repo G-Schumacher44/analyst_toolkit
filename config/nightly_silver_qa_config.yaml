@@ -1,0 +1,220 @@
+# ------------------------------------------------------------------------------
+# 📄 Config File: nightly_silver_qa_config.yaml
+# 📌 Purpose: Pre-authored base config for the FridAI nightly silver QA spec.
+#
+# Used by the autonomous daily_silver_qa spec. The SLM passes relevant blocks
+# from this file as the `config` argument when calling toolkit MCP tools.
+#
+# Targets enriched silver tables with the highest anomaly signal:
+#   - int_daily_business_metrics  (revenue anomaly flag, return rate, conversion)
+#   - int_inventory_risk          (risk_tier, attention_score, return_signal)
+#   - int_product_performance     (margin_pct, return_rate, cart_to_order_rate)
+#   - int_sales_velocity          (daily_quantity, velocity_avg, trend_signal)
+#
+# Data is loaded via GCS path — gcs_path is passed at runtime by the spec.
+# ------------------------------------------------------------------------------
+
+# 📥 Execution context
+notebook: false
+run_id: "nightly_silver_qa"   # Overridden at runtime by FridAI spec with dated run_id
+logging: "on"
+
+
+# ==============================================================================
+# 🔍 DIAGNOSTICS
+# Structural profile — types, nulls, cardinality, skew. Non-destructive.
+# ==============================================================================
+diagnostics:
+  profile:
+    run: true
+
+    settings:
+      export: true
+      export_html: true
+      export_html_path: "exports/reports/diagnostics/{run_id}_diagnostics_report.html"
+      as_csv: false
+      export_path: "exports/reports/diagnostics/{run_id}_diagnostics_summary.xlsx"
+      checkpoint: false
+
+      show_inline: false
+      include_samples: true
+      include_metadata: true
+      max_rows: 5
+      high_cardinality_threshold: 20
+
+      quality_checks:
+        skew_threshold: 2.5
+
+        # int_daily_business_metrics
+        expected_dtypes:
+          orders_count: "int64"
+          gross_revenue: "float64"
+          net_revenue: "float64"
+          avg_order_value: "float64"
+          cart_conversion_rate: "float64"
+          return_rate: "float64"
+          refund_total: "float64"
+          orders_7d_avg: "float64"
+          revenue_7d_avg: "float64"
+          revenue_30d_avg: "float64"
+          revenue_30d_std: "float64"
+
+        # int_inventory_risk
+        # expected_dtypes:
+        #   utilization_ratio: "float64"
+        #   return_signal: "float64"
+        #   attention_score: "float64"
+        #   risk_tier: "object"
+        #   inventory_quantity: "int64"
+        #   sales_volume: "int64"
+        #   return_volume: "int64"
+
+        # int_product_performance
+        # expected_dtypes:
+        #   units_sold: "int64"
+        #   units_returned: "int64"
+        #   gross_revenue: "float64"
+        #   net_revenue: "float64"
+        #   return_rate: "float64"
+        #   margin_pct: "float64"
+        #   cart_to_order_rate: "float64"
+
+        # int_sales_velocity
+        # expected_dtypes:
+        #   daily_quantity: "int64"
+        #   velocity_avg: "float64"
+        #   trend_signal: "object"
+
+  plotting:
+    run: true
+    save_dir: "exports/plots/diagnostics/"
+
+
+# ==============================================================================
+# 🚨 OUTLIER DETECTION
+# Column-specific thresholds calibrated to ecom enriched silver distributions.
+# ==============================================================================
+outlier_detection:
+  run: true
+
+  detection_specs:
+
+    # --- int_daily_business_metrics -------------------------------------------
+    # Revenue and order volume can shift legitimately — use wider IQR.
+    # return_rate and cart_conversion_rate are bounded [0,1]; tight z-score.
+    gross_revenue:
+      method: "iqr"
+      iqr_multiplier: 2.5
+    net_revenue:
+      method: "iqr"
+      iqr_multiplier: 2.5
+    avg_order_value:
+      method: "iqr"
+      iqr_multiplier: 2.0
+    orders_count:
+      method: "iqr"
+      iqr_multiplier: 2.5
+    return_rate:
+      method: "zscore"
+      zscore_threshold: 2.5       # Flag days with abnormally high return spikes
+    cart_conversion_rate:
+      method: "zscore"
+      zscore_threshold: 2.5
+    refund_total:
+      method: "iqr"
+      iqr_multiplier: 2.0
+
+    # --- int_inventory_risk ---------------------------------------------------
+    # attention_score and ratios are [0,1] — z-score is appropriate.
+    # locked_capital can be extreme for high-inventory products — wide IQR.
+    attention_score:
+      method: "zscore"
+      zscore_threshold: 2.5
+    utilization_ratio:
+      method: "zscore"
+      zscore_threshold: 2.5
+    return_signal:
+      method: "zscore"
+      zscore_threshold: 2.5
+    inventory_quantity:
+      method: "iqr"
+      iqr_multiplier: 2.5
+    sales_volume:
+      method: "iqr"
+      iqr_multiplier: 2.5
+
+    # --- int_product_performance ----------------------------------------------
+    # margin_pct can go negative legitimately — z-score catches extreme drops.
+    # return_rate and cart_to_order_rate bounded [0,1].
+    margin_pct:
+      method: "zscore"
+      zscore_threshold: 2.5
+    return_rate:
+      method: "zscore"
+      zscore_threshold: 2.5
+    cart_to_order_rate:
+      method: "zscore"
+      zscore_threshold: 2.5
+    gross_margin:
+      method: "iqr"
+      iqr_multiplier: 2.0
+    units_sold:
+      method: "iqr"
+      iqr_multiplier: 2.5
+    units_returned:
+      method: "iqr"
+      iqr_multiplier: 2.0
+
+    # --- int_sales_velocity ---------------------------------------------------
+    # daily_quantity spikes are the signal we want to catch.
+    daily_quantity:
+      method: "iqr"
+      iqr_multiplier: 2.0
+    velocity_avg:
+      method: "zscore"
+      zscore_threshold: 2.5
+
+    # Global default for any numeric columns not listed above
+    __default__:
+      method: "iqr"
+      iqr_multiplier: 2.0
+
+  # Exclude ID/key/string/flag columns from outlier detection
+  exclude_columns:
+    - product_id
+    - product_name
+    - category
+    - order_id
+    - customer_id
+    - risk_tier
+    - trend_signal
+    - revenue_anomaly_flag
+    - customer_segment
+    - predicted_clv_bucket
+    - actual_clv_bucket
+    - order_channel
+    - shipping_speed
+    - cart_status
+    - ingest_dt
+    - order_dt
+    - product_dt
+    - cart_dt
+    - date
+
+  append_flags: true
+
+  plotting:
+    run: true
+    plot_save_dir: "exports/plots/outliers/{run_id}"
+    plot_types: ["box", "hist"]
+    show_plots_inline: false
+
+  export:
+    run: true
+    export_dir: "exports/reports/outliers/detection/"
+    as_csv: false
+    export_html: true
+    export_html_path: "exports/reports/outliers/detection/{run_id}_outlier_report.html"
+
+  checkpoint:
+    run: false
