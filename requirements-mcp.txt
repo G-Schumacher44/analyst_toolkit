@@ -9,6 +9,7 @@ mcp>=1.2.1
 # Data stack (matches core toolkit requirements)
 pandas>=2.0
 numpy>=1.24
+scipy>=1.10
 matplotlib>=3.7
 seaborn>=0.12
 joblib>=1.3

@@ -88,7 +88,18 @@ def get_session_metadata(session_id: str) -> Optional[dict]:
 
 
 def generate_default_export_path(run_id: str, module: str, extension: str = "csv") -> str:
-    """Generate a consistent default local path for data exports."""
+    """
+    Generate a consistent default path for data exports.
+    If ANALYST_REPORT_BUCKET is set, defaults to a GCS path.
+    Otherwise, defaults to a local path.
+    """
+    bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
+
+    if bucket_uri:
+        return f"{bucket_uri}/{prefix}/{run_id}/{module}_output.{extension}"
+
+    # Local fallback
     base_dir = Path("exports/data") / run_id
     base_dir.mkdir(parents=True, exist_ok=True)
     return str((base_dir / f"{module}_output.{extension}").absolute())
