@@ -1,8 +1,9 @@
 """MCP tool: cockpit — tools for client delivery, history, and health scoring."""
 
 from analyst_toolkit.m00_utils.scoring import calculate_health_score
-from analyst_toolkit.mcp_server.io import default_run_id, get_run_history, get_golden_configs
+from analyst_toolkit.mcp_server.io import default_run_id, get_run_history
 from analyst_toolkit.mcp_server.registry import register_tool
+from analyst_toolkit.mcp_server.templates import get_golden_configs
 
 
 async def _toolkit_get_cockpit_help() -> dict:
@@ -65,12 +66,12 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
     """Calculates a Red/Yellow/Green Data Health Score (0-100)."""
     history = get_run_history(run_id)
     metrics = {"null_rate": 0.0, "validation_pass_rate": 1.0, "outlier_ratio": 0.0, "duplicate_ratio": 0.0}
-    
+
     for entry in history:
         module = entry.get("module")
         summary = entry.get("summary", {})
         row_count = summary.get("row_count")
-        
+
         if module == "diagnostics":
             metrics["null_rate"] = summary.get("null_rate", 0.0)
         elif module == "validation":
@@ -96,7 +97,8 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
 async def _toolkit_get_agent_instructions() -> dict:
     """Returns the agent flight checklist."""
     try:
-        with open("MESSAGES.md", "r") as f: content = f.read()
+        with open("MESSAGES.md", "r") as f:
+            content = f.read()
         return {"status": "pass", "instructions": content}
     except Exception as e:
         return {"status": "error", "message": str(e)}
