@@ -3,7 +3,14 @@
 import numpy as np
 import pandas as pd
 
-from analyst_toolkit.mcp_server.io import append_to_run_history, default_run_id, load_input
+from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
+    default_run_id,
+    generate_default_export_path,
+    load_input,
+    save_output,
+    upload_artifact,
+)
 
 
 async def _toolkit_drift_detection(
@@ -12,6 +19,7 @@ async def _toolkit_drift_detection(
     target_path: str | None = None,
     target_session_id: str | None = None,
     run_id: str | None = None,
+    **kwargs
 ) -> dict:
     """
     Compare two datasets (base vs target) to detect schema drift or distribution changes.
@@ -69,6 +77,14 @@ async def _toolkit_drift_detection(
         "target_row_count": target_row_count,
     }
 
+    # Save drift results to a physical file for persistence/audit
+    drift_df = pd.DataFrame([summary])
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "drift_detection")
+    export_url = save_output(drift_df, export_path)
+
+    # Upload as artifact if GCS is configured
+    artifact_url = upload_artifact(export_path, run_id, "drift_detection", config=kwargs)
+
     res = {
         "status": "warn" if summary["drift_detected"] else "pass",
         "module": "drift_detection",
@@ -78,6 +94,8 @@ async def _toolkit_drift_detection(
         "removed_columns": removed_cols,
         "dtype_changes": dtype_changes,
         "numeric_drift": drift_metrics,
+        "artifact_url": artifact_url,
+        "export_url": export_url,
     }
     append_to_run_history(run_id, res)
     return res
