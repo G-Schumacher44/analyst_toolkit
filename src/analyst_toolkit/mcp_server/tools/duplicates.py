@@ -24,7 +24,7 @@ async def _toolkit_duplicates(
     config: dict | None = None,
     run_id: str | None = None,
     subset_columns: list[str] | None = None,
-    **kwargs
+    **kwargs,
 ) -> dict:
     """Run duplicate detection on the dataset at gcs_path or session_id."""
     if not run_id and session_id:
@@ -74,7 +74,9 @@ async def _toolkit_duplicates(
     row_count = metadata.get("row_count", len(df_processed))
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "duplicates", session_id=session_id)
+    export_path = kwargs.get("export_path") or generate_default_export_path(
+        run_id, "duplicates", session_id=session_id
+    )
     export_url = save_output(df_processed, export_path)
 
     artifact_path = ""
@@ -84,17 +86,27 @@ async def _toolkit_duplicates(
 
     if should_export_html(config):
         artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "duplicates", config=kwargs, session_id=session_id)
+        artifact_url = upload_artifact(
+            artifact_path, run_id, "duplicates", config=kwargs, session_id=session_id
+        )
 
         xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates", config=kwargs, session_id=session_id)
+        xlsx_url = upload_artifact(
+            xlsx_path, run_id, "duplicates", config=kwargs, session_id=session_id
+        )
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/duplicates"), Path(f"exports/plots/duplicates/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(str(plot_file), run_id, "duplicates/plots", config=kwargs, session_id=session_id)
+                    url = upload_artifact(
+                        str(plot_file),
+                        run_id,
+                        "duplicates/plots",
+                        config=kwargs,
+                        session_id=session_id,
+                    )
                     if url:
                         plot_urls[plot_file.name] = url
 

@@ -19,7 +19,7 @@ async def _toolkit_drift_detection(
     target_path: str | None = None,
     target_session_id: str | None = None,
     run_id: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> dict:
     """
     Compare two datasets (base vs target) to detect schema drift or distribution changes.
@@ -79,7 +79,9 @@ async def _toolkit_drift_detection(
 
     # Save drift results to a physical file for persistence/audit
     drift_df = pd.DataFrame([summary])
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "drift_detection")
+    export_path = kwargs.get("export_path") or generate_default_export_path(
+        run_id, "drift_detection"
+    )
     export_url = save_output(drift_df, export_path)
 
     # Upload as artifact if GCS is configured

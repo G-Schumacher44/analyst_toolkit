@@ -236,7 +236,9 @@ def upload_artifact(
     Groups artifacts by session_timestamp/run_id.
     """
     config = config or {}
-    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    bucket_uri = config.get("output_bucket") or os.environ.get(
+        "ANALYST_REPORT_BUCKET", ""
+    ).strip().rstrip("/")
     if not bucket_uri:
         return ""
 
@@ -251,10 +253,16 @@ def upload_artifact(
         logger.warning("google-cloud-storage not installed; skipping artifact upload.")
         return ""
 
-    prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
+    prefix = config.get("output_prefix") or os.environ.get(
+        "ANALYST_REPORT_PREFIX", "analyst_toolkit/reports"
+    ).strip().strip("/")
     content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
-    session_ts = get_session_start(session_id) if session_id else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    session_ts = (
+        get_session_start(session_id)
+        if session_id
+        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    )
     path_root = f"{session_ts}/{run_id}"
 
     bucket_name = bucket_uri.removeprefix("gs://")
@@ -310,9 +318,13 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     Append a tool result entry to the run's history ledger.
     Groups history by session_timestamp/run_id.
     """
-    session_ts = get_session_start(session_id) if session_id else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    session_ts = (
+        get_session_start(session_id)
+        if session_id
+        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    )
     path_root = f"{session_ts}/{run_id}"
-    
+
     history_dir = Path("exports/reports/history") / path_root
     history_dir.mkdir(parents=True, exist_ok=True)
 
@@ -339,20 +351,22 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
 def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     """Retrieve the history ledger for a run."""
     session_ts = get_session_start(session_id) if session_id else None
-    
+
     if session_ts:
-        history_file = Path("exports/reports/history") / f"{session_ts}/{run_id}" / f"{run_id}_history.json"
+        history_file = (
+            Path("exports/reports/history") / f"{session_ts}/{run_id}" / f"{run_id}_history.json"
+        )
         if history_file.exists():
             with open(history_file, "r") as f:
                 return json.load(f)
-    
+
     # Fallback to search all history if session_id unknown
     history_root = Path("exports/reports/history")
     if not history_root.exists():
         return []
-        
+
     for h_file in history_root.glob(f"**/{run_id}_history.json"):
         with open(h_file, "r") as f:
             return json.load(f)
-            
+
     return []

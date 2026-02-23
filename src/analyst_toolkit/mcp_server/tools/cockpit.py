@@ -77,15 +77,9 @@ async def _toolkit_get_agent_instructions() -> dict:
     try:
         with open("MESSAGES.md", "r") as f:
             content = f.read()
-        return {
-            "status": "pass",
-            "instructions": content
-        }
+        return {"status": "pass", "instructions": content}
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Could not load instructions: {str(e)}"
-        }
+        return {"status": "error", "message": f"Could not load instructions: {str(e)}"}
 
 
 # Registration

@@ -79,10 +79,14 @@ async def _toolkit_auto_heal(
         "run_id": run_id,
         "session_id": current_session_id,
         "summary": {**summary, "row_count": row_count},
-        "artifact_path": summary.get("imputation", {}).get("artifact_path") or summary.get("normalization", {}).get("artifact_path", ""),
-        "artifact_url": summary.get("imputation", {}).get("artifact_url") or summary.get("normalization", {}).get("artifact_url", ""),
-        "export_url": summary.get("imputation", {}).get("export_url") or summary.get("normalization", {}).get("export_url", ""),
-        "plot_urls": summary.get("imputation", {}).get("plot_urls") or summary.get("normalization", {}).get("plot_urls", {}),
+        "artifact_path": summary.get("imputation", {}).get("artifact_path")
+        or summary.get("normalization", {}).get("artifact_path", ""),
+        "artifact_url": summary.get("imputation", {}).get("artifact_url")
+        or summary.get("normalization", {}).get("artifact_url", ""),
+        "export_url": summary.get("imputation", {}).get("export_url")
+        or summary.get("normalization", {}).get("export_url", ""),
+        "plot_urls": summary.get("imputation", {}).get("plot_urls")
+        or summary.get("normalization", {}).get("plot_urls", {}),
         "message": "Auto-healing completed. Normalization and Imputation applied based on inference.",
     }
     append_to_run_history(run_id, res)

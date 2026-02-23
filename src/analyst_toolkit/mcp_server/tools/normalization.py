@@ -23,7 +23,7 @@ async def _toolkit_normalization(
     session_id: str | None = None,
     config: dict | None = None,
     run_id: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> dict:
     """Run normalization (rename, value mapping, dtype conversion) on the dataset at gcs_path or session_id."""
     if not run_id and session_id:
@@ -59,7 +59,9 @@ async def _toolkit_normalization(
     row_count = metadata.get("row_count")
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "normalization", session_id=session_id)
+    export_path = kwargs.get("export_path") or generate_default_export_path(
+        run_id, "normalization", session_id=session_id
+    )
     export_url = save_output(df_normalized, export_path)
 
     changes_made = 0  # Placeholder
@@ -70,10 +72,14 @@ async def _toolkit_normalization(
 
     if should_export_html(config):
         artifact_path = f"exports/reports/normalization/{run_id}_normalization_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "normalization", config=kwargs, session_id=session_id)
+        artifact_url = upload_artifact(
+            artifact_path, run_id, "normalization", config=kwargs, session_id=session_id
+        )
 
         xlsx_path = f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id)
+        xlsx_url = upload_artifact(
+            xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id
+        )
 
     res = {
         "status": "pass",

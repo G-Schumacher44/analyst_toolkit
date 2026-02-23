@@ -25,7 +25,7 @@ async def _toolkit_imputation(
     session_id: str | None = None,
     config: dict | None = None,
     run_id: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> dict:
     """Run missing value imputation on the dataset at gcs_path or session_id."""
     if not run_id and session_id:
@@ -51,9 +51,7 @@ async def _toolkit_imputation(
     }
 
     # run_imputation_pipeline returns the imputed dataframe
-    df_imputed = run_imputation_pipeline(
-        config=module_cfg, df=df, notebook=False, run_id=run_id
-    )
+    df_imputed = run_imputation_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
 
     # Save to session
     session_id = save_to_session(df_imputed, session_id=session_id, run_id=run_id)
@@ -61,7 +59,9 @@ async def _toolkit_imputation(
     row_count = metadata.get("row_count")
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "imputation", session_id=session_id)
+    export_path = kwargs.get("export_path") or generate_default_export_path(
+        run_id, "imputation", session_id=session_id
+    )
     export_url = save_output(df_imputed, export_path)
 
     # We need to compute these for the MCP response summary
@@ -70,9 +70,7 @@ async def _toolkit_imputation(
     nulls_filled = nulls_before - nulls_after
 
     # Simple way to get columns imputed
-    columns_imputed = [
-        c for c in df.columns if df[c].isnull().sum() > df_imputed[c].isnull().sum()
-    ]
+    columns_imputed = [c for c in df.columns if df[c].isnull().sum() > df_imputed[c].isnull().sum()]
 
     artifact_path = ""
     artifact_url = ""
@@ -81,10 +79,14 @@ async def _toolkit_imputation(
 
     if should_export_html(config):
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "imputation", config=kwargs, session_id=session_id)
+        artifact_url = upload_artifact(
+            artifact_path, run_id, "imputation", config=kwargs, session_id=session_id
+        )
 
         xlsx_path = f"exports/reports/imputation/{run_id}_imputation_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "imputation", config=kwargs, session_id=session_id)
+        xlsx_url = upload_artifact(
+            xlsx_path, run_id, "imputation", config=kwargs, session_id=session_id
+        )
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [
@@ -94,7 +96,13 @@ async def _toolkit_imputation(
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(str(plot_file), run_id, "imputation/plots", config=kwargs, session_id=session_id)
+                    url = upload_artifact(
+                        str(plot_file),
+                        run_id,
+                        "imputation/plots",
+                        config=kwargs,
+                        session_id=session_id,
+                    )
                     if url:
                         plot_urls[plot_file.name] = url
 

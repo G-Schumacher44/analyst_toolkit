@@ -23,7 +23,7 @@ async def _toolkit_final_audit(
     session_id: str | None = None,
     config: dict | None = None,
     run_id: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> dict:
     """
     Run the final certification audit.
@@ -50,9 +50,7 @@ async def _toolkit_final_audit(
     }
 
     # run_final_audit_pipeline returns the certified dataframe
-    df_certified = run_final_audit_pipeline(
-        config=module_cfg, df=df, run_id=run_id, notebook=False
-    )
+    df_certified = run_final_audit_pipeline(config=module_cfg, df=df, run_id=run_id, notebook=False)
 
     # Save to session
     session_id = save_to_session(df_certified, session_id=session_id, run_id=run_id)
@@ -60,7 +58,9 @@ async def _toolkit_final_audit(
     row_count = metadata.get("row_count")
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "final_audit", session_id=session_id)
+    export_path = kwargs.get("export_path") or generate_default_export_path(
+        run_id, "final_audit", session_id=session_id
+    )
     export_url = save_output(df_certified, export_path)
 
     artifact_path = ""
@@ -69,10 +69,14 @@ async def _toolkit_final_audit(
 
     # M10 always exports to these locations
     artifact_path = f"exports/reports/final_audit/{run_id}_FinalAuditReport.html"
-    artifact_url = upload_artifact(artifact_path, run_id, "final_audit", config=kwargs, session_id=session_id)
+    artifact_url = upload_artifact(
+        artifact_path, run_id, "final_audit", config=kwargs, session_id=session_id
+    )
 
     xlsx_path = f"exports/reports/final_audit/{run_id}_FinalAuditReport.xlsx"
-    xlsx_url = upload_artifact(xlsx_path, run_id, "final_audit", config=kwargs, session_id=session_id)
+    xlsx_url = upload_artifact(
+        xlsx_path, run_id, "final_audit", config=kwargs, session_id=session_id
+    )
 
     res = {
         "status": "pass",  # Final audit status
