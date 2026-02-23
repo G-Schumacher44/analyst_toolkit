@@ -42,7 +42,7 @@ dependencies = [
   "PyYAML",
   "thefuzz",
   "XlsxWriter",
-  "openpyxl"
+  "openpyxl",
 ]
 
 # ----------------------------------------

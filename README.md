@@ -17,7 +17,7 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
-## 🆕 Version 0.4: The "Self-Healing" Audit
+## 🆕 Version 0.4.1: The "Self-Healing" Audit
 
 This major update transforms the toolkit from a collection of utilities into a cohesive, autonomous auditing engine.
 

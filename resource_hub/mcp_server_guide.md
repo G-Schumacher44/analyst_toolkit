@@ -15,7 +15,7 @@
 
 The analyst toolkit MCP server exposes every toolkit module as a callable tool over the [Model Context Protocol](https://modelcontextprotocol.io). Any MCP-compatible host — FridAI, Claude Desktop, VS Code, or a plain JSON-RPC 2.0 client — can invoke toolkit operations against local or GCS-hosted data without any Python dependency on the host side.
 
-## 🆕 Version 0.4 Highlights
+## 🆕 Version 0.4.1 Highlights
 
 - **Pipeline Mode:** In-memory state management via `session_id` allows chaining multiple tools without manual file saving.
 - **Client Cockpit:** New tools for executive reporting, including a 0-100 Data Health Score and a "Healing Ledger" history.
