@@ -58,16 +58,28 @@ def get_session_start(session_id: str) -> Optional[str]:
     return StateStore.get_session_start(session_id)
 
 
-def _resolve_path_root(session_id: Optional[str] = None) -> str:
+def get_session_metadata(session_id: str) -> Optional[dict]:
+    """Retrieve metadata for a session."""
+    return StateStore.get_metadata(session_id)
+
+
+def _resolve_path_root(run_id: str, session_id: Optional[str] = None) -> str:
     """
-    Stricly follow the structure: <session_timestamp>/<session_id>
+    Strictly follow the structure: <session_timestamp>/<session_id>
+    If run_id is different from session_start, it nests under it.
     """
-    if not session_id:
-        # If no session yet, we use a 'standalone' timestamp folder
-        return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    session_ts = (
+        get_session_start(session_id)
+        if session_id
+        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    )
+
+    # If run_id is the default timestamp, don't double-nest
+    # (Since we can't easily detect 'defaultness', we just check for exact match)
+    if run_id == session_ts:
+        return session_ts
     
-    session_ts = get_session_start(session_id) or "standalone"
-    return f"{session_ts}/{session_id}"
+    return f"{session_ts}/{run_id}"
 
 
 def generate_default_export_path(
@@ -77,7 +89,7 @@ def generate_default_export_path(
     bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
 
-    path_root = _resolve_path_root(session_id)
+    path_root = _resolve_path_root(run_id, session_id)
 
     if bucket_uri:
         return f"{bucket_uri}/{prefix}/{path_root}/{module}_output.{extension}"
@@ -85,69 +97,6 @@ def generate_default_export_path(
     base_dir = Path("exports/data") / path_root
     base_dir.mkdir(parents=True, exist_ok=True)
     return str((base_dir / f"{module}_output.{extension}").absolute())
-
-
-def upload_artifact(
-    local_path: str,
-    run_id: str,
-    module: str,
-    config: Optional[dict] = None,
-    session_id: Optional[str] = None,
-) -> str:
-    """Uploads artifact to: prefix/session_ts/session_id/module/filename"""
-    config = config or {}
-    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
-    if not bucket_uri:
-        return ""
-
-    p = Path(local_path)
-    if not p.exists():
-        return ""
-
-    try:
-        from google.cloud import storage
-    except ImportError:
-        return ""
-
-    prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
-    content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
-
-    path_root = _resolve_path_root(session_id)
-    bucket_name = bucket_uri.removeprefix("gs://")
-    blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
-
-    try:
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
-        blob.upload_from_filename(str(p), content_type=content_type)
-        return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
-    except Exception:
-        return ""
-
-
-def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = None):
-    """Save history to: exports/reports/history/session_ts/session_id/run_history.json"""
-    path_root = _resolve_path_root(session_id)
-    history_dir = Path("exports/reports/history") / path_root
-    history_dir.mkdir(parents=True, exist_ok=True)
-
-    history_file = history_dir / f"{run_id}_history.json"
-    history = []
-    if history_file.exists():
-        try:
-            with open(history_file, "r") as f:
-                history = json.load(f)
-        except Exception:
-            history = []
-
-    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-    history.append(entry)
-    
-    with open(history_file, "w") as f:
-        json.dump(history, f, indent=2)
-
-    upload_artifact(str(history_file), run_id, "history", session_id=session_id)
 
 
 def load_from_gcs(gcs_path: str) -> pd.DataFrame:
@@ -195,6 +144,70 @@ _CONTENT_TYPES = {
     ".json": "application/json",
     ".png": "image/png",
 }
+
+
+def upload_artifact(
+    local_path: str,
+    run_id: str,
+    module: str,
+    config: Optional[dict] = None,
+    session_id: Optional[str] = None,
+) -> str:
+    """Uploads artifact to: prefix/path_root/module/filename"""
+    config = config or {}
+    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    if not bucket_uri:
+        return ""
+
+    p = Path(local_path)
+    if not p.exists():
+        return ""
+
+    try:
+        from google.cloud import storage
+    except ImportError:
+        return ""
+
+    prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
+    content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
+
+    path_root = _resolve_path_root(run_id, session_id)
+    bucket_name = bucket_uri.removeprefix("gs://")
+    blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        blob.upload_from_filename(str(p), content_type=content_type)
+        return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
+    except Exception:
+        return ""
+
+
+def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = None):
+    """Save history to: exports/reports/history/path_root/run_history.json"""
+    path_root = _resolve_path_root(run_id, session_id)
+    history_dir = Path("exports/reports/history") / path_root
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    history_file = history_dir / f"{run_id}_history.json"
+    history = []
+    if history_file.exists():
+        try:
+            with open(history_file, "r") as f:
+                history = json.load(f)
+        except Exception:
+            history = []
+
+    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+    history.append(entry)
+    
+    with open(history_file, "w") as f:
+        json.dump(history, f, indent=2)
+
+    upload_artifact(str(history_file), run_id, "history", session_id=session_id)
+
 
 def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     history_root = Path("exports/reports/history")
