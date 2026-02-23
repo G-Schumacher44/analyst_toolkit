@@ -100,6 +100,23 @@ def get_session_metadata(session_id: str) -> Optional[dict]:
     return StateStore.get_metadata(session_id)
 
 
+def _resolve_path_root(run_id: str, session_id: Optional[str] = None) -> str:
+    """
+    Determines the directory root for artifacts.
+    If run_id is the same as session_start (default), uses one level.
+    If they differ (rerun/override), nests them.
+    """
+    session_ts = (
+        get_session_start(session_id)
+        if session_id
+        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    )
+
+    if run_id == session_ts:
+        return session_ts
+    return f"{session_ts}/{run_id}"
+
+
 def generate_default_export_path(
     run_id: str, module: str, extension: str = "csv", session_id: Optional[str] = None
 ) -> str:
@@ -110,12 +127,7 @@ def generate_default_export_path(
     bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
 
-    session_ts = (
-        get_session_start(session_id)
-        if session_id
-        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    )
-    path_root = f"{session_ts}/{run_id}"
+    path_root = _resolve_path_root(run_id, session_id)
 
     if bucket_uri:
         return f"{bucket_uri}/{prefix}/{path_root}/{module}_output.{extension}"
@@ -236,9 +248,10 @@ def upload_artifact(
     Groups artifacts by session_timestamp/run_id.
     """
     config = config or {}
-    bucket_uri = config.get("output_bucket") or os.environ.get(
-        "ANALYST_REPORT_BUCKET", ""
-    ).strip().rstrip("/")
+    bucket_uri = (
+        config.get("output_bucket")
+        or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    )
     if not bucket_uri:
         return ""
 
@@ -258,12 +271,7 @@ def upload_artifact(
     ).strip().strip("/")
     content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
-    session_ts = (
-        get_session_start(session_id)
-        if session_id
-        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    )
-    path_root = f"{session_ts}/{run_id}"
+    path_root = _resolve_path_root(run_id, session_id)
 
     bucket_name = bucket_uri.removeprefix("gs://")
     blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
@@ -318,12 +326,7 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     Append a tool result entry to the run's history ledger.
     Groups history by session_timestamp/run_id.
     """
-    session_ts = (
-        get_session_start(session_id)
-        if session_id
-        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    )
-    path_root = f"{session_ts}/{run_id}"
+    path_root = _resolve_path_root(run_id, session_id)
 
     history_dir = Path("exports/reports/history") / path_root
     history_dir.mkdir(parents=True, exist_ok=True)
@@ -353,12 +356,16 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     session_ts = get_session_start(session_id) if session_id else None
 
     if session_ts:
-        history_file = (
-            Path("exports/reports/history") / f"{session_ts}/{run_id}" / f"{run_id}_history.json"
-        )
-        if history_file.exists():
-            with open(history_file, "r") as f:
-                return json.load(f)
+        # Check both potential roots (flat and nested)
+        roots = [
+            Path("exports/reports/history") / f"{session_ts}/{run_id}",
+            Path("exports/reports/history") / f"{session_ts}",
+        ]
+        for root in roots:
+            history_file = root / f"{run_id}_history.json"
+            if history_file.exists():
+                with open(history_file, "r") as f:
+                    return json.load(f)
 
     # Fallback to search all history if session_id unknown
     history_root = Path("exports/reports/history")
