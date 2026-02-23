@@ -41,7 +41,7 @@ async def _toolkit_diagnostics(
         save_to_session(df, session_id=session_id, run_id=run_id)
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "diagnostics")
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "diagnostics", session_id=session_id)
     export_url = save_output(df, export_path)
 
     # Robustly handle config nesting
@@ -77,17 +77,17 @@ async def _toolkit_diagnostics(
     if should_export_html(config):
         # Paths where run_diag_pipeline saves its reports
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "diagnostics", config=kwargs)
+        artifact_url = upload_artifact(artifact_path, run_id, "diagnostics", config=kwargs, session_id=session_id)
 
         xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics", config=kwargs)
+        xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics", config=kwargs, session_id=session_id)
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/diagnostics"), Path(f"exports/plots/diagnostics/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(str(plot_file), run_id, "diagnostics/plots", config=kwargs)
+                    url = upload_artifact(str(plot_file), run_id, "diagnostics/plots", config=kwargs, session_id=session_id)
                     if url:
                         plot_urls[plot_file.name] = url
 
@@ -111,7 +111,7 @@ async def _toolkit_diagnostics(
         "plot_urls": plot_urls,
         "export_url": export_url,
     }
-    append_to_run_history(run_id, res)
+    append_to_run_history(run_id, res, session_id=session_id)
     return res
 
 

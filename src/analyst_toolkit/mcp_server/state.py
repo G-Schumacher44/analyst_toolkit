@@ -3,16 +3,11 @@ state.py — In-memory state management for MCP tool pipelines.
 """
 
 import logging
+import time
 import uuid
 from typing import Dict, Optional
 
 import pandas as pd
-
-logger = logging.getLogger(__name__)
-
-
-import logging
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +24,12 @@ class StateStore:
     _metadata: Dict[str, dict] = {}
     _last_accessed: Dict[str, float] = {}
     _session_run_ids: Dict[str, str] = {}
+    _session_start_times: Dict[str, str] = {}
 
     @classmethod
-    def save(cls, df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None) -> str:
+    def save(
+        cls, df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None
+    ) -> str:
         """
         Save a DataFrame to the store.
         If no session_id is provided, a new one is generated.
@@ -40,7 +38,9 @@ class StateStore:
 
         if session_id is None:
             session_id = f"sess_{uuid.uuid4().hex[:8]}"
-        
+            # Record the start time for the entire session
+            cls._session_start_times[session_id] = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+
         cls._sessions[session_id] = df
         cls._metadata[session_id] = {
             "row_count": len(df),
@@ -48,17 +48,12 @@ class StateStore:
             "updated_at": pd.Timestamp.now().isoformat(),
         }
         cls._last_accessed[session_id] = time.time()
-        
+
         if run_id:
             cls._session_run_ids[session_id] = run_id
-            
+
         logger.info(f"Saved session {session_id} (run_id: {run_id}, shape: {df.shape})")
         return session_id
-
-    @classmethod
-    def get_run_id(cls, session_id: str) -> Optional[str]:
-        """Retrieve the run_id associated with a session."""
-        return cls._session_run_ids.get(session_id)
 
     @classmethod
     def get(cls, session_id: str) -> Optional[pd.DataFrame]:
@@ -67,6 +62,16 @@ class StateStore:
             cls._last_accessed[session_id] = time.time()
             return cls._sessions[session_id]
         return None
+
+    @classmethod
+    def get_run_id(cls, session_id: str) -> Optional[str]:
+        """Retrieve the run_id associated with a session."""
+        return cls._session_run_ids.get(session_id)
+
+    @classmethod
+    def get_session_start(cls, session_id: str) -> Optional[str]:
+        """Retrieve the start time associated with a session."""
+        return cls._session_start_times.get(session_id)
 
     @classmethod
     def get_metadata(cls, session_id: str) -> Optional[dict]:
@@ -99,8 +104,10 @@ class StateStore:
             cls._metadata.pop(session_id, None)
             cls._last_accessed.pop(session_id, None)
             cls._session_run_ids.pop(session_id, None)
+            cls._session_start_times.pop(session_id, None)
         else:
             cls._sessions.clear()
             cls._metadata.clear()
             cls._last_accessed.clear()
             cls._session_run_ids.clear()
+            cls._session_start_times.clear()

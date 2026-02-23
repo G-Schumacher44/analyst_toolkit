@@ -2,7 +2,9 @@
 
 import pandas as pd
 
-from analyst_toolkit.m02_validation.run_validation_pipeline import run_validation_pipeline
+from analyst_toolkit.m02_validation.run_validation_pipeline import (
+    run_validation_pipeline,
+)
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
@@ -43,7 +45,7 @@ async def _toolkit_validation(
     row_count = metadata.get("row_count", len(df))
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "validation")
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "validation", session_id=session_id)
     export_url = save_output(df, export_path)
 
     # Robustly handle config nesting
@@ -68,10 +70,10 @@ async def _toolkit_validation(
     xlsx_url = ""
     if should_export_html(config):
         artifact_path = f"exports/reports/validation/{run_id}_validation_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "validation", config=kwargs)
+        artifact_url = upload_artifact(artifact_path, run_id, "validation", config=kwargs, session_id=session_id)
 
         xlsx_path = f"exports/reports/validation/{run_id}_validation_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "validation", config=kwargs)
+        xlsx_url = upload_artifact(xlsx_path, run_id, "validation", config=kwargs, session_id=session_id)
 
     # Logic to determine pass/fail for the response (heuristic)
     passed = True  # Placeholder
@@ -91,7 +93,7 @@ async def _toolkit_validation(
         "xlsx_url": xlsx_url,
         "export_url": export_url,
     }
-    append_to_run_history(run_id, res)
+    append_to_run_history(run_id, res, session_id=session_id)
     return res
 
 

@@ -68,7 +68,9 @@ def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> 
         return pd.read_csv(path, low_memory=False)
 
 
-def save_to_session(df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None) -> str:
+def save_to_session(
+    df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None
+) -> str:
     """
     Save a DataFrame to the in-memory state store.
 
@@ -88,25 +90,38 @@ def get_session_run_id(session_id: str) -> Optional[str]:
     return StateStore.get_run_id(session_id)
 
 
+def get_session_start(session_id: str) -> Optional[str]:
+    """Retrieve the start time associated with a session."""
+    return StateStore.get_session_start(session_id)
+
+
 def get_session_metadata(session_id: str) -> Optional[dict]:
     """Retrieve metadata for a session."""
     return StateStore.get_metadata(session_id)
 
 
-def generate_default_export_path(run_id: str, module: str, extension: str = "csv") -> str:
+def generate_default_export_path(
+    run_id: str, module: str, extension: str = "csv", session_id: Optional[str] = None
+) -> str:
     """
     Generate a consistent default path for data exports.
-    If ANALYST_REPORT_BUCKET is set, defaults to a GCS path.
-    Otherwise, defaults to a local path.
+    Groups artifacts by session_timestamp/run_id.
     """
     bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
 
+    session_ts = (
+        get_session_start(session_id)
+        if session_id
+        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    )
+    path_root = f"{session_ts}/{run_id}"
+
     if bucket_uri:
-        return f"{bucket_uri}/{prefix}/{run_id}/{module}_output.{extension}"
+        return f"{bucket_uri}/{prefix}/{path_root}/{module}_output.{extension}"
 
     # Local fallback
-    base_dir = Path("exports/data") / run_id
+    base_dir = Path("exports/data") / path_root
     base_dir.mkdir(parents=True, exist_ok=True)
     return str((base_dir / f"{module}_output.{extension}").absolute())
 
@@ -208,21 +223,17 @@ _CONTENT_TYPES = {
 }
 
 
-def upload_artifact(local_path: str, run_id: str, module: str, config: Optional[dict] = None) -> str:
+def upload_artifact(
+    local_path: str,
+    run_id: str,
+    module: str,
+    config: Optional[dict] = None,
+    session_id: Optional[str] = None,
+) -> str:
     """
     Upload any local artifact to GCS and return its public HTTPS URL.
 
-    Reads ANALYST_REPORT_BUCKET and ANALYST_REPORT_PREFIX from env,
-    but allows overrides via config['output_bucket'] and config['output_prefix'].
-
-    Args:
-        local_path: Absolute or relative path to the file on disk.
-        run_id:     Run identifier (used as a path component in GCS).
-        module:     Module name (e.g. "outliers", "imputation").
-        config:     Optional config dict for bucket/prefix overrides.
-
-    Returns:
-        Public GCS HTTPS URL string, or "" if upload is disabled or file missing.
+    Groups artifacts by session_timestamp/run_id.
     """
     config = config or {}
     bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
@@ -243,8 +254,11 @@ def upload_artifact(local_path: str, run_id: str, module: str, config: Optional[
     prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
     content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
+    session_ts = get_session_start(session_id) if session_id else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    path_root = f"{session_ts}/{run_id}"
+
     bucket_name = bucket_uri.removeprefix("gs://")
-    blob_path = f"{prefix}/{run_id}/{module}/{p.name}"
+    blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
 
     try:
         client = storage.Client()
@@ -291,12 +305,15 @@ def upload_report(local_path: str, run_id: str, module: str) -> str:
     return upload_artifact(local_path, run_id, module)
 
 
-def append_to_run_history(run_id: str, entry: dict):
+def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = None):
     """
     Append a tool result entry to the run's history ledger.
-    Saves to exports/reports/history/{run_id}_history.json
+    Groups history by session_timestamp/run_id.
     """
-    history_dir = Path("exports/reports/history")
+    session_ts = get_session_start(session_id) if session_id else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    path_root = f"{session_ts}/{run_id}"
+    
+    history_dir = Path("exports/reports/history") / path_root
     history_dir.mkdir(parents=True, exist_ok=True)
 
     history_file = history_dir / f"{run_id}_history.json"
@@ -316,13 +333,26 @@ def append_to_run_history(run_id: str, entry: dict):
         json.dump(history, f, indent=2)
 
     # Also upload to GCS if possible
-    upload_artifact(str(history_file), run_id, "history")
+    upload_artifact(str(history_file), run_id, "history", session_id=session_id)
 
 
-def get_run_history(run_id: str) -> list:
+def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     """Retrieve the history ledger for a run."""
-    history_file = Path("exports/reports/history") / f"{run_id}_history.json"
-    if history_file.exists():
-        with open(history_file, "r") as f:
+    session_ts = get_session_start(session_id) if session_id else None
+    
+    if session_ts:
+        history_file = Path("exports/reports/history") / f"{session_ts}/{run_id}" / f"{run_id}_history.json"
+        if history_file.exists():
+            with open(history_file, "r") as f:
+                return json.load(f)
+    
+    # Fallback to search all history if session_id unknown
+    history_root = Path("exports/reports/history")
+    if not history_root.exists():
+        return []
+        
+    for h_file in history_root.glob(f"**/{run_id}_history.json"):
+        with open(h_file, "r") as f:
             return json.load(f)
+            
     return []

@@ -59,7 +59,7 @@ async def _toolkit_normalization(
     row_count = metadata.get("row_count")
 
     # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "normalization")
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "normalization", session_id=session_id)
     export_url = save_output(df_normalized, export_path)
 
     changes_made = 0  # Placeholder
@@ -70,10 +70,10 @@ async def _toolkit_normalization(
 
     if should_export_html(config):
         artifact_path = f"exports/reports/normalization/{run_id}_normalization_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "normalization", config=kwargs)
+        artifact_url = upload_artifact(artifact_path, run_id, "normalization", config=kwargs, session_id=session_id)
 
         xlsx_path = f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "normalization", config=kwargs)
+        xlsx_url = upload_artifact(xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id)
 
     res = {
         "status": "pass",
@@ -87,7 +87,7 @@ async def _toolkit_normalization(
         "xlsx_url": xlsx_url,
         "export_url": export_url,
     }
-    append_to_run_history(run_id, res)
+    append_to_run_history(run_id, res, session_id=session_id)
     return res
 
 
