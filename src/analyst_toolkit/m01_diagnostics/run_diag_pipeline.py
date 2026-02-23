@@ -98,7 +98,7 @@ def run_diag_pipeline(
             logging.info("Generating diagnostic plots...")
             save_dir = Path(plotting_cfg.get("save_dir", "exports/plots/diagnostics/")) / run_id
 
-            # Generate high-level summary plots
+            # Generate high-level summary plots (Fast and high-value)
             plot_paths["Summary Plots"] = [
                 p
                 for p in [
@@ -109,20 +109,29 @@ def run_diag_pipeline(
                 if p is not None
             ]
 
-            # --- CORRECTED: Added missing distribution plot logic ---
-            numeric_cols = df.select_dtypes(include="number").columns
-            categorical_cols = df.select_dtypes(include=["object", "category"]).columns
+            # --- OPTIMIZATION: Limit distribution plots to prevent timeouts ---
+            include_dist = plotting_cfg.get("include_distributions", True)
+            max_plots = plotting_cfg.get("max_distribution_plots", 20)
+            
+            if include_dist:
+                numeric_cols = df.select_dtypes(include="number").columns[:max_plots]
+                categorical_cols = df.select_dtypes(include=["object", "category"]).columns[:max_plots]
 
-            dist_num_paths = [
-                plot_continuous_distribution(df[col], save_dir, run_id) for col in numeric_cols
-            ]
-            dist_cat_paths = [
-                plot_categorical_distribution(df[col], save_dir, run_id) for col in categorical_cols
-            ]
+                if len(df.columns) > max_plots:
+                    logging.info(f"Wide dataset detected (> {max_plots} cols). Limiting distribution plots to first {max_plots} columns to prevent timeout.")
 
-            plot_paths["Numeric Distributions"] = [p for p in dist_num_paths if p]
-            plot_paths["Categorical Distributions"] = [p for p in dist_cat_paths if p]
-            # --- END OF CORRECTION ---
+                dist_num_paths = [
+                    plot_continuous_distribution(df[col], save_dir, run_id) for col in numeric_cols
+                ]
+                dist_cat_paths = [
+                    plot_categorical_distribution(df[col], save_dir, run_id) for col in categorical_cols
+                ]
+
+                plot_paths["Numeric Distributions"] = [p for p in dist_num_paths if p]
+                plot_paths["Categorical Distributions"] = [p for p in dist_cat_paths if p]
+            else:
+                logging.info("Individual distribution plots skipped (include_distributions=False).")
+            # --- END OF OPTIMIZATION ---
 
         if settings.get("show_inline", False) and notebook:
             from analyst_toolkit.m01_diagnostics.diag_display import display_profile_summary
