@@ -1,19 +1,5 @@
 """
 io.py — Data loading and artifact upload for the analyst_toolkit MCP server.
-
-Dispatches on path prefix:
-  gs://...          → GCS pull (parquet or CSV)
-  *.parquet         → pd.read_parquet()
-  *.csv / default   → pd.read_csv()
-
-GCS auth: GOOGLE_APPLICATION_CREDENTIALS env var (mounted in Docker).
-Manifest: if _MANIFEST.json exists at the partition path, reads file list
-from it rather than globbing all parquet files (faster for large partitions).
-
-Report upload:
-  ANALYST_REPORT_BUCKET  — GCS bucket, e.g. gs://fridai-reports (no trailing slash)
-  ANALYST_REPORT_PREFIX  — optional blob prefix, default "analyst_toolkit/reports"
-  If ANALYST_REPORT_BUCKET is unset, upload_report() is a no-op returning "".
 """
 
 import json
@@ -32,21 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 def default_run_id() -> str:
-    """Return a UTC timestamp-based run ID, e.g. '20260222_153045'."""
+    """Return a UTC timestamp-based run ID."""
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> pd.DataFrame:
-    """
-    Dispatch on path type or session_id and return a DataFrame.
-
-    Args:
-        path: Local file path or gs:// URI.
-        session_id: In-memory session identifier.
-
-    Returns:
-        pd.DataFrame loaded from the specified source.
-    """
+    """Load data from GCS, local file, or in-memory session."""
     if session_id:
         df = StateStore.get(session_id)
         if df is not None:
@@ -61,178 +38,53 @@ def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> 
     if path.startswith("gs://"):
         return load_from_gcs(path)
     elif path.endswith(".parquet"):
-        logger.info(f"Loading parquet: {path}")
         return pd.read_parquet(path)
     else:
-        logger.info(f"Loading CSV: {path}")
         return pd.read_csv(path, low_memory=False)
 
 
 def save_to_session(
     df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None
 ) -> str:
-    """
-    Save a DataFrame to the in-memory state store.
-
-    Args:
-        df: The DataFrame to save.
-        session_id: Optional session ID to use/overwrite.
-        run_id: Optional run_id to associate with the session.
-
-    Returns:
-        The session_id.
-    """
+    """Save to in-memory store."""
     return StateStore.save(df, session_id, run_id=run_id)
 
 
 def get_session_run_id(session_id: str) -> Optional[str]:
-    """Retrieve the run_id associated with a session."""
     return StateStore.get_run_id(session_id)
 
 
 def get_session_start(session_id: str) -> Optional[str]:
-    """Retrieve the start time associated with a session."""
     return StateStore.get_session_start(session_id)
 
 
-def get_session_metadata(session_id: str) -> Optional[dict]:
-    """Retrieve metadata for a session."""
-    return StateStore.get_metadata(session_id)
-
-
-def _resolve_path_root(run_id: str, session_id: Optional[str] = None) -> str:
+def _resolve_path_root(session_id: Optional[str] = None) -> str:
     """
-    Determines the directory root for artifacts.
-    If run_id is the same as session_start (default), uses one level.
-    If they differ (rerun/override), nests them.
+    Stricly follow the structure: <session_timestamp>/<session_id>
     """
-    session_ts = (
-        get_session_start(session_id)
-        if session_id
-        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    )
-
-    if run_id == session_ts:
-        return session_ts
-    return f"{session_ts}/{run_id}"
+    if not session_id:
+        # If no session yet, we use a 'standalone' timestamp folder
+        return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    
+    session_ts = get_session_start(session_id) or "standalone"
+    return f"{session_ts}/{session_id}"
 
 
 def generate_default_export_path(
     run_id: str, module: str, extension: str = "csv", session_id: Optional[str] = None
 ) -> str:
-    """
-    Generate a consistent default path for data exports.
-    Groups artifacts by session_timestamp/run_id.
-    """
+    """Generate default path: prefix/session_ts/session_id/module_output.csv"""
     bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
 
-    path_root = _resolve_path_root(run_id, session_id)
+    path_root = _resolve_path_root(session_id)
 
     if bucket_uri:
         return f"{bucket_uri}/{prefix}/{path_root}/{module}_output.{extension}"
 
-    # Local fallback
     base_dir = Path("exports/data") / path_root
     base_dir.mkdir(parents=True, exist_ok=True)
     return str((base_dir / f"{module}_output.{extension}").absolute())
-
-
-def load_from_gcs(gcs_path: str) -> pd.DataFrame:
-    """
-    Pull data from a GCS path into a DataFrame.
-
-    If a _MANIFEST.json exists at the path, reads the file list from it
-    and fetches only those files. Otherwise globs *.parquet files.
-    Falls back to CSV if no parquet files found.
-
-    Args:
-        gcs_path: GCS URI, e.g. gs://bucket/path/to/partition/
-
-    Returns:
-        pd.DataFrame concatenated from all found files.
-    """
-    try:
-        from google.cloud import storage
-    except ImportError:
-        raise ImportError(
-            "google-cloud-storage is required for GCS access. "
-            "Install it with: pip install google-cloud-storage"
-        )
-
-    # Parse bucket and prefix from gs:// URI
-    stripped = gcs_path.removeprefix("gs://")
-    bucket_name, _, prefix = stripped.partition("/")
-    prefix = prefix.rstrip("/")
-
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-
-    # Direct file path — skip manifest/glob logic
-    if prefix.endswith(".parquet") or prefix.endswith(".csv"):
-        logger.info(f"Direct file path detected: {gcs_path}")
-        blobs = [bucket.blob(prefix)]
-    else:
-        # Check for _MANIFEST.json
-        manifest_blob = bucket.blob(f"{prefix}/_MANIFEST.json")
-        has_manifest = False
-        try:
-            has_manifest = manifest_blob.exists()
-        except Exception:
-            pass
-
-        if has_manifest:
-            logger.info(f"Found _MANIFEST.json at {gcs_path}")
-            manifest_data = json.loads(manifest_blob.download_as_text())
-            raw_files = manifest_data.get("files", [])
-            # files entries may be bare strings or dicts with a "path" key
-            file_names: list[str] = [f["path"] if isinstance(f, dict) else f for f in raw_files]
-            blobs = [bucket.blob(f"{prefix}/{f}") for f in file_names]
-        else:
-            logger.info(f"No manifest found, globbing {gcs_path}")
-            blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix}/"))
-            blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
-
-    if not blobs:
-        raise FileNotFoundError(f"No data files found at GCS path: {gcs_path}")
-
-    # Download to a temp dir and read
-    frames = []
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for blob in blobs:
-            sanitized_name = blob.name.replace("/", "_")
-            local_path = Path(tmpdir) / sanitized_name
-            blob.download_to_filename(str(local_path))
-            logger.info(f"Downloaded {blob.name} → {local_path}")
-            if sanitized_name.endswith(".parquet"):
-                frames.append(pd.read_parquet(local_path))
-            else:
-                frames.append(pd.read_csv(local_path, low_memory=False))
-
-    df = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
-    logger.info(f"Loaded {df.shape[0]} rows × {df.shape[1]} cols from {gcs_path}")
-    return df
-
-
-def should_export_html(config: dict) -> bool:
-    """Return True if HTML export should run.
-
-    Defaults to True when ANALYST_REPORT_BUCKET is set (container/production).
-    Callers can explicitly override with export_html: true/false in config.
-    """
-    if "export_html" in config:
-        return bool(config["export_html"])
-    return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
-
-
-_CONTENT_TYPES = {
-    ".html": "text/html",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".csv": "text/csv",
-    ".joblib": "application/octet-stream",
-    ".json": "application/json",
-    ".png": "image/png",
-}
 
 
 def upload_artifact(
@@ -242,37 +94,25 @@ def upload_artifact(
     config: Optional[dict] = None,
     session_id: Optional[str] = None,
 ) -> str:
-    """
-    Upload any local artifact to GCS and return its public HTTPS URL.
-
-    Groups artifacts by session_timestamp/run_id.
-    """
+    """Uploads artifact to: prefix/session_ts/session_id/module/filename"""
     config = config or {}
-    bucket_uri = (
-        config.get("output_bucket")
-        or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
-    )
+    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     if not bucket_uri:
         return ""
 
     p = Path(local_path)
     if not p.exists():
-        logger.warning(f"Artifact not found, skipping upload: {local_path}")
         return ""
 
     try:
         from google.cloud import storage
     except ImportError:
-        logger.warning("google-cloud-storage not installed; skipping artifact upload.")
         return ""
 
-    prefix = config.get("output_prefix") or os.environ.get(
-        "ANALYST_REPORT_PREFIX", "analyst_toolkit/reports"
-    ).strip().strip("/")
+    prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
     content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
-    path_root = _resolve_path_root(run_id, session_id)
-
+    path_root = _resolve_path_root(session_id)
     bucket_name = bucket_uri.removeprefix("gs://")
     blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
 
@@ -281,58 +121,18 @@ def upload_artifact(
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
         blob.upload_from_filename(str(p), content_type=content_type)
-        url = f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
-        logger.info(f"Uploaded {p.suffix} artifact → {url}")
-        return url
-    except Exception as exc:
-        logger.warning(f"GCS upload failed for {local_path}: {exc}")
+        return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
+    except Exception:
         return ""
 
 
-def save_output(df: pd.DataFrame, path: str) -> str:
-    """
-    Save a DataFrame to a specific path (GCS or local).
-    Supports .csv and .parquet.
-    """
-    if path.startswith("gs://"):
-        try:
-            if path.endswith(".parquet"):
-                df.to_parquet(path, index=False)
-            else:
-                df.to_csv(path, index=False)
-            logger.info(f"Saved output to GCS: {path}")
-            return path
-        except Exception as e:
-            logger.error(f"Failed to save to GCS {path}: {e}")
-            raise
-    else:
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        if path.endswith(".parquet"):
-            df.to_parquet(path, index=False)
-        else:
-            df.to_csv(path, index=False)
-        logger.info(f"Saved output to local path: {path}")
-        return str(p.absolute())
-
-
-def upload_report(local_path: str, run_id: str, module: str) -> str:
-    """Alias for upload_artifact — retained for backwards compatibility."""
-    return upload_artifact(local_path, run_id, module)
-
-
 def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = None):
-    """
-    Append a tool result entry to the run's history ledger.
-    Groups history by session_timestamp/run_id.
-    """
-    path_root = _resolve_path_root(run_id, session_id)
-
+    """Save history to: exports/reports/history/session_ts/session_id/run_history.json"""
+    path_root = _resolve_path_root(session_id)
     history_dir = Path("exports/reports/history") / path_root
     history_dir.mkdir(parents=True, exist_ok=True)
 
     history_file = history_dir / f"{run_id}_history.json"
-
     history = []
     if history_file.exists():
         try:
@@ -343,37 +143,62 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
 
     entry["timestamp"] = datetime.now(timezone.utc).isoformat()
     history.append(entry)
-
+    
     with open(history_file, "w") as f:
         json.dump(history, f, indent=2)
 
-    # Also upload to GCS if possible
     upload_artifact(str(history_file), run_id, "history", session_id=session_id)
 
 
+def load_from_gcs(gcs_path: str) -> pd.DataFrame:
+    stripped = gcs_path.removeprefix("gs://")
+    bucket_name, _, prefix = stripped.partition("/")
+    from google.cloud import storage
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"))
+    blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
+    
+    frames = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for blob in blobs:
+            local_path = Path(tmpdir) / blob.name.replace("/", "_")
+            blob.download_to_filename(str(local_path))
+            if local_path.suffix == ".parquet":
+                frames.append(pd.read_parquet(local_path))
+            else:
+                frames.append(pd.read_csv(local_path, low_memory=False))
+    return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+
+
+def should_export_html(config: dict) -> bool:
+    if "export_html" in config: return bool(config["export_html"])
+    return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
+
+
+def save_output(df: pd.DataFrame, path: str) -> str:
+    if path.startswith("gs://"):
+        if path.endswith(".parquet"): df.to_parquet(path, index=False)
+        else: df.to_csv(path, index=False)
+        return path
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if path.endswith(".parquet"): df.to_parquet(path, index=False)
+    else: df.to_csv(path, index=False)
+    return str(p.absolute())
+
+
+_CONTENT_TYPES = {
+    ".html": "text/html",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".png": "image/png",
+}
+
 def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
-    """Retrieve the history ledger for a run."""
-    session_ts = get_session_start(session_id) if session_id else None
-
-    if session_ts:
-        # Check both potential roots (flat and nested)
-        roots = [
-            Path("exports/reports/history") / f"{session_ts}/{run_id}",
-            Path("exports/reports/history") / f"{session_ts}",
-        ]
-        for root in roots:
-            history_file = root / f"{run_id}_history.json"
-            if history_file.exists():
-                with open(history_file, "r") as f:
-                    return json.load(f)
-
-    # Fallback to search all history if session_id unknown
     history_root = Path("exports/reports/history")
-    if not history_root.exists():
-        return []
-
+    if not history_root.exists(): return []
     for h_file in history_root.glob(f"**/{run_id}_history.json"):
-        with open(h_file, "r") as f:
-            return json.load(f)
-
+        with open(h_file, "r") as f: return json.load(f)
     return []

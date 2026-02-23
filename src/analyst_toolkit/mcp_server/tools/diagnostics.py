@@ -24,8 +24,7 @@ async def _toolkit_diagnostics(
     run_id: str | None = None,
     **kwargs,
 ) -> dict:
-    """Run data profiling and structural diagnostics on the dataset at gcs_path or session_id."""
-    # Resolve run_id: 1. Explicitly provided, 2. Existing session run_id, 3. Default timestamp
+    """Run data profiling and structural diagnostics on the dataset."""
     if not run_id and session_id:
         run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
@@ -33,22 +32,20 @@ async def _toolkit_diagnostics(
     config = config or {}
     df = load_input(gcs_path, session_id=session_id)
 
-    # If it came from a path, save it to a session so downstream tools can use it
+    # If it came from a path, save it to a session
     if not session_id:
         session_id = save_to_session(df, run_id=run_id)
     else:
-        # Update session with current run_id if it changed or was missing
         save_to_session(df, session_id=session_id, run_id=run_id)
 
-    # Handle explicit or default export
-    export_path = kwargs.get("export_path") or generate_default_export_path(
-        run_id, "diagnostics", session_id=session_id
-    )
-    export_url = save_output(df, export_path)
-
-    # Robustly handle config nesting
+    # Resolve Plotting Settings (Opt-in by default)
     base_cfg = config.get("diagnostics", config) if isinstance(config, dict) else {}
+    plotting_cfg = base_cfg.get("plotting", {})
+    
+    # Check if user explicitly asked for plotting in config OR tool arguments
+    run_plots = plotting_cfg.get("run", False) or kwargs.get("plotting", False)
 
+    # Build module config
     module_cfg = {
         "diagnostics": {
             **base_cfg,
@@ -57,19 +54,21 @@ async def _toolkit_diagnostics(
                 "run": True,
                 "settings": {"export": True, "export_html": should_export_html(config)},
             },
-            "plotting": {"run": True},
+            "plotting": {
+                "run": run_plots,
+                "include_distributions": run_plots, # Only draw if requested
+                "max_distribution_plots": kwargs.get("max_plots", 50)
+            },
         }
     }
 
-    # run_diag_pipeline handles profiling, plotting and report generation
     run_diag_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
 
-    shape = [int(df.shape[0]), int(df.shape[1])]
-    null_rate = round(float(df.isnull().mean().mean()), 4)
-
-    # Base status on configurable or default threshold
-    null_threshold = config.get("null_threshold", 0.1)
-    status = "pass" if null_rate < null_threshold else "warn"
+    # Handle export
+    export_path = kwargs.get("export_path") or generate_default_export_path(
+        run_id, "diagnostics", session_id=session_id
+    )
+    export_url = save_output(df, export_path)
 
     artifact_path = ""
     artifact_url = ""
@@ -77,7 +76,6 @@ async def _toolkit_diagnostics(
     plot_urls = {}
 
     if should_export_html(config):
-        # Paths where run_diag_pipeline saves its reports
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
         artifact_url = upload_artifact(
             artifact_path, run_id, "diagnostics", config=kwargs, session_id=session_id
@@ -88,35 +86,26 @@ async def _toolkit_diagnostics(
             xlsx_path, run_id, "diagnostics", config=kwargs, session_id=session_id
         )
 
-        # Upload plots - search both root and run_id subdir
-        plot_dirs = [Path("exports/plots/diagnostics"), Path(f"exports/plots/diagnostics/{run_id}")]
-        for plot_dir in plot_dirs:
-            if plot_dir.exists():
-                for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(
-                        str(plot_file),
-                        run_id,
-                        "diagnostics/plots",
-                        config=kwargs,
-                        session_id=session_id,
-                    )
-                    if url:
-                        plot_urls[plot_file.name] = url
+        if run_plots:
+            plot_dirs = [Path("exports/plots/diagnostics"), Path(f"exports/plots/diagnostics/{run_id}")]
+            for plot_dir in plot_dirs:
+                if plot_dir.exists():
+                    for plot_file in plot_dir.glob(f"*{run_id}*.png"):
+                        url = upload_artifact(
+                            str(plot_file), run_id, "diagnostics/plots", config=kwargs, session_id=session_id
+                        )
+                        if url: plot_urls[plot_file.name] = url
 
     res = {
-        "status": status,
+        "status": "pass",
         "module": "diagnostics",
         "run_id": run_id,
         "session_id": session_id,
         "summary": {
-            "shape": shape,
-            "null_rate": null_rate,
-            "column_count": shape[1],
-            "row_count": shape[0],
+            "null_rate": round(float(df.isnull().mean().mean()), 4),
+            "column_count": len(df.columns),
+            "row_count": len(df),
         },
-        "profile_shape": shape,
-        "null_rate": null_rate,
-        "column_count": shape[1],
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
@@ -132,6 +121,9 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="diagnostics",
     fn=_toolkit_diagnostics,
-    description="Run data profiling on a dataset. Returns shape, null rate, and column summary.",
-    input_schema=base_input_schema(),
+    description="Run data profiling on a dataset. Plotting is opt-in (pass plotting=true).",
+    input_schema=base_input_schema(extra_props={
+        "plotting": {"type": "boolean", "description": "Opt-in to generate visualization plots. Default: false."},
+        "max_plots": {"type": "integer", "description": "Max number of column distributions to plot. Default: 50."}
+    }),
 )
