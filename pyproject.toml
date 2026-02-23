@@ -13,17 +13,20 @@ name = "analyst_toolkit"
 version = "0.4.1"
 description = "A comprehensive toolkit for data analysis, validation, and diagnostics."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 
 authors = [
-  { name = "Garrett Schumacher", email = "your@email.com" }
+  { name = "Garrett Schumacher", email = "me@garrettschumacher.com" }
 ]
 
 classifiers = [
-  "Development Status :: 5 - Production/Stable",
+  "Development Status :: 4 - Beta",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]

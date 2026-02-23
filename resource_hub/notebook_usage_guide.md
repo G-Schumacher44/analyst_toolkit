@@ -12,7 +12,7 @@
 
 ## 🔰 Analyst Toolkit Notebook Usage Guide
 
-This guide explains how to use each module in an interactive notebook session. It assumes you've installed the toolkit using `pip install -e .`.
+This guide explains how to use each module in an interactive notebook session. It assumes you've installed the toolkit using `pip install -e ".[notebook]"`.
 
 >💡 As a best practice across all modules, we recommend renaming each DataFrame after a stage is complete (e.g., `df_diagnosed`, `df_validated`, `df_normalized`) to maintain clarity in modular workflows.
 
@@ -20,7 +20,7 @@ This guide explains how to use each module in an interactive notebook session. I
 ### ✅ Getting Started
 
 ```bash
-pip install -e .
+pip install -e ".[notebook]"
 ```
 
 ### 🧭 Standard Import Pattern

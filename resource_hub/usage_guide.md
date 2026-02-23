@@ -25,7 +25,7 @@ Clone the repo and install locally using the provided `pyproject.toml`:
 ```bash
 git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
-pip install -e .[dev]
+pip install -e ".[dev]"
 
 ```
 **🌐 Install Directly via GitHub**
