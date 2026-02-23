@@ -20,6 +20,7 @@ async def _toolkit_imputation(
     session_id: str | None = None,
     config: dict | None = None,
     run_id: str | None = None,
+    **kwargs
 ) -> dict:
     """Run missing value imputation on the dataset at gcs_path or session_id."""
     run_id = run_id or default_run_id()
@@ -49,6 +50,11 @@ async def _toolkit_imputation(
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count")
 
+    # Handle explicit export if requested
+    export_url = ""
+    if "export_path" in kwargs:
+        export_url = save_output(df_imputed, kwargs["export_path"])
+
     # We need to compute these for the MCP response summary
     nulls_before = int(df.isnull().sum().sum())
     nulls_after = int(df_imputed.isnull().sum().sum())
@@ -64,17 +70,17 @@ async def _toolkit_imputation(
 
     if should_export_html(config):
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "imputation")
+        artifact_url = upload_artifact(artifact_path, run_id, "imputation", config=kwargs)
 
         xlsx_path = f"exports/reports/imputation/{run_id}_imputation_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "imputation")
+        xlsx_url = upload_artifact(xlsx_path, run_id, "imputation", config=kwargs)
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/imputation"), Path(f"exports/plots/imputation/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(str(plot_file), run_id, "imputation/plots")
+                    url = upload_artifact(str(plot_file), run_id, "imputation/plots", config=kwargs)
                     if url:
                         plot_urls[plot_file.name] = url
 
@@ -94,6 +100,7 @@ async def _toolkit_imputation(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "plot_urls": plot_urls,
+        "export_url": export_url,
     }
     append_to_run_history(run_id, res)
     return res

@@ -7,6 +7,7 @@ from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
     load_input,
+    save_output,
     save_to_session,
     should_export_html,
     upload_artifact,
@@ -19,6 +20,7 @@ async def _toolkit_diagnostics(
     session_id: str | None = None,
     config: dict | None = None,
     run_id: str | None = None,
+    **kwargs
 ) -> dict:
     """Run data profiling and structural diagnostics on the dataset at gcs_path or session_id."""
     run_id = run_id or default_run_id()
@@ -28,6 +30,11 @@ async def _toolkit_diagnostics(
     # If it came from a path, save it to a session so downstream tools can use it
     if not session_id:
         session_id = save_to_session(df)
+
+    # Handle explicit export if requested
+    export_url = ""
+    if "export_path" in kwargs:
+        export_url = save_output(df, kwargs["export_path"])
 
     # Robustly handle config nesting
     base_cfg = config.get("diagnostics", config) if isinstance(config, dict) else {}
@@ -62,17 +69,17 @@ async def _toolkit_diagnostics(
     if should_export_html(config):
         # Paths where run_diag_pipeline saves its reports
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "diagnostics")
+        artifact_url = upload_artifact(artifact_path, run_id, "diagnostics", config=kwargs)
 
         xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics")
+        xlsx_url = upload_artifact(xlsx_path, run_id, "diagnostics", config=kwargs)
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/diagnostics"), Path(f"exports/plots/diagnostics/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(str(plot_file), run_id, "diagnostics/plots")
+                    url = upload_artifact(str(plot_file), run_id, "diagnostics/plots", config=kwargs)
                     if url:
                         plot_urls[plot_file.name] = url
 
@@ -94,6 +101,7 @@ async def _toolkit_diagnostics(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "plot_urls": plot_urls,
+        "export_url": export_url,
     }
     append_to_run_history(run_id, res)
     return res

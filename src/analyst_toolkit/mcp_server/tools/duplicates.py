@@ -21,6 +21,7 @@ async def _toolkit_duplicates(
     config: dict | None = None,
     run_id: str | None = None,
     subset_columns: list[str] | None = None,
+    **kwargs
 ) -> dict:
     """Run duplicate detection on the dataset at gcs_path or session_id."""
     run_id = run_id or default_run_id()
@@ -66,6 +67,11 @@ async def _toolkit_duplicates(
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count", len(df_processed))
 
+    # Handle explicit export if requested
+    export_url = ""
+    if "export_path" in kwargs:
+        export_url = save_output(df_processed, kwargs["export_path"])
+
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
@@ -73,17 +79,17 @@ async def _toolkit_duplicates(
 
     if should_export_html(config):
         artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
-        artifact_url = upload_artifact(artifact_path, run_id, "duplicates")
+        artifact_url = upload_artifact(artifact_path, run_id, "duplicates", config=kwargs)
 
         xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
-        xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates")
+        xlsx_url = upload_artifact(xlsx_path, run_id, "duplicates", config=kwargs)
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/duplicates"), Path(f"exports/plots/duplicates/{run_id}")]
         for plot_dir in plot_dirs:
             if plot_dir.exists():
                 for plot_file in plot_dir.glob(f"*{run_id}*.png"):
-                    url = upload_artifact(str(plot_file), run_id, "duplicates/plots")
+                    url = upload_artifact(str(plot_file), run_id, "duplicates/plots", config=kwargs)
                     if url:
                         plot_urls[plot_file.name] = url
 
@@ -103,6 +109,7 @@ async def _toolkit_duplicates(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "plot_urls": plot_urls,
+        "export_url": export_url,
     }
     append_to_run_history(run_id, res)
     return res

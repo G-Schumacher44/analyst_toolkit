@@ -184,28 +184,24 @@ _CONTENT_TYPES = {
 }
 
 
-def upload_artifact(local_path: str, run_id: str, module: str) -> str:
+def upload_artifact(local_path: str, run_id: str, module: str, config: Optional[dict] = None) -> str:
     """
     Upload any local artifact to GCS and return its public HTTPS URL.
 
-    Reads ANALYST_REPORT_BUCKET and ANALYST_REPORT_PREFIX from env.
-    If ANALYST_REPORT_BUCKET is not set, returns "" (no-op for local dev).
-
-    Blob path: {prefix}/{run_id}/{module}/{filename}
-    Public URL: https://storage.googleapis.com/{bucket}/{blob}
-
-    Supports HTML, XLSX, CSV, joblib, and JSON — content type is inferred
-    from the file extension.
+    Reads ANALYST_REPORT_BUCKET and ANALYST_REPORT_PREFIX from env,
+    but allows overrides via config['output_bucket'] and config['output_prefix'].
 
     Args:
         local_path: Absolute or relative path to the file on disk.
         run_id:     Run identifier (used as a path component in GCS).
         module:     Module name (e.g. "outliers", "imputation").
+        config:     Optional config dict for bucket/prefix overrides.
 
     Returns:
         Public GCS HTTPS URL string, or "" if upload is disabled or file missing.
     """
-    bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    config = config or {}
+    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     if not bucket_uri:
         return ""
 
@@ -220,7 +216,7 @@ def upload_artifact(local_path: str, run_id: str, module: str) -> str:
         logger.warning("google-cloud-storage not installed; skipping artifact upload.")
         return ""
 
-    prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
+    prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
     content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
     bucket_name = bucket_uri.removeprefix("gs://")
@@ -237,6 +233,33 @@ def upload_artifact(local_path: str, run_id: str, module: str) -> str:
     except Exception as exc:
         logger.warning(f"GCS upload failed for {local_path}: {exc}")
         return ""
+
+
+def save_output(df: pd.DataFrame, path: str) -> str:
+    """
+    Save a DataFrame to a specific path (GCS or local).
+    Supports .csv and .parquet.
+    """
+    if path.startswith("gs://"):
+        try:
+            if path.endswith(".parquet"):
+                df.to_parquet(path, index=False)
+            else:
+                df.to_csv(path, index=False)
+            logger.info(f"Saved output to GCS: {path}")
+            return path
+        except Exception as e:
+            logger.error(f"Failed to save to GCS {path}: {e}")
+            raise
+    else:
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if path.endswith(".parquet"):
+            df.to_parquet(path, index=False)
+        else:
+            df.to_csv(path, index=False)
+        logger.info(f"Saved output to local path: {path}")
+        return str(p.absolute())
 
 
 def upload_report(local_path: str, run_id: str, module: str) -> str:

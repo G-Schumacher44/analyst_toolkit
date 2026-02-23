@@ -51,10 +51,31 @@ _RUN_ID_PROP = {
     }
 }
 
+_OUTPUT_CONTROL_PROPS = {
+    "output_bucket": {
+        "type": "string",
+        "description": "Optional: Override the GCS bucket for report uploads (e.g., 'gs://my-custom-bucket').",
+    },
+    "output_prefix": {
+        "type": "string",
+        "description": "Optional: Override the GCS prefix for report uploads (default: 'analyst_toolkit/reports').",
+    },
+    "export_path": {
+        "type": "string",
+        "description": "Optional: A specific GCS or local path to save the resulting dataset (e.g., 'gs://bucket/cleaned.parquet' or 'outputs/final.csv').",
+    },
+}
+
 
 def base_input_schema(extra_props: dict | None = None) -> dict:
     """Return a JSON Schema object for standard toolkit tool inputs."""
-    props = {**_GCS_PATH_PROP, **_SESSION_ID_PROP, **_CONFIG_PROP, **_RUN_ID_PROP}
+    props = {
+        **_GCS_PATH_PROP,
+        **_SESSION_ID_PROP,
+        **_CONFIG_PROP,
+        **_RUN_ID_PROP,
+        **_OUTPUT_CONTROL_PROPS,
+    }
     if extra_props:
         props.update(extra_props)
     return {
