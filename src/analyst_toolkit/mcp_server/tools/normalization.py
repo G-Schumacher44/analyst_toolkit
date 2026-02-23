@@ -6,6 +6,7 @@ from analyst_toolkit.m03_normalization.run_normalization_pipeline import (
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    generate_default_export_path,
     get_session_metadata,
     load_input,
     save_output,
@@ -53,10 +54,9 @@ async def _toolkit_normalization(
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count")
 
-    # Handle explicit export if requested
-    export_url = ""
-    if "export_path" in kwargs:
-        export_url = save_output(df_normalized, kwargs["export_path"])
+    # Handle explicit or default export
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "normalization")
+    export_url = save_output(df_normalized, export_path)
 
     changes_made = 0  # Placeholder
 

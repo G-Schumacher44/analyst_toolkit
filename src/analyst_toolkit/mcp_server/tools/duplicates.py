@@ -6,8 +6,10 @@ from analyst_toolkit.m04_duplicates.run_dupes_pipeline import run_duplicates_pip
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    generate_default_export_path,
     get_session_metadata,
     load_input,
+    save_output,
     save_to_session,
     should_export_html,
     upload_artifact,
@@ -67,10 +69,9 @@ async def _toolkit_duplicates(
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count", len(df_processed))
 
-    # Handle explicit export if requested
-    export_url = ""
-    if "export_path" in kwargs:
-        export_url = save_output(df_processed, kwargs["export_path"])
+    # Handle explicit or default export
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "duplicates")
+    export_url = save_output(df_processed, export_path)
 
     artifact_path = ""
     artifact_url = ""

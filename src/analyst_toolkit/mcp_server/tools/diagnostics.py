@@ -6,6 +6,7 @@ from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    generate_default_export_path,
     load_input,
     save_output,
     save_to_session,
@@ -31,10 +32,9 @@ async def _toolkit_diagnostics(
     if not session_id:
         session_id = save_to_session(df)
 
-    # Handle explicit export if requested
-    export_url = ""
-    if "export_path" in kwargs:
-        export_url = save_output(df, kwargs["export_path"])
+    # Handle explicit or default export
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "diagnostics")
+    export_url = save_output(df, export_path)
 
     # Robustly handle config nesting
     base_cfg = config.get("diagnostics", config) if isinstance(config, dict) else {}

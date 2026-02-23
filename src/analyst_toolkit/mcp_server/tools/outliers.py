@@ -2,14 +2,13 @@
 
 from pathlib import Path
 
-from analyst_toolkit.m00_utils.export_utils import export_dataframes, export_html_report
-from analyst_toolkit.m00_utils.report_generator import generate_outlier_report
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
     run_outlier_detection_pipeline,
 )
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    generate_default_export_path,
     get_session_metadata,
     load_input,
     save_output,
@@ -54,10 +53,9 @@ async def _toolkit_outliers(
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count", len(df_out))
 
-    # Handle explicit export if requested
-    export_url = ""
-    if "export_path" in kwargs:
-        export_url = save_output(df_out, kwargs["export_path"])
+    # Handle explicit or default export
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "outliers")
+    export_url = save_output(df_out, export_path)
 
     outlier_log = detection_results.get("outlier_log")
     outlier_count = (
@@ -74,20 +72,12 @@ async def _toolkit_outliers(
     xlsx_url = ""
     plot_urls = {}
     if should_export_html(config):
-        report_tables = generate_outlier_report(detection_results)
-        html_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
-        artifact_path = export_html_report(report_tables, html_path, "Outlier Detection", run_id)
+        # Path where the pipeline runner saves its report
+        artifact_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
         artifact_url = upload_artifact(artifact_path, run_id, "outliers", config=kwargs)
 
-        if outlier_log is not None and not outlier_log.empty:
-            export_dataframes(
-                {"outlier_log": outlier_log},
-                "exports/reports/outliers/detection/outlier_report.xlsx",
-                file_format="xlsx",
-                run_id=run_id,
-            )
-            xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
-            xlsx_url = upload_artifact(xlsx_path, run_id, "outliers", config=kwargs)
+        xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
+        xlsx_url = upload_artifact(xlsx_path, run_id, "outliers", config=kwargs)
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [

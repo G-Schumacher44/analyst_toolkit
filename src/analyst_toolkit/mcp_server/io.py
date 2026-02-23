@@ -87,6 +87,13 @@ def get_session_metadata(session_id: str) -> Optional[dict]:
     return StateStore.get_metadata(session_id)
 
 
+def generate_default_export_path(run_id: str, module: str, extension: str = "csv") -> str:
+    """Generate a consistent default local path for data exports."""
+    base_dir = Path("exports/data") / run_id
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return str((base_dir / f"{module}_output.{extension}").absolute())
+
+
 def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     """
     Pull data from a GCS path into a DataFrame.

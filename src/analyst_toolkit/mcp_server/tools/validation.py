@@ -6,6 +6,7 @@ from analyst_toolkit.m02_validation.run_validation_pipeline import run_validatio
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
+    generate_default_export_path,
     get_session_metadata,
     load_input,
     save_output,
@@ -34,6 +35,10 @@ async def _toolkit_validation(
     metadata = get_session_metadata(session_id) or {}
     row_count = metadata.get("row_count", len(df))
 
+    # Handle explicit or default export
+    export_path = kwargs.get("export_path") or generate_default_export_path(run_id, "validation")
+    export_url = save_output(df, export_path)
+
     # Robustly handle config nesting
     base_cfg = config.get("validation", config) if isinstance(config, dict) else {}
 
@@ -51,23 +56,18 @@ async def _toolkit_validation(
     # run_validation_pipeline returns the validated (unchanged) dataframe
     run_validation_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
 
-    # Handle explicit export if requested
-    export_url = ""
-    if "export_path" in kwargs:
-        export_url = save_output(df, kwargs["export_path"])
-
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
     if should_export_html(config):
-        html_path = f"exports/reports/validation/{run_id}_validation_report.html"
-        artifact_path = upload_artifact(artifact_path, run_id, "validation", config=kwargs)
+        artifact_path = f"exports/reports/validation/{run_id}_validation_report.html"
+        artifact_url = upload_artifact(artifact_path, run_id, "validation", config=kwargs)
 
         xlsx_path = f"exports/reports/validation/{run_id}_validation_report.xlsx"
         xlsx_url = upload_artifact(xlsx_path, run_id, "validation", config=kwargs)
 
     # Logic to determine pass/fail for the response (heuristic)
-    passed = True # Placeholder
+    passed = True  # Placeholder
 
     res = {
         "status": "pass" if passed else "fail",
