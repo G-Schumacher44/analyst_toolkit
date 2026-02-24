@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.1-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.2-blueviolet">
 </p>
 
 ---
@@ -15,12 +15,13 @@
 
 The analyst toolkit MCP server exposes every toolkit module as a callable tool over the [Model Context Protocol](https://modelcontextprotocol.io). Any MCP-compatible host — FridAI, Claude Desktop, VS Code, or a plain JSON-RPC 2.0 client — can invoke toolkit operations against local or GCS-hosted data without any Python dependency on the host side.
 
-## 🆕 Version 0.4.1 Highlights
+## 🆕 Version 0.4.2 Highlights
 
 - **Pipeline Mode:** In-memory state management via `session_id` allows chaining multiple tools without manual file saving.
-- **Client Cockpit:** New tools for executive reporting, including a 0-100 Data Health Score and a "Healing Ledger" history.
+- **Client Cockpit:** Tools for executive reporting, including a 0-100 Data Health Score, a "Healing Ledger" history, and an agent flight checklist.
 - **Golden Templates:** Mountable library of industry-standard configurations for Fraud, Migration, and Compliance.
-- **Auto-Healing:** One-click inference and repair tool.
+- **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
+- **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.
 
 ---
 
@@ -112,6 +113,9 @@ curl http://localhost:8001/health | python3 -m json.tool
 | `get_data_health_report` | 0-100 health score (Completeness, Validity, Uniqueness, Consistency) |
 | `get_run_history` | Full "Healing Ledger" — every transformation made in a run |
 | `get_golden_templates` | Returns industry-standard starter configs (Fraud, Migration, Compliance) |
+| `get_agent_instructions` | Returns the agent flight checklist and pipeline order guidance |
+| `get_cockpit_help` | Returns a guide to state management, directory structure, and plotting |
+| `final_audit` | Final certification step — produces the Healing Certificate HTML report |
 
 </details>
 
@@ -122,20 +126,31 @@ curl http://localhost:8001/health | python3 -m json.tool
 Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a tool runs, it saves its output to an in-memory `StateStore` and returns a `session_id`. Pass that `session_id` to the next tool to operate on the already-transformed data — no intermediate files needed.
 
 ```text
-Call diagnostics(gcs_path="data/raw/file.csv")
-  → returns session_id: "sess_abc123"
+1. diagnostics(gcs_path="gs://bucket/path/file.parquet", run_id="my_run")
+     → creates session_id: "sess_abc123", establishes baseline profile
 
-Call normalization(session_id="sess_abc123")
-  → reads cleaned df from state, returns session_id: "sess_abc123"
+2. get_data_health_report(run_id="my_run")
+     → 0-100 health score before any changes
 
-Call imputation(session_id="sess_abc123")
-  → reads imputed df from state, returns session_id: "sess_abc123"
+3. infer_configs(session_id="sess_abc123")
+     → returns YAML configs per module; review and adjust before using
 
-Call get_data_health_report(run_id="my_run")
-  → returns 0-100 score aggregated from all steps
+4. normalization(session_id="sess_abc123", config={...})
+5. duplicates(session_id="sess_abc123", config={...})
+6. outliers(session_id="sess_abc123", config={...})
+7. imputation(session_id="sess_abc123", config={...})
+8. validation(session_id="sess_abc123", config={...})
+
+9. final_audit(session_id="sess_abc123")
+     → produces Healing Certificate HTML report
+
+10. get_run_history(run_id="my_run")
+      → full ledger of every transformation
 ```
 
 A `run_id` ties all steps together in the Healing Ledger. Pass the same `run_id` across calls to build a full audit trail.
+
+> **Config structure note:** `infer_configs` returns YAML strings. Parse each one with `yaml.safe_load` and pass the resulting dict directly to the relevant tool. Never flatten nested keys — for normalization, `standardize_text_columns`, `coerce_dtypes`, etc. must stay nested inside `rules:` or the pipeline will skip all transformations.
 
 ---
 
@@ -411,22 +426,29 @@ In your FridAI `remote_manager` config, point to the running server:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GCP_CREDS_PATH` | For GCS data | `~/.secrets/gcp_creds.json` | Host path to service account key |
-| `ANALYST_REPORT_BUCKET` | No | _(unset)_ | GCS bucket for HTML report upload |
-| `ANALYST_REPORT_PREFIX` | No | `analyst_toolkit/reports` | Blob path prefix in GCS |
+| `GCP_CREDS_PATH` | For GCS | — | Host path to service account JSON key |
+| `ANALYST_REPORT_BUCKET` | No | _(unset — local mode)_ | GCS bucket for HTML/XLSX/plot upload, e.g. `gs://my-bucket` |
+| `ANALYST_REPORT_PREFIX` | No | `analyst_toolkit/reports` | Blob path prefix within the bucket |
+| `ANALYST_MCP_PORT` | No | `8001` | Override the server port |
+
+Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
 
 ---
 
 ## GCS Data Loading
 
-The server dispatches on path prefix:
+The server dispatches on path format:
 
 | Input | Behavior |
 | --- | --- |
-| `gs://bucket/path/` | Downloads and concatenates all files (supports `_MANIFEST.json`) |
-| `path/to/file.parquet` | `pd.read_parquet()` |
-| `path/to/file.csv` | `pd.read_csv()` |
+| `gs://bucket/path/to/file.parquet` | Downloads the single blob directly |
+| `gs://bucket/path/to/file.csv` | Downloads the single blob directly |
+| `gs://bucket/path/to/partition/` | Lists all `.parquet` / `.csv` blobs under the prefix and concatenates them |
+| `path/to/file.parquet` | `pd.read_parquet()` (local) |
+| `path/to/file.csv` | `pd.read_csv()` (local) |
 | `session_id` | Reads from in-memory `StateStore` (no I/O) |
+
+> **Note:** Partition-style directory paths must end with `/`. Direct file paths (ending in `.parquet` or `.csv`) are read without listing.
 
 ---
 

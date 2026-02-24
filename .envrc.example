@@ -1,0 +1,22 @@
+# ============================================================
+# Analyst Toolkit — Environment Template
+# Copy to .envrc and fill in your values:
+#   cp .envrc.example .envrc && direnv allow
+# ============================================================
+
+# --- GCS Authentication ---
+# Path to your GCP service account key (JSON).
+# Required for reading GCS data or uploading reports.
+export GCP_CREDS_PATH=/path/to/your/gcp_service_account.json
+
+# Convenience alias used by local dev scripts and notebooks
+export GOOGLE_APPLICATION_CREDENTIALS=$GCP_CREDS_PATH
+
+# --- Report Output ---
+# GCS bucket to upload HTML reports, plots, and XLSX artifacts.
+# Leave unset to write reports to ./exports/ only (local-only mode).
+export ANALYST_REPORT_BUCKET=gs://your-bucket-name
+
+# Blob path prefix within the bucket.
+# Reports land at: {bucket}/{prefix}/{session_ts}/{run_id}/{module}/
+export ANALYST_REPORT_PREFIX=analyst_toolkit/reports
