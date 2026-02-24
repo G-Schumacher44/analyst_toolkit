@@ -28,7 +28,7 @@ def plot_continuous_distribution(series: pd.Series, save_dir: Path, run_id: str)
     series.plot(kind="kde", ax=ax, secondary_y=True, color="#c44e52")
 
     ax.set_title(f"Distribution of {series.name}")
-    ax.set_xlabel(series.name)
+    ax.set_xlabel(str(series.name))
     ax.set_ylabel("Frequency")
     plt.tight_layout()
 

@@ -46,7 +46,7 @@ def plot_imputation_comparison(
         sns.kdeplot(s_after, ax=ax, label="After Imputation", fill=True, alpha=0.5)
 
         ax.set_title(f"Distribution Change After Imputation: {col_name}")
-        ax.set_xlabel(col_name)
+        ax.set_xlabel(str(col_name))
         ax.legend()
         plt.tight_layout()
 

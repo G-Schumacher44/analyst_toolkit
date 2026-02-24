@@ -74,7 +74,7 @@ def plot_dtype_summary(df: pd.DataFrame, save_dir: Path, run_id: str) -> Path:
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.pie(
         dtype_counts,
-        labels=dtype_counts.index,
+        labels=[str(label) for label in dtype_counts.index],
         autopct="%1.1f%%",
         startangle=90,
         wedgeprops=dict(width=0.4),
@@ -120,7 +120,13 @@ def plot_duplication_summary(summary_df: pd.DataFrame, save_dir: Path, run_id: s
 
         for bar in bars:
             yval = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2.0, yval, int(yval), va="bottom", ha="center")
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                yval,
+                str(int(yval)),
+                va="bottom",
+                ha="center",
+            )
 
         ax.set_title("Deduplication Summary: Row Counts")
         ax.set_ylabel("Number of Rows")
