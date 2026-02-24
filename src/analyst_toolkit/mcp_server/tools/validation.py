@@ -5,6 +5,7 @@ import pandas as pd
 from analyst_toolkit.m02_validation.run_validation_pipeline import (
     run_validation_pipeline,
 )
+from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     check_upload,
@@ -65,8 +66,22 @@ async def _toolkit_validation(
         }
     }
 
-    # run_validation_pipeline returns the validated (unchanged) dataframe
+    # run_validation_pipeline handles export/reporting
     run_validation_pipeline(config=module_cfg, df=df, notebook=False, run_id=run_id)
+
+    # Run suite directly to get structured pass/fail results for the MCP response
+    schema_cfg = base_cfg.get("schema_validation", {})
+    violations_found: list[str] = []
+    checks_run = 0
+    if schema_cfg.get("run", False):
+        validation_results = run_validation_suite(df, config=base_cfg)
+        for check_name, check in validation_results.items():
+            if isinstance(check, dict) and "passed" in check:
+                checks_run += 1
+                if not check["passed"]:
+                    violations_found.append(check_name)
+
+    passed = len(violations_found) == 0
 
     artifact_path = ""
     artifact_url = ""
@@ -89,19 +104,21 @@ async def _toolkit_validation(
             warnings,
         )
 
-    # Logic to determine pass/fail for the response (heuristic)
-    passed = True  # Placeholder
+    status = "warn" if warnings else ("fail" if violations_found else "pass")
 
     res = {
-        "status": "pass" if passed else "fail",
+        "status": status,
         "module": "validation",
         "run_id": run_id,
         "session_id": session_id,
         "summary": {
             "passed": passed,
+            "checks_run": checks_run,
+            "violations_found": violations_found,
             "row_count": row_count,
         },
         "passed": passed,
+        "violations_found": violations_found,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,

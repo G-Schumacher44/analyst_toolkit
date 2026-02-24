@@ -1,16 +1,16 @@
 """
 test_hardening.py — Unit tests for StateStore thread safety, coerce_config YAML parsing,
-and check_upload warning surfacing.
+check_upload warning surfacing, TTL eviction, and pipeline integration.
 """
 
 import threading
+import time
 
 import pandas as pd
 import pytest
 
 from analyst_toolkit.mcp_server.io import check_upload, coerce_config
 from analyst_toolkit.mcp_server.state import StateStore
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -187,3 +187,166 @@ def test_check_upload_accumulates_multiple_warnings():
     check_upload("", "report.html", warnings)
     check_upload("", "report.xlsx", warnings)
     assert len(warnings) == 2
+
+
+# ---------------------------------------------------------------------------
+# StateStore — TTL eviction
+# ---------------------------------------------------------------------------
+
+
+def test_ttl_eviction_removes_expired_sessions(sample_df, monkeypatch):
+    """Sessions accessed longer ago than SESSION_TTL_SECONDS are evicted on next save."""
+    import analyst_toolkit.mcp_server.state as state_module
+
+    # Patch TTL to 1 second so we don't wait an hour
+    monkeypatch.setattr(state_module, "SESSION_TTL_SECONDS", 1)
+
+    sid = StateStore.save(sample_df)
+    assert StateStore.get(sid) is not None
+
+    # Backdate last_accessed so the session appears expired
+    with StateStore._lock:
+        StateStore._last_accessed[sid] = time.time() - 2  # 2s ago, TTL=1s
+
+    # Trigger cleanup by saving a new session
+    StateStore.save(sample_df)
+
+    # The old session should be gone
+    assert StateStore.get(sid) is None
+
+
+def test_non_expired_session_survives_cleanup(sample_df, monkeypatch):
+    """Sessions within TTL are NOT evicted."""
+    import analyst_toolkit.mcp_server.state as state_module
+
+    monkeypatch.setattr(state_module, "SESSION_TTL_SECONDS", 60)
+
+    sid = StateStore.save(sample_df)
+    # Trigger cleanup
+    StateStore.cleanup()
+    assert StateStore.get(sid) is not None
+
+
+# ---------------------------------------------------------------------------
+# Pipeline integration — normalization changes_made
+# ---------------------------------------------------------------------------
+
+
+def test_normalization_changes_made_rename():
+    """apply_normalization changelog counts renamed columns correctly."""
+    from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
+
+    df = pd.DataFrame({"old_name": [1, 2], "b": [3, 4]})
+    config = {"rules": {"rename_columns": {"old_name": "new_name"}}}
+    _, df_norm, changelog = apply_normalization(df, config)
+
+    assert "new_name" in df_norm.columns
+    assert "renamed_columns" in changelog
+    assert len(changelog["renamed_columns"]) == 1
+
+
+def test_normalization_changes_made_text_standardize():
+    """apply_normalization changelog counts standardized text columns correctly."""
+    from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
+
+    df = pd.DataFrame({"name": ["  Alice  ", "BOB"]})
+    config = {"rules": {"standardize_text_columns": ["name"]}}
+    _, df_norm, changelog = apply_normalization(df, config)
+
+    assert df_norm["name"].tolist() == ["alice", "bob"]
+    assert "strings_cleaned" in changelog
+    assert len(changelog["strings_cleaned"]) == 1
+
+
+def test_normalization_no_rules_returns_unchanged():
+    """Empty rules → changelog is empty, df unchanged."""
+    from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
+
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    _, df_norm, changelog = apply_normalization(df, {"rules": {}})
+
+    pd.testing.assert_frame_equal(df, df_norm)
+    assert changelog == {}
+
+
+# ---------------------------------------------------------------------------
+# Pipeline integration — validation pass/fail
+# ---------------------------------------------------------------------------
+
+
+def test_validation_suite_passes_with_correct_schema():
+    """run_validation_suite returns passed=True when schema matches."""
+    from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    config = {
+        "schema_validation": {
+            "rules": {
+                "expected_columns": ["a", "b"],
+                "expected_types": {},
+                "categorical_values": {},
+                "numeric_ranges": {},
+            }
+        }
+    }
+    results = run_validation_suite(df, config)
+    assert results["schema_conformity"]["passed"] is True
+
+
+def test_validation_suite_fails_missing_columns():
+    """run_validation_suite detects missing columns and marks schema_conformity failed."""
+    from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+
+    df = pd.DataFrame({"a": [1, 2]})  # Missing column 'b'
+    config = {
+        "schema_validation": {
+            "rules": {
+                "expected_columns": ["a", "b"],
+                "expected_types": {},
+                "categorical_values": {},
+                "numeric_ranges": {},
+            }
+        }
+    }
+    results = run_validation_suite(df, config)
+    assert results["schema_conformity"]["passed"] is False
+    assert "b" in results["schema_conformity"]["details"]["missing_columns"]
+
+
+def test_validation_suite_fails_dtype_mismatch():
+    """run_validation_suite detects dtype mismatches."""
+    from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+
+    df = pd.DataFrame({"score": ["high", "low"]})  # object, not int64
+    config = {
+        "schema_validation": {
+            "rules": {
+                "expected_columns": [],
+                "expected_types": {"score": "int64"},
+                "categorical_values": {},
+                "numeric_ranges": {},
+            }
+        }
+    }
+    results = run_validation_suite(df, config)
+    assert results["dtype_enforcement"]["passed"] is False
+    assert "score" in results["dtype_enforcement"]["details"]
+
+
+def test_validation_suite_fails_categorical_violation():
+    """run_validation_suite detects values outside allowed set."""
+    from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+
+    df = pd.DataFrame({"color": ["red", "blue", "purple"]})  # purple not allowed
+    config = {
+        "schema_validation": {
+            "rules": {
+                "expected_columns": [],
+                "expected_types": {},
+                "categorical_values": {"color": ["red", "blue"]},
+                "numeric_ranges": {},
+            }
+        }
+    }
+    results = run_validation_suite(df, config)
+    assert results["categorical_values"]["passed"] is False

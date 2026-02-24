@@ -1,5 +1,6 @@
 """MCP tool: toolkit_normalization — data cleaning and standardization via M03."""
 
+from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
 from analyst_toolkit.m03_normalization.run_normalization_pipeline import (
     run_normalization_pipeline,
 )
@@ -49,6 +50,27 @@ async def _toolkit_normalization(
         }
     }
 
+    # Compute changes_made from changelog before running the full pipeline
+    _rules_cfg = base_cfg if base_cfg else {}
+    _, _, changelog = apply_normalization(df, _rules_cfg)
+
+    def _count_changelog(cl: dict) -> int:
+        total = 0
+        for key, cdf in cl.items():
+            if cdf is None or (hasattr(cdf, "empty") and cdf.empty):
+                continue
+            if key == "values_mapped" and "Mappings Applied" in cdf.columns:
+                total += int(cdf["Mappings Applied"].sum())
+            elif key == "types_coerced" and "Status" in cdf.columns:
+                total += int((cdf["Status"].str.contains("Success", na=False)).sum())
+            elif key == "datetimes_parsed" and "NaT Added" in cdf.columns:
+                total += int(cdf["NaT Added"].sum())
+            else:
+                total += len(cdf)
+        return total
+
+    changes_made = _count_changelog(changelog)
+
     # run_normalization_pipeline handles transformation and reporting
     df_normalized = run_normalization_pipeline(
         config=module_cfg, df=df, notebook=False, run_id=run_id
@@ -64,8 +86,6 @@ async def _toolkit_normalization(
         run_id, "normalization", session_id=session_id
     )
     export_url = save_output(df_normalized, export_path)
-
-    changes_made = 0  # Placeholder
 
     artifact_path = ""
     artifact_url = ""
