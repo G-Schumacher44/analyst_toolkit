@@ -96,12 +96,60 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
 
 async def _toolkit_get_agent_instructions() -> dict:
     """Returns the agent flight checklist."""
-    try:
-        with open("MESSAGES.md", "r") as f:
-            content = f.read()
-        return {"status": "pass", "instructions": content}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    instructions = """
+# ✈️ MCP Agent Flight Checklist
+
+When you start working with a user on a data audit, follow this checklist in order. Do NOT skip steps or jump ahead.
+
+## 1. Discovery (Pre-Flight)
+Before running any tools, confirm with the user:
+- [ ] **Data Location:** GCS path or local file?
+- [ ] **Output Destination:** Reports default to the server's configured bucket. Override with `output_bucket` if needed.
+
+## 2. Diagnostics (Takeoff)
+- [ ] Run `toolkit_diagnostics` to establish a baseline profile.
+- [ ] Run `toolkit_get_data_health_report` and share the **Data Health Score** with the user before proceeding.
+
+## 3. Config Inference & Customization
+- [ ] Run `toolkit_infer_configs` using the `session_id` from step 2.
+- [ ] **Read and reason about the returned YAML configs.** Do not pass them through blindly.
+  - Check `normalization` config: are the detected text columns and type coercions correct for this dataset?
+  - Check `imputation` config: are the fill strategies appropriate (mean/median/mode/constant)?
+  - Check `duplicates` config: are the subset columns meaningful for deduplication?
+  - Check `outliers` config: are the flagged numeric columns sensible? Is the IQR multiplier appropriate?
+  - Check `validation` config: are range checks, null constraints, and categorical rules reasonable?
+- [ ] Present a **summary of the proposed configs** to the user and ask for confirmation or amendments before proceeding.
+- [ ] Optionally merge with a **Golden Template** (`toolkit_get_golden_templates`) if the use case matches (Fraud, Migration, Compliance).
+
+> ⚠️ **Config structure is critical — do NOT restructure inferred configs.**
+> `toolkit_infer_configs` returns YAML strings keyed by module name. Parse each YAML string into a dict (e.g. with `yaml.safe_load`), then pass the parsed dict directly as the `config` argument to the tool.
+> Example: `toolkit_normalization(session_id=..., config={"normalization": <parsed_yaml_dict>["normalization"]})`
+> Never hoist nested keys to the top level. For normalization, `standardize_text_columns`, `coerce_dtypes`, `rename_columns` etc. must remain nested inside `rules:` exactly as inferred. Flattening them will cause the pipeline to find no rules and skip all transformations.
+
+## 4. Manual Pipeline (Cruise) — run in this order
+Execute each step using the `session_id` and the confirmed/adjusted config. Pause after each to share the summary.
+
+1. `toolkit_normalization` — standardize text, rename columns, coerce types.
+2. `toolkit_duplicates` — flag or drop duplicate rows (if duplicates were detected).
+3. `toolkit_outliers` — flag or cap outliers (if outliers were detected).
+4. `toolkit_imputation` — fill missing values.
+5. `toolkit_validation` — enforce business rules and constraints.
+
+> ⚠️ **Do NOT use `toolkit_auto_heal` unless the user explicitly requests a fully automated one-shot fix.**
+
+## 5. Certification (Landing)
+- [ ] Run `toolkit_final_audit` to produce the Healing Certificate.
+- [ ] Run `toolkit_get_run_history` and share the full ledger with the user.
+- [ ] Provide the link to the HTML report as the final **Proof of Health**.
+
+---
+
+## 💡 Pro-Tips
+- Always chain steps in memory via `session_id` — do not download/re-upload data between steps.
+- Pass `plotting=true` only when the user asks for charts (OFF by default to avoid timeouts).
+- If a step produces unexpected output (e.g. too many duplicates flagged), re-examine the config and re-run with adjusted parameters rather than proceeding blindly.
+"""
+    return {"status": "pass", "instructions": instructions}
 
 
 register_tool(
