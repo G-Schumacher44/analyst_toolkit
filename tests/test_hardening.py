@@ -162,6 +162,16 @@ def test_coerce_config_non_dict_non_string_returns_empty():
     assert coerce_config(42, "normalization") == {}  # type: ignore[arg-type]
 
 
+def test_coerce_config_unwraps_double_wrapped():
+    """Agent passes {module: {module: {...}}} — unwraps one level."""
+    inner = {"rules": {"coerce_dtypes": True}}
+    cfg = {"normalization": {"normalization": inner}}
+    result = coerce_config(cfg, "normalization")
+    # After unwrapping: {"normalization": {"rules": ...}}
+    assert result == {"normalization": inner}
+    assert result["normalization"]["rules"]["coerce_dtypes"] is True
+
+
 # ---------------------------------------------------------------------------
 # check_upload — warning surfacing
 # ---------------------------------------------------------------------------

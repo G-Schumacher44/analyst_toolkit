@@ -22,29 +22,19 @@ def coerce_config(config: Optional[dict], module: str) -> dict:
     """
     Ensure the config passed to a tool is a properly structured dict.
 
-    Handles two agent failure modes:
+    Handles three agent failure modes:
     1. Agent passes a YAML string instead of a parsed dict — auto-parses it.
-    2. Agent passes the full inferred config without extracting the module key —
-       auto-extracts it (e.g. {"normalization": {...}} → {...}).
+    2. Agent passes the full inferred config with the module key containing a YAML
+       string — auto-parses: {"normalization": "<yaml>"} → {"normalization": {...}}
+    3. Agent double-wraps the module key — auto-unwraps one level:
+       {"normalization": {"normalization": {...}}} → {"normalization": {...}}
 
     Logs a warning whenever a correction is made so it's visible in server logs.
     """
     if config is None:
         return {}
 
-    # If the top-level value for the module key is a YAML string, parse it
-    if isinstance(config, dict) and module in config and isinstance(config[module], str):
-        logger.warning(
-            f"[{module}] config['{module}'] was a YAML string — auto-parsing. "
-            "Pass a parsed dict to avoid this."
-        )
-        try:
-            config = {module: yaml.safe_load(config[module])}
-        except yaml.YAMLError as e:
-            logger.error(f"[{module}] Failed to parse YAML string in config: {e}")
-            return {}
-
-    # If the entire config is a YAML string, parse it
+    # If the entire config is a YAML string, parse it first
     if isinstance(config, str):
         logger.warning(
             f"[{module}] config was a raw YAML string — auto-parsing. "
@@ -56,7 +46,34 @@ def coerce_config(config: Optional[dict], module: str) -> dict:
             logger.error(f"[{module}] Failed to parse YAML string config: {e}")
             return {}
 
-    return config if isinstance(config, dict) else {}
+    if not isinstance(config, dict):
+        return {}
+
+    # If the module key's value is a YAML string, parse it
+    if module in config and isinstance(config[module], str):
+        logger.warning(
+            f"[{module}] config['{module}'] was a YAML string — auto-parsing. "
+            "Pass a parsed dict to avoid this."
+        )
+        try:
+            config = {module: yaml.safe_load(config[module])}
+        except yaml.YAMLError as e:
+            logger.error(f"[{module}] Failed to parse YAML string in config: {e}")
+            return {}
+
+    # If double-wrapped ({"normalization": {"normalization": {...}}}), unwrap one level
+    if (
+        module in config
+        and isinstance(config[module], dict)
+        and module in config[module]
+    ):
+        logger.warning(
+            f"[{module}] config was double-wrapped — auto-unwrapping. "
+            "Pass a single-level dict to avoid this."
+        )
+        config = config[module]
+
+    return config
 
 
 def default_run_id() -> str:
