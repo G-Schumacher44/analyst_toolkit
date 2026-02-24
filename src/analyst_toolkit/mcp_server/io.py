@@ -105,9 +105,24 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     from google.cloud import storage
     client = storage.Client()
     bucket = client.bucket(bucket_name)
+
+    # Direct file path — download and read without listing
+    if prefix.endswith(".parquet") or prefix.endswith(".csv"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_path = Path(tmpdir) / Path(prefix).name
+            bucket.blob(prefix).download_to_filename(str(local_path))
+            if local_path.suffix == ".parquet":
+                return pd.read_parquet(local_path)
+            else:
+                return pd.read_csv(local_path, low_memory=False)
+
+    # Directory path — list and concat all matching files
     blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"))
     blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
-    
+
+    if not blobs:
+        raise FileNotFoundError(f"No .parquet or .csv files found at gs://{bucket_name}/{prefix}")
+
     frames = []
     with tempfile.TemporaryDirectory() as tmpdir:
         for blob in blobs:
