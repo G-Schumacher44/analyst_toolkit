@@ -83,7 +83,9 @@ async def _toolkit_imputation(
     if should_export_html(config):
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
         artifact_url = check_upload(
-            upload_artifact(artifact_path, run_id, "imputation", config=kwargs, session_id=session_id),
+            upload_artifact(
+                artifact_path, run_id, "imputation", config=kwargs, session_id=session_id
+            ),
             artifact_path,
             warnings,
         )

@@ -75,7 +75,9 @@ async def _toolkit_validation(
     if should_export_html(config):
         artifact_path = f"exports/reports/validation/{run_id}_validation_report.html"
         artifact_url = check_upload(
-            upload_artifact(artifact_path, run_id, "validation", config=kwargs, session_id=session_id),
+            upload_artifact(
+                artifact_path, run_id, "validation", config=kwargs, session_id=session_id
+            ),
             artifact_path,
             warnings,
         )

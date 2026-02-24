@@ -83,7 +83,9 @@ async def _toolkit_outliers(
         # Path where the pipeline runner saves its report
         artifact_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
         artifact_url = check_upload(
-            upload_artifact(artifact_path, run_id, "outliers", config=kwargs, session_id=session_id),
+            upload_artifact(
+                artifact_path, run_id, "outliers", config=kwargs, session_id=session_id
+            ),
             artifact_path,
             warnings,
         )

@@ -89,7 +89,9 @@ async def _toolkit_duplicates(
     if should_export_html(config):
         artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
         artifact_url = check_upload(
-            upload_artifact(artifact_path, run_id, "duplicates", config=kwargs, session_id=session_id),
+            upload_artifact(
+                artifact_path, run_id, "duplicates", config=kwargs, session_id=session_id
+            ),
             artifact_path,
             warnings,
         )

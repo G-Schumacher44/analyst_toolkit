@@ -82,7 +82,9 @@ async def _toolkit_diagnostics(
     if should_export_html(config):
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
         artifact_url = check_upload(
-            upload_artifact(artifact_path, run_id, "diagnostics", config=kwargs, session_id=session_id),
+            upload_artifact(
+                artifact_path, run_id, "diagnostics", config=kwargs, session_id=session_id
+            ),
             artifact_path,
             warnings,
         )
