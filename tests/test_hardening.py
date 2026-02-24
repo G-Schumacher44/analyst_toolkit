@@ -9,7 +9,13 @@ import time
 import pandas as pd
 import pytest
 
-from analyst_toolkit.mcp_server.io import check_upload, coerce_config
+from analyst_toolkit.mcp_server.io import (
+    _resolve_path_root,
+    append_to_run_history,
+    check_upload,
+    coerce_config,
+    get_run_history,
+)
 from analyst_toolkit.mcp_server.state import StateStore
 
 # ---------------------------------------------------------------------------
@@ -200,6 +206,39 @@ def test_check_upload_accumulates_multiple_warnings():
 
 
 # ---------------------------------------------------------------------------
+# History + path root keying — session_id + run_id
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_path_root_includes_session_and_run(sample_df):
+    sid = StateStore.save(sample_df, run_id="run_alpha")
+    path_root = _resolve_path_root("run_alpha", session_id=sid)
+    parts = path_root.split("/")
+    assert len(parts) == 3
+    assert parts[1] == sid
+    assert parts[2] == "run_alpha"
+
+
+def test_get_run_history_isolation_by_session(sample_df, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    shared_run_id = "run_shared"
+    sid_a = StateStore.save(sample_df, run_id=shared_run_id)
+    sid_b = StateStore.save(sample_df, run_id=shared_run_id)
+
+    append_to_run_history(shared_run_id, {"module": "diagnostics", "summary": {}}, session_id=sid_a)
+    append_to_run_history(shared_run_id, {"module": "imputation", "summary": {}}, session_id=sid_b)
+
+    hist_a = get_run_history(shared_run_id, session_id=sid_a)
+    hist_b = get_run_history(shared_run_id, session_id=sid_b)
+
+    assert len(hist_a) == 1
+    assert len(hist_b) == 1
+    assert hist_a[0]["module"] == "diagnostics"
+    assert hist_b[0]["module"] == "imputation"
+
+
+# ---------------------------------------------------------------------------
 # StateStore — TTL eviction
 # ---------------------------------------------------------------------------
 
@@ -360,3 +399,87 @@ def test_validation_suite_fails_categorical_violation():
     }
     results = run_validation_suite(df, config)
     assert results["categorical_values"]["passed"] is False
+
+
+# ---------------------------------------------------------------------------
+# Auto-heal integration response behavior
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_auto_heal_propagates_child_artifacts_and_status(monkeypatch):
+    import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_module
+
+    async def fake_infer(*args, **kwargs):
+        return {
+            "status": "pass",
+            "configs": {
+                "normalization": "normalization:\n  rules: {}\n",
+                "imputation": "imputation:\n  rules:\n    strategies: {}\n",
+            },
+            "session_id": "sess_unit",
+        }
+
+    async def fake_norm(*args, **kwargs):
+        return {
+            "status": "pass",
+            "session_id": "sess_unit",
+            "summary": {"changes_made": 2},
+            "artifact_path": "norm_report.html",
+            "artifact_url": "https://example.com/norm",
+            "export_url": "gs://bucket/norm.csv",
+            "plot_urls": {"norm.png": "https://example.com/norm.png"},
+        }
+
+    async def fake_imp(*args, **kwargs):
+        return {
+            "status": "warn",
+            "session_id": "sess_unit",
+            "summary": {"nulls_filled": 4},
+            "artifact_path": "imp_report.html",
+            "artifact_url": "https://example.com/imp",
+            "export_url": "gs://bucket/imp.csv",
+            "plot_urls": {"imp.png": "https://example.com/imp.png"},
+        }
+
+    monkeypatch.setattr(auto_heal_module, "_toolkit_infer_configs", fake_infer)
+    monkeypatch.setattr(auto_heal_module, "_toolkit_normalization", fake_norm)
+    monkeypatch.setattr(auto_heal_module, "_toolkit_imputation", fake_imp)
+    monkeypatch.setattr(auto_heal_module, "append_to_run_history", lambda *args, **kwargs: None)
+    monkeypatch.setattr(auto_heal_module, "get_session_metadata", lambda sid: {"row_count": 3})
+
+    res = await auto_heal_module._toolkit_auto_heal(session_id="sess_input", run_id="run_auto")
+
+    assert res["status"] == "warn"
+    assert res["artifact_path"] == "imp_report.html"
+    assert res["artifact_url"] == "https://example.com/imp"
+    assert res["export_url"] == "gs://bucket/imp.csv"
+    assert res["plot_urls"] == {"imp.png": "https://example.com/imp.png"}
+    assert res["failed_steps"] == []
+
+
+@pytest.mark.asyncio
+async def test_auto_heal_returns_error_when_step_raises(monkeypatch):
+    import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_module
+
+    async def fake_infer(*args, **kwargs):
+        return {
+            "status": "pass",
+            "configs": {"normalization": "normalization:\n  rules: {}\n"},
+            "session_id": "sess_unit",
+        }
+
+    async def fake_norm(*args, **kwargs):
+        raise RuntimeError("normalization boom")
+
+    monkeypatch.setattr(auto_heal_module, "_toolkit_infer_configs", fake_infer)
+    monkeypatch.setattr(auto_heal_module, "_toolkit_normalization", fake_norm)
+    monkeypatch.setattr(auto_heal_module, "append_to_run_history", lambda *args, **kwargs: None)
+    monkeypatch.setattr(auto_heal_module, "get_session_metadata", lambda sid: {"row_count": 3})
+
+    res = await auto_heal_module._toolkit_auto_heal(session_id="sess_input", run_id="run_auto")
+
+    assert res["status"] == "error"
+    assert "normalization" in res["failed_steps"]
+    assert "normalization" in res["summary"]
+    assert "normalization boom" in res["summary"]["normalization"]["error"]

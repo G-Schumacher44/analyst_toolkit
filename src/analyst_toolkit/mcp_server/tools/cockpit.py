@@ -1,7 +1,7 @@
 """MCP tool: cockpit — tools for client delivery, history, and health scoring."""
 
 from analyst_toolkit.m00_utils.scoring import calculate_health_score
-from analyst_toolkit.mcp_server.io import default_run_id, get_run_history
+from analyst_toolkit.mcp_server.io import get_run_history
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.templates import get_golden_configs
 
@@ -23,7 +23,7 @@ Every time you run a tool, the system maintains the data in an in-memory session
 
 ## 📂 Directory Structure (GCS/Local)
 Reports are now strictly grouped for clarity:
-`reports/<session_timestamp>/<session_id>/<module>/...`
+`reports/<session_timestamp>/<session_id>/<run_id>/<module>/...`
 - This ensures that a single multi-step audit run is always kept together in one folder.
 
 ## 📊 Plotting (Opt-In)
@@ -45,15 +45,21 @@ async def _toolkit_get_golden_templates() -> dict:
     return {"status": "pass", "templates": get_golden_configs()}
 
 
-async def _toolkit_get_run_history(run_id: str) -> dict:
+async def _toolkit_get_run_history(run_id: str, session_id: str | None = None) -> dict:
     """Returns the 'Prescription & Healing Ledger'."""
-    history = get_run_history(run_id)
-    return {"status": "pass", "run_id": run_id, "history_count": len(history), "ledger": history}
+    history = get_run_history(run_id, session_id=session_id)
+    return {
+        "status": "pass",
+        "run_id": run_id,
+        "session_id": session_id,
+        "history_count": len(history),
+        "ledger": history,
+    }
 
 
-async def _toolkit_get_data_health_report(run_id: str) -> dict:
+async def _toolkit_get_data_health_report(run_id: str, session_id: str | None = None) -> dict:
     """Calculates a Red/Yellow/Green Data Health Score (0-100)."""
-    history = get_run_history(run_id)
+    history = get_run_history(run_id, session_id=session_id)
     metrics = {
         "null_rate": 0.0,
         "validation_pass_rate": 1.0,
@@ -81,6 +87,7 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
     return {
         "status": "pass",
         "run_id": run_id,
+        "session_id": session_id,
         "health_score": score_res["overall_score"],
         "health_status": score_res["status"],
         "breakdown": score_res["breakdown"],
@@ -166,7 +173,13 @@ register_tool(
     description="Returns the 'Prescription & Healing Ledger' for a run.",
     input_schema={
         "type": "object",
-        "properties": {"run_id": {"type": "string"}},
+        "properties": {
+            "run_id": {"type": "string"},
+            "session_id": {
+                "type": "string",
+                "description": "Optional session scope. Recommended when reusing run_id values.",
+            },
+        },
         "required": ["run_id"],
     },
 )
@@ -177,7 +190,13 @@ register_tool(
     description="Returns a Visual Data Health Score (0-100) for a run.",
     input_schema={
         "type": "object",
-        "properties": {"run_id": {"type": "string"}},
+        "properties": {
+            "run_id": {"type": "string"},
+            "session_id": {
+                "type": "string",
+                "description": "Optional session scope. Recommended when reusing run_id values.",
+            },
+        },
         "required": ["run_id"],
     },
 )

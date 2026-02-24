@@ -180,7 +180,7 @@ async def run_stdio():
             write_stream,
             InitializationOptions(
                 server_name="analyst-toolkit",
-                server_version="0.1.0",
+                server_version=__version__,
                 capabilities=mcp_server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

@@ -124,27 +124,28 @@ def get_session_metadata(session_id: str) -> Optional[dict]:
 
 def _resolve_path_root(run_id: str, session_id: Optional[str] = None) -> str:
     """
-    Strictly follow the structure: <session_timestamp>/<session_id>
-    If run_id is different from session_start, it nests under it.
+    Resolve storage root using session + run identity.
+
+    Session-aware layout:
+      <session_timestamp>/<session_id>/<run_id>
+
+    Non-session layout:
+      <current_timestamp>/<run_id>
     """
-    session_ts = (
-        get_session_start(session_id)
-        if session_id
-        else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    )
+    if session_id:
+        session_ts = get_session_start(session_id) or datetime.now(timezone.utc).strftime(
+            "%Y%m%d_%H%M%S"
+        )
+        return f"{session_ts}/{session_id}/{run_id}"
 
-    # If run_id is the default timestamp, don't double-nest
-    # (Since we can't easily detect 'defaultness', we just check for exact match)
-    if run_id == session_ts:
-        return session_ts
-
-    return f"{session_ts}/{run_id}"
+    current_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return f"{current_ts}/{run_id}"
 
 
 def generate_default_export_path(
     run_id: str, module: str, extension: str = "csv", session_id: Optional[str] = None
 ) -> str:
-    """Generate default path: prefix/session_ts/session_id/module_output.csv"""
+    """Generate default path: prefix/path_root/module_output.csv"""
     bucket_uri = os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
     prefix = os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
 
@@ -304,7 +305,21 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     history_root = Path("exports/reports/history")
     if not history_root.exists():
         return []
-    for h_file in history_root.glob(f"**/{run_id}_history.json"):
-        with open(h_file, "r") as f:
+
+    if session_id:
+        path_root = _resolve_path_root(run_id, session_id)
+        history_file = history_root / path_root / f"{run_id}_history.json"
+        if history_file.exists():
+            with open(history_file, "r") as f:
+                return json.load(f)
+        return []
+
+    candidates = sorted(
+        history_root.glob(f"**/{run_id}_history.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if candidates:
+        with open(candidates[0], "r") as f:
             return json.load(f)
     return []

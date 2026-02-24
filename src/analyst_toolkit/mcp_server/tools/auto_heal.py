@@ -6,8 +6,6 @@ from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
     get_session_metadata,
-    load_input,
-    save_to_session,
 )
 from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
 from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_configs
@@ -37,6 +35,9 @@ async def _toolkit_auto_heal(
     current_session_id = infer_res.get("session_id")
 
     summary = {}
+    failed_steps: list[str] = []
+    norm_res: dict = {}
+    imp_res: dict = {}
 
     # 2. Apply Normalization if inferred
     if "normalization" in configs:
@@ -53,6 +54,7 @@ async def _toolkit_auto_heal(
             summary["normalization"] = norm_res.get("summary")
         except Exception as e:
             summary["normalization"] = {"error": str(e)}
+            failed_steps.append("normalization")
 
     # 3. Apply Imputation if inferred
     if "imputation" in configs:
@@ -68,28 +70,38 @@ async def _toolkit_auto_heal(
             summary["imputation"] = imp_res.get("summary")
         except Exception as e:
             summary["imputation"] = {"error": str(e)}
+            failed_steps.append("imputation")
 
     # Final Metadata
     metadata = get_session_metadata(current_session_id) or {}
     row_count = metadata.get("row_count")
 
+    child_statuses = [s for s in [norm_res.get("status"), imp_res.get("status")] if s]
+    if failed_steps or "error" in child_statuses:
+        status = "error"
+    elif "fail" in child_statuses:
+        status = "fail"
+    elif "warn" in child_statuses:
+        status = "warn"
+    elif not child_statuses:
+        status = "warn"
+    else:
+        status = "pass"
+
     res = {
-        "status": "pass",
+        "status": status,
         "module": "auto_heal",
         "run_id": run_id,
         "session_id": current_session_id,
         "summary": {**summary, "row_count": row_count},
-        "artifact_path": summary.get("imputation", {}).get("artifact_path")
-        or summary.get("normalization", {}).get("artifact_path", ""),
-        "artifact_url": summary.get("imputation", {}).get("artifact_url")
-        or summary.get("normalization", {}).get("artifact_url", ""),
-        "export_url": summary.get("imputation", {}).get("export_url")
-        or summary.get("normalization", {}).get("export_url", ""),
-        "plot_urls": summary.get("imputation", {}).get("plot_urls")
-        or summary.get("normalization", {}).get("plot_urls", {}),
+        "artifact_path": imp_res.get("artifact_path") or norm_res.get("artifact_path", ""),
+        "artifact_url": imp_res.get("artifact_url") or norm_res.get("artifact_url", ""),
+        "export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
+        "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
+        "failed_steps": failed_steps,
         "message": "Auto-healing completed. Normalization and Imputation applied based on inference.",
     }
-    append_to_run_history(run_id, res)
+    append_to_run_history(run_id, res, session_id=current_session_id)
     return res
 
 
