@@ -5,6 +5,8 @@ from analyst_toolkit.m03_normalization.run_normalization_pipeline import (
 )
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    check_upload,
+    coerce_config,
     default_run_id,
     generate_default_export_path,
     get_session_metadata,
@@ -30,11 +32,10 @@ async def _toolkit_normalization(
         run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
 
-    config = config or {}
+    config = coerce_config(config, "normalization")
     df = load_input(gcs_path, session_id=session_id)
 
-    # Robustly handle config nesting
-    base_cfg = config.get("normalization", config) if isinstance(config, dict) else {}
+    base_cfg = config.get("normalization", config)
 
     # Build module config for the pipeline runner
     module_cfg = {
@@ -70,19 +71,25 @@ async def _toolkit_normalization(
     artifact_url = ""
     xlsx_url = ""
 
+    warnings: list = []
+
     if should_export_html(config):
         artifact_path = f"exports/reports/normalization/{run_id}_normalization_report.html"
-        artifact_url = upload_artifact(
-            artifact_path, run_id, "normalization", config=kwargs, session_id=session_id
+        artifact_url = check_upload(
+            upload_artifact(artifact_path, run_id, "normalization", config=kwargs, session_id=session_id),
+            artifact_path,
+            warnings,
         )
 
         xlsx_path = f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
-        xlsx_url = upload_artifact(
-            xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id
+        xlsx_url = check_upload(
+            upload_artifact(xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id),
+            xlsx_path,
+            warnings,
         )
 
     res = {
-        "status": "pass",
+        "status": "warn" if warnings else "pass",
         "module": "normalization",
         "run_id": run_id,
         "session_id": session_id,
@@ -92,6 +99,7 @@ async def _toolkit_normalization(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "export_url": export_url,
+        "warnings": warnings,
     }
     append_to_run_history(run_id, res, session_id=session_id)
     return res

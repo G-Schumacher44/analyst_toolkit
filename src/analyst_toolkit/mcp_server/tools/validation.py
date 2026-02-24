@@ -7,6 +7,8 @@ from analyst_toolkit.m02_validation.run_validation_pipeline import (
 )
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    check_upload,
+    coerce_config,
     default_run_id,
     generate_default_export_path,
     get_session_metadata,
@@ -32,7 +34,7 @@ async def _toolkit_validation(
         run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
 
-    config = config or {}
+    config = coerce_config(config, "validation")
     df = load_input(gcs_path, session_id=session_id)
 
     # Ensure it's in a session for the pipeline
@@ -50,8 +52,7 @@ async def _toolkit_validation(
     )
     export_url = save_output(df, export_path)
 
-    # Robustly handle config nesting
-    base_cfg = config.get("validation", config) if isinstance(config, dict) else {}
+    base_cfg = config.get("validation", config)
 
     module_cfg = {
         "validation": {
@@ -70,15 +71,20 @@ async def _toolkit_validation(
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
+    warnings: list = []
     if should_export_html(config):
         artifact_path = f"exports/reports/validation/{run_id}_validation_report.html"
-        artifact_url = upload_artifact(
-            artifact_path, run_id, "validation", config=kwargs, session_id=session_id
+        artifact_url = check_upload(
+            upload_artifact(artifact_path, run_id, "validation", config=kwargs, session_id=session_id),
+            artifact_path,
+            warnings,
         )
 
         xlsx_path = f"exports/reports/validation/{run_id}_validation_report.xlsx"
-        xlsx_url = upload_artifact(
-            xlsx_path, run_id, "validation", config=kwargs, session_id=session_id
+        xlsx_url = check_upload(
+            upload_artifact(xlsx_path, run_id, "validation", config=kwargs, session_id=session_id),
+            xlsx_path,
+            warnings,
         )
 
     # Logic to determine pass/fail for the response (heuristic)
@@ -98,6 +104,7 @@ async def _toolkit_validation(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "export_url": export_url,
+        "warnings": warnings,
     }
     append_to_run_history(run_id, res, session_id=session_id)
     return res

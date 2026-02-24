@@ -7,6 +7,8 @@ from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
 )
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    check_upload,
+    coerce_config,
     default_run_id,
     generate_default_export_path,
     get_session_metadata,
@@ -32,11 +34,10 @@ async def _toolkit_outliers(
         run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
 
-    config = config or {}
+    config = coerce_config(config, "outlier_detection")
     df = load_input(gcs_path, session_id=session_id)
 
-    # Robustly handle config nesting
-    base_cfg = config.get("outlier_detection", config) if isinstance(config, dict) else {}
+    base_cfg = config.get("outlier_detection", config)
 
     # Build a module config that ensures plotting and export are on
     module_cfg = {
@@ -77,16 +78,21 @@ async def _toolkit_outliers(
     artifact_url = ""
     xlsx_url = ""
     plot_urls = {}
+    warnings: list = []
     if should_export_html(config):
         # Path where the pipeline runner saves its report
         artifact_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
-        artifact_url = upload_artifact(
-            artifact_path, run_id, "outliers", config=kwargs, session_id=session_id
+        artifact_url = check_upload(
+            upload_artifact(artifact_path, run_id, "outliers", config=kwargs, session_id=session_id),
+            artifact_path,
+            warnings,
         )
 
         xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
-        xlsx_url = upload_artifact(
-            xlsx_path, run_id, "outliers", config=kwargs, session_id=session_id
+        xlsx_url = check_upload(
+            upload_artifact(xlsx_path, run_id, "outliers", config=kwargs, session_id=session_id),
+            xlsx_path,
+            warnings,
         )
 
         # Upload plots - search both root and run_id subdir
@@ -124,6 +130,7 @@ async def _toolkit_outliers(
         "xlsx_url": xlsx_url,
         "plot_urls": plot_urls,
         "export_url": export_url,
+        "warnings": warnings,
     }
     append_to_run_history(run_id, res, session_id=session_id)
     return res

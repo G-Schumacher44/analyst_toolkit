@@ -11,10 +11,52 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import yaml
 
 from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
+
+
+def coerce_config(config: Optional[dict], module: str) -> dict:
+    """
+    Ensure the config passed to a tool is a properly structured dict.
+
+    Handles two agent failure modes:
+    1. Agent passes a YAML string instead of a parsed dict — auto-parses it.
+    2. Agent passes the full inferred config without extracting the module key —
+       auto-extracts it (e.g. {"normalization": {...}} → {...}).
+
+    Logs a warning whenever a correction is made so it's visible in server logs.
+    """
+    if config is None:
+        return {}
+
+    # If the top-level value for the module key is a YAML string, parse it
+    if isinstance(config, dict) and module in config and isinstance(config[module], str):
+        logger.warning(
+            f"[{module}] config['{module}'] was a YAML string — auto-parsing. "
+            "Pass a parsed dict to avoid this."
+        )
+        try:
+            config = {module: yaml.safe_load(config[module])}
+        except yaml.YAMLError as e:
+            logger.error(f"[{module}] Failed to parse YAML string in config: {e}")
+            return {}
+
+    # If the entire config is a YAML string, parse it
+    if isinstance(config, str):
+        logger.warning(
+            f"[{module}] config was a raw YAML string — auto-parsing. "
+            "Pass a parsed dict to avoid this."
+        )
+        try:
+            config = yaml.safe_load(config)
+        except yaml.YAMLError as e:
+            logger.error(f"[{module}] Failed to parse YAML string config: {e}")
+            return {}
+
+    return config if isinstance(config, dict) else {}
 
 
 def default_run_id() -> str:
@@ -208,6 +250,13 @@ def upload_artifact(
         return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
     except Exception:
         return ""
+
+
+def check_upload(url: str, label: str, warnings: list) -> str:
+    """Append a warning if the upload failed (url is empty). Returns url unchanged."""
+    if not url:
+        warnings.append(f"Upload failed or file not found: {label}")
+    return url
 
 
 def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = None):

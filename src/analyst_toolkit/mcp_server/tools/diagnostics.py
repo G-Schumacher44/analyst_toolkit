@@ -5,6 +5,8 @@ from pathlib import Path
 from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    check_upload,
+    coerce_config,
     default_run_id,
     generate_default_export_path,
     get_session_run_id,
@@ -29,7 +31,7 @@ async def _toolkit_diagnostics(
         run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
 
-    config = config or {}
+    config = coerce_config(config, "diagnostics")
     df = load_input(gcs_path, session_id=session_id)
 
     # If it came from a path, save it to a session
@@ -75,15 +77,21 @@ async def _toolkit_diagnostics(
     xlsx_url = ""
     plot_urls = {}
 
+    warnings: list = []
+
     if should_export_html(config):
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
-        artifact_url = upload_artifact(
-            artifact_path, run_id, "diagnostics", config=kwargs, session_id=session_id
+        artifact_url = check_upload(
+            upload_artifact(artifact_path, run_id, "diagnostics", config=kwargs, session_id=session_id),
+            artifact_path,
+            warnings,
         )
 
         xlsx_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
-        xlsx_url = upload_artifact(
-            xlsx_path, run_id, "diagnostics", config=kwargs, session_id=session_id
+        xlsx_url = check_upload(
+            upload_artifact(xlsx_path, run_id, "diagnostics", config=kwargs, session_id=session_id),
+            xlsx_path,
+            warnings,
         )
 
         if run_plots:
@@ -105,7 +113,7 @@ async def _toolkit_diagnostics(
                             plot_urls[plot_file.name] = url
 
     res = {
-        "status": "pass",
+        "status": "warn" if warnings else "pass",
         "module": "diagnostics",
         "run_id": run_id,
         "session_id": session_id,
@@ -119,6 +127,7 @@ async def _toolkit_diagnostics(
         "xlsx_url": xlsx_url,
         "plot_urls": plot_urls,
         "export_url": export_url,
+        "warnings": warnings,
     }
     append_to_run_history(run_id, res, session_id=session_id)
     return res

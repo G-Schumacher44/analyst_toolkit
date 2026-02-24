@@ -8,6 +8,8 @@ from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
 )
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    check_upload,
+    coerce_config,
     default_run_id,
     generate_default_export_path,
     get_session_metadata,
@@ -36,11 +38,11 @@ async def _toolkit_final_audit(
         run_id = get_session_run_id(session_id)
     run_id = run_id or default_run_id()
 
-    config = config or {}
+    config = coerce_config(config, "final_audit")
     df = load_input(gcs_path, session_id=session_id)
 
     # Robustly handle config nesting
-    base_cfg = config.get("final_audit", config) if isinstance(config, dict) else {}
+    base_cfg = config.get("final_audit", config)
 
     # The M10 pipeline requires a raw_data_path to compute before/after row counts.
     # Write the current df to a temp CSV as the "raw" snapshot if not provided.
@@ -92,23 +94,25 @@ async def _toolkit_final_audit(
     )
     export_url = save_output(df_certified, export_path)
 
-    artifact_path = ""
-    artifact_url = ""
-    xlsx_url = ""
+    warnings: list = []
 
     # M10 exports to these locations (matches final_audit_pipeline.py defaults)
     artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
-    artifact_url = upload_artifact(
-        artifact_path, run_id, "final_audit", config=kwargs, session_id=session_id
+    artifact_url = check_upload(
+        upload_artifact(artifact_path, run_id, "final_audit", config=kwargs, session_id=session_id),
+        artifact_path,
+        warnings,
     )
 
     xlsx_path = f"exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
-    xlsx_url = upload_artifact(
-        xlsx_path, run_id, "final_audit", config=kwargs, session_id=session_id
+    xlsx_url = check_upload(
+        upload_artifact(xlsx_path, run_id, "final_audit", config=kwargs, session_id=session_id),
+        xlsx_path,
+        warnings,
     )
 
     res = {
-        "status": "pass",  # Final audit status
+        "status": "warn" if warnings else "pass",  # Final audit status
         "module": "final_audit",
         "run_id": run_id,
         "session_id": session_id,
@@ -120,6 +124,7 @@ async def _toolkit_final_audit(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "export_url": export_url,
+        "warnings": warnings,
     }
     append_to_run_history(run_id, res, session_id=session_id)
     return res
