@@ -401,7 +401,10 @@ def generate_imputation_report(
     # Pass the detailed changelog through for the actions log table
     report["imputation_actions_log"] = detailed_changelog
 
-    imputed_cols = detailed_changelog["Column"].unique().tolist()
+    if detailed_changelog.empty or "Column" not in detailed_changelog.columns:
+        imputed_cols = []
+    else:
+        imputed_cols = detailed_changelog["Column"].unique().tolist()
 
     # --- Null Value Audit: Before vs. After ---
     if imputed_cols:

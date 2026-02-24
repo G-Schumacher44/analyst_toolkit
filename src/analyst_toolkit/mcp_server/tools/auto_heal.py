@@ -62,12 +62,21 @@ async def _toolkit_auto_heal(
             imp_cfg_str = configs["imputation"]
             imp_cfg = yaml.safe_load(imp_cfg_str)
             actual_cfg = imp_cfg.get("imputation", imp_cfg)
+            rules = actual_cfg.get("rules", {}) if isinstance(actual_cfg, dict) else {}
+            strategies = rules.get("strategies") if isinstance(rules, dict) else None
 
-            imp_res = await _toolkit_imputation(
-                session_id=current_session_id, config=actual_cfg, run_id=run_id
-            )
-            current_session_id = imp_res.get("session_id")
-            summary["imputation"] = imp_res.get("summary")
+            if not strategies:
+                summary["imputation"] = {
+                    "skipped": True,
+                    "reason": "No inferred imputation strategies.",
+                }
+            else:
+                imp_res = await _toolkit_imputation(
+                    session_id=current_session_id, config=actual_cfg, run_id=run_id
+                )
+                current_session_id = imp_res.get("session_id")
+                summary["imputation"] = imp_res.get("summary")
+
         except Exception as e:
             summary["imputation"] = {"error": str(e)}
             failed_steps.append("imputation")

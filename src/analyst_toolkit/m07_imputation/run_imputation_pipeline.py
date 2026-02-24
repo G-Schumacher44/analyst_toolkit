@@ -74,8 +74,10 @@ def run_imputation_pipeline(
             input_path = input_path.format(run_id=run_id)
         df = load_joblib(input_path)
 
-    if not module_cfg.get("rules"):
-        logging.warning("No imputation rules found. Returning original DataFrame.")
+    rules = module_cfg.get("rules") or {}
+    strategies = rules.get("strategies") if isinstance(rules, dict) else None
+    if not strategies:
+        logging.warning("No imputation strategies found. Returning original DataFrame.")
         return df
 
     df_original = df.copy()
