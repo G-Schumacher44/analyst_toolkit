@@ -62,11 +62,7 @@ def coerce_config(config: Optional[dict], module: str) -> dict:
             return {}
 
     # If double-wrapped ({"normalization": {"normalization": {...}}}), unwrap one level
-    if (
-        module in config
-        and isinstance(config[module], dict)
-        and module in config[module]
-    ):
+    if module in config and isinstance(config[module], dict) and module in config[module]:
         logger.warning(
             f"[{module}] config was double-wrapped — auto-unwrapping. "
             "Pass a single-level dict to avoid this."
