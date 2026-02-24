@@ -34,10 +34,10 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint with ruff
-        run: ruff check src/analyst_toolkit/mcp_server
+        run: ruff check src/
 
       - name: Type check with mypy
-        run: mypy src/analyst_toolkit/mcp_server
+        run: mypy src tests
 
       - name: Run All Tests
         run: pytest tests/
