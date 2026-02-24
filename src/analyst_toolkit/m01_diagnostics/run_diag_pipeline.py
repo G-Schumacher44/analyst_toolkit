@@ -112,19 +112,24 @@ def run_diag_pipeline(
             # --- OPTIMIZATION: Limit distribution plots to prevent timeouts ---
             include_dist = plotting_cfg.get("include_distributions", True)
             max_plots = plotting_cfg.get("max_distribution_plots", 20)
-            
+
             if include_dist:
                 numeric_cols = df.select_dtypes(include="number").columns[:max_plots]
-                categorical_cols = df.select_dtypes(include=["object", "category"]).columns[:max_plots]
+                categorical_cols = df.select_dtypes(include=["object", "category"]).columns[
+                    :max_plots
+                ]
 
                 if len(df.columns) > max_plots:
-                    logging.info(f"Wide dataset detected (> {max_plots} cols). Limiting distribution plots to first {max_plots} columns to prevent timeout.")
+                    logging.info(
+                        f"Wide dataset detected (> {max_plots} cols). Limiting distribution plots to first {max_plots} columns to prevent timeout."
+                    )
 
                 dist_num_paths = [
                     plot_continuous_distribution(df[col], save_dir, run_id) for col in numeric_cols
                 ]
                 dist_cat_paths = [
-                    plot_categorical_distribution(df[col], save_dir, run_id) for col in categorical_cols
+                    plot_categorical_distribution(df[col], save_dir, run_id)
+                    for col in categorical_cols
                 ]
 
                 plot_paths["Numeric Distributions"] = [p for p in dist_num_paths if p]

@@ -41,7 +41,7 @@ async def _toolkit_diagnostics(
     # Resolve Plotting Settings (Opt-in by default)
     base_cfg = config.get("diagnostics", config) if isinstance(config, dict) else {}
     plotting_cfg = base_cfg.get("plotting", {})
-    
+
     # Check if user explicitly asked for plotting in config OR tool arguments
     run_plots = plotting_cfg.get("run", False) or kwargs.get("plotting", False)
 
@@ -56,8 +56,8 @@ async def _toolkit_diagnostics(
             },
             "plotting": {
                 "run": run_plots,
-                "include_distributions": run_plots, # Only draw if requested
-                "max_distribution_plots": kwargs.get("max_plots", 50)
+                "include_distributions": run_plots,  # Only draw if requested
+                "max_distribution_plots": kwargs.get("max_plots", 50),
             },
         }
     }
@@ -87,14 +87,22 @@ async def _toolkit_diagnostics(
         )
 
         if run_plots:
-            plot_dirs = [Path("exports/plots/diagnostics"), Path(f"exports/plots/diagnostics/{run_id}")]
+            plot_dirs = [
+                Path("exports/plots/diagnostics"),
+                Path(f"exports/plots/diagnostics/{run_id}"),
+            ]
             for plot_dir in plot_dirs:
                 if plot_dir.exists():
                     for plot_file in plot_dir.glob(f"*{run_id}*.png"):
                         url = upload_artifact(
-                            str(plot_file), run_id, "diagnostics/plots", config=kwargs, session_id=session_id
+                            str(plot_file),
+                            run_id,
+                            "diagnostics/plots",
+                            config=kwargs,
+                            session_id=session_id,
                         )
-                        if url: plot_urls[plot_file.name] = url
+                        if url:
+                            plot_urls[plot_file.name] = url
 
     res = {
         "status": "pass",
@@ -122,8 +130,16 @@ register_tool(
     name="diagnostics",
     fn=_toolkit_diagnostics,
     description="Run data profiling on a dataset. Plotting is opt-in (pass plotting=true).",
-    input_schema=base_input_schema(extra_props={
-        "plotting": {"type": "boolean", "description": "Opt-in to generate visualization plots. Default: false."},
-        "max_plots": {"type": "integer", "description": "Max number of column distributions to plot. Default: 50."}
-    }),
+    input_schema=base_input_schema(
+        extra_props={
+            "plotting": {
+                "type": "boolean",
+                "description": "Opt-in to generate visualization plots. Default: false.",
+            },
+            "max_plots": {
+                "type": "integer",
+                "description": "Max number of column distributions to plot. Default: 50.",
+            },
+        }
+    ),
 )

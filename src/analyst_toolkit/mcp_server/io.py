@@ -78,7 +78,7 @@ def _resolve_path_root(run_id: str, session_id: Optional[str] = None) -> str:
     # (Since we can't easily detect 'defaultness', we just check for exact match)
     if run_id == session_ts:
         return session_ts
-    
+
     return f"{session_ts}/{run_id}"
 
 
@@ -103,6 +103,7 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     stripped = gcs_path.removeprefix("gs://")
     bucket_name, _, prefix = stripped.partition("/")
     from google.cloud import storage
+
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
@@ -136,19 +137,24 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
 
 
 def should_export_html(config: dict) -> bool:
-    if "export_html" in config: return bool(config["export_html"])
+    if "export_html" in config:
+        return bool(config["export_html"])
     return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
 
 
 def save_output(df: pd.DataFrame, path: str) -> str:
     if path.startswith("gs://"):
-        if path.endswith(".parquet"): df.to_parquet(path, index=False)
-        else: df.to_csv(path, index=False)
+        if path.endswith(".parquet"):
+            df.to_parquet(path, index=False)
+        else:
+            df.to_csv(path, index=False)
         return path
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    if path.endswith(".parquet"): df.to_parquet(path, index=False)
-    else: df.to_csv(path, index=False)
+    if path.endswith(".parquet"):
+        df.to_parquet(path, index=False)
+    else:
+        df.to_csv(path, index=False)
     return str(p.absolute())
 
 
@@ -170,7 +176,9 @@ def upload_artifact(
 ) -> str:
     """Uploads artifact to: prefix/path_root/module/filename"""
     config = config or {}
-    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    bucket_uri = config.get("output_bucket") or os.environ.get(
+        "ANALYST_REPORT_BUCKET", ""
+    ).strip().rstrip("/")
     if not bucket_uri:
         return ""
 
@@ -183,7 +191,9 @@ def upload_artifact(
     except ImportError:
         return ""
 
-    prefix = config.get("output_prefix") or os.environ.get("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports").strip().strip("/")
+    prefix = config.get("output_prefix") or os.environ.get(
+        "ANALYST_REPORT_PREFIX", "analyst_toolkit/reports"
+    ).strip().strip("/")
     content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
 
     path_root = _resolve_path_root(run_id, session_id)
@@ -217,7 +227,7 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
 
     entry["timestamp"] = datetime.now(timezone.utc).isoformat()
     history.append(entry)
-    
+
     with open(history_file, "w") as f:
         json.dump(history, f, indent=2)
 
@@ -226,7 +236,9 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
 
 def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     history_root = Path("exports/reports/history")
-    if not history_root.exists(): return []
+    if not history_root.exists():
+        return []
     for h_file in history_root.glob(f"**/{run_id}_history.json"):
-        with open(h_file, "r") as f: return json.load(f)
+        with open(h_file, "r") as f:
+            return json.load(f)
     return []

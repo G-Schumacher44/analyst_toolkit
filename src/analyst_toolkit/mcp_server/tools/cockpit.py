@@ -37,35 +37,29 @@ Plotting is turned **OFF** by default to prevent timeouts on large datasets.
 - `auto_heal`: The autonomous mode. Infer and apply fixes in one step.
 - `get_golden_templates`: Discover best-practice configurations for Fraud, Migration, and more.
 """
-    return {
-        "status": "pass",
-        "help": help_text
-    }
+    return {"status": "pass", "help": help_text}
 
 
 async def _toolkit_get_golden_templates() -> dict:
     """Returns a library of 'Golden Config' templates."""
-    return {
-        "status": "pass",
-        "templates": get_golden_configs()
-    }
+    return {"status": "pass", "templates": get_golden_configs()}
 
 
 async def _toolkit_get_run_history(run_id: str) -> dict:
     """Returns the 'Prescription & Healing Ledger'."""
     history = get_run_history(run_id)
-    return {
-        "status": "pass",
-        "run_id": run_id,
-        "history_count": len(history),
-        "ledger": history
-    }
+    return {"status": "pass", "run_id": run_id, "history_count": len(history), "ledger": history}
 
 
 async def _toolkit_get_data_health_report(run_id: str) -> dict:
     """Calculates a Red/Yellow/Green Data Health Score (0-100)."""
     history = get_run_history(run_id)
-    metrics = {"null_rate": 0.0, "validation_pass_rate": 1.0, "outlier_ratio": 0.0, "duplicate_ratio": 0.0}
+    metrics = {
+        "null_rate": 0.0,
+        "validation_pass_rate": 1.0,
+        "outlier_ratio": 0.0,
+        "duplicate_ratio": 0.0,
+    }
 
     for entry in history:
         module = entry.get("module")
@@ -90,7 +84,7 @@ async def _toolkit_get_data_health_report(run_id: str) -> dict:
         "health_score": score_res["overall_score"],
         "health_status": score_res["status"],
         "breakdown": score_res["breakdown"],
-        "message": f"Data Health Score is {score_res['overall_score']}/100 ({score_res['status'].upper()})"
+        "message": f"Data Health Score is {score_res['overall_score']}/100 ({score_res['status'].upper()})",
     }
 
 
@@ -170,14 +164,22 @@ register_tool(
     name="get_run_history",
     fn=_toolkit_get_run_history,
     description="Returns the 'Prescription & Healing Ledger' for a run.",
-    input_schema={"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]},
+    input_schema={
+        "type": "object",
+        "properties": {"run_id": {"type": "string"}},
+        "required": ["run_id"],
+    },
 )
 
 register_tool(
     name="get_data_health_report",
     fn=_toolkit_get_data_health_report,
     description="Returns a Visual Data Health Score (0-100) for a run.",
-    input_schema={"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]},
+    input_schema={
+        "type": "object",
+        "properties": {"run_id": {"type": "string"}},
+        "required": ["run_id"],
+    },
 )
 
 register_tool(

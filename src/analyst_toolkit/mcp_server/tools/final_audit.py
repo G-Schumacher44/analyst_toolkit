@@ -1,7 +1,7 @@
 """MCP tool: toolkit_final_audit — final certification and big HTML report via M10."""
 
-import tempfile
 import os
+import tempfile
 
 from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
     run_final_audit_pipeline,
@@ -62,11 +62,11 @@ async def _toolkit_final_audit(
                 "export_report": True,
                 "export_html": True,  # Force true for the certification
                 "paths": {
-                    "report_excel": f"exports/reports/final_audit/{{run_id}}_final_audit_report.xlsx",
-                    "report_joblib": f"exports/reports/final_audit/{{run_id}}_final_audit_report.joblib",
-                    "checkpoint_csv": f"exports/reports/final_audit/{{run_id}}_certified.csv",
-                    "checkpoint_joblib": f"exports/reports/final_audit/{{run_id}}_certified.joblib",
-                    "report_html": f"exports/reports/final_audit/{{run_id}}_final_audit_report.html",
+                    "report_excel": "exports/reports/final_audit/{run_id}_final_audit_report.xlsx",
+                    "report_joblib": "exports/reports/final_audit/{run_id}_final_audit_report.joblib",
+                    "checkpoint_csv": "exports/reports/final_audit/{run_id}_certified.csv",
+                    "checkpoint_joblib": "exports/reports/final_audit/{run_id}_certified.joblib",
+                    "report_html": "exports/reports/final_audit/{run_id}_final_audit_report.html",
                 },
             },
         }
@@ -74,7 +74,9 @@ async def _toolkit_final_audit(
 
     try:
         # run_final_audit_pipeline returns the certified dataframe
-        df_certified = run_final_audit_pipeline(config=module_cfg, df=df, run_id=run_id, notebook=False)
+        df_certified = run_final_audit_pipeline(
+            config=module_cfg, df=df, run_id=run_id, notebook=False
+        )
     finally:
         if tmp_raw:
             os.unlink(tmp_raw.name)
