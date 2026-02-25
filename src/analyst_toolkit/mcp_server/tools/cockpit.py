@@ -294,6 +294,46 @@ Use this to auto-correct typos while controlling aggressiveness via score cutoff
 
 Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
+    machine_guide = {
+        "ordered_steps": [
+            {
+                "step": 1,
+                "tool": "diagnostics",
+                "required_inputs": ["gcs_path|session_id", "run_id"],
+            },
+            {
+                "step": 2,
+                "tool": "infer_configs",
+                "required_inputs": ["gcs_path|session_id"],
+            },
+            {
+                "step": 3,
+                "tool_chain": [
+                    "normalization",
+                    "duplicates",
+                    "outliers",
+                    "imputation",
+                    "validation",
+                ],
+                "required_inputs": ["session_id", "run_id", "config"],
+            },
+            {
+                "step": 4,
+                "tool": "final_audit",
+                "required_inputs": ["session_id", "run_id"],
+            },
+        ],
+        "example_calls": [
+            {
+                "tool": "diagnostics",
+                "arguments": {"gcs_path": "gs://bucket/data.csv", "run_id": "run_001"},
+            },
+            {
+                "tool": "infer_configs",
+                "arguments": {"session_id": "<session_id_from_diagnostics>"},
+            },
+        ],
+    }
     return {
         "status": "pass",
         "content": {
@@ -301,6 +341,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             "title": "Analyst Toolkit Quickstart",
             "markdown": guide.strip(),
         },
+        "machine_guide": machine_guide,
         "quick_actions": [
             {
                 "label": "Run diagnostics",
@@ -310,7 +351,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             {
                 "label": "Infer configs",
                 "tool": "infer_configs",
-                "arguments_schema_hint": {"required": ["session_id"]},
+                "arguments_schema_hint": {"required": ["gcs_path|session_id"]},
             },
             {
                 "label": "Open capabilities",
@@ -350,7 +391,7 @@ async def _toolkit_get_agent_playbook() -> dict:
             {
                 "step": 3,
                 "tool": "infer_configs",
-                "required_inputs": ["session_id"],
+                "required_inputs": ["gcs_path|session_id"],
                 "outputs": ["configs (YAML strings by module)"],
                 "next": [4],
             },

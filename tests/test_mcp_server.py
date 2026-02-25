@@ -101,11 +101,35 @@ def test_rpc_user_quickstart_tool():
     assert result["content"]["title"] == "Analyst Toolkit Quickstart"
     assert "fuzzy matching" in result["content"]["markdown"].lower()
     assert "plotting" in result["content"]["markdown"].lower()
+    assert "machine_guide" in result
+    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
+    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == [
+        "gcs_path|session_id"
+    ]
     assert len(result["quick_actions"]) >= 2
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
+    infer_quick = next(a for a in result["quick_actions"] if a["tool"] == "infer_configs")
+    assert infer_quick["arguments_schema_hint"]["required"] == ["gcs_path|session_id"]
     assert isinstance(result.get("trace_id"), str)
     assert result["trace_id"]
+
+
+def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 31,
+        "method": "tools/call",
+        "params": {"name": "get_agent_playbook", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    infer_step = next(
+        step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
+    )
+    assert infer_step["required_inputs"] == ["gcs_path|session_id"]
 
 
 def test_rpc_get_config_schema_supports_final_audit():
