@@ -20,6 +20,13 @@ from analyst_toolkit.mcp_server.io import (
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
+def _normalize_mode(mode: str) -> str:
+    normalized = str(mode).strip().lower()
+    if normalized == "drop":
+        return "remove"
+    return normalized
+
+
 async def _toolkit_duplicates(
     gcs_path: str | None = None,
     session_id: str | None = None,
@@ -36,10 +43,9 @@ async def _toolkit_duplicates(
     config = coerce_config(config, "duplicates")
     df = load_input(gcs_path, session_id=session_id)
 
-    subset_cols = subset_columns or config.get("subset_columns")
-    mode = config.get("mode", "flag")
-
     base_cfg = config.get("duplicates", config)
+    subset_cols = subset_columns or base_cfg.get("subset_columns")
+    mode = _normalize_mode(base_cfg.get("mode", "flag"))
 
     # Build module config for the pipeline runner
     module_cfg = {

@@ -90,7 +90,10 @@ def run_duplicates_pipeline(
     df_flagged, detection_results = detect_duplicates(df_original.copy(), subset_cols)
 
     # --- Step 2: Decide whether to handle (remove) or just return the flagged DF ---
-    mode = dupes_cfg.get("mode", "remove")
+    mode = str(dupes_cfg.get("mode", "remove")).strip().lower()
+    if mode == "drop":
+        logging.info("Duplicate processing mode 'drop' is treated as alias for 'remove'.")
+        mode = "remove"
     logging.info(f"Duplicate processing mode: '{mode}'")
 
     settings = dupes_cfg.get("settings", {})
@@ -116,7 +119,7 @@ def run_duplicates_pipeline(
         )
     else:
         raise ValueError(
-            f"Invalid mode specified in configuration: '{mode}'. Must be 'flag' or 'remove'."
+            f"Invalid mode specified in configuration: '{mode}'. Must be 'flag' or 'remove' (alias: 'drop')."
         )
 
     # --- Step 3: Generate report based on detection results and final state ---

@@ -69,7 +69,7 @@ class DuplicatesConfig(BaseModel):
     subset_columns: Optional[List[str]] = Field(
         None, description="Columns to consider for duplicate detection."
     )
-    mode: str = Field("flag", description="Action: 'flag' or 'drop'.")
+    mode: str = Field("flag", description="Action: 'flag' or 'remove'. Alias: 'drop'.")
     export_html: bool = Field(True, description="Whether to export an HTML report.")
 
 

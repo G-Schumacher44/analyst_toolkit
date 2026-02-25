@@ -1,5 +1,7 @@
 """MCP tool: toolkit_validation — schema/dtype/range validation via M02."""
 
+from copy import deepcopy
+
 import pandas as pd
 
 from analyst_toolkit.m02_validation.run_validation_pipeline import (
@@ -23,6 +25,47 @@ from analyst_toolkit.mcp_server.io import (
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
+def _normalize_validation_config(config: dict) -> dict:
+    """
+    Accept both full module config and MCP shorthand config.
+
+    MCP config schema exposes top-level `rules`, while M02 expects:
+      validation.schema_validation.rules
+    """
+    if "validation" in config and isinstance(config.get("validation"), dict):
+        base_cfg = deepcopy(config["validation"])
+    else:
+        base_cfg = deepcopy(config)
+
+    if not isinstance(base_cfg, dict):
+        base_cfg = {}
+
+    schema_cfg = base_cfg.get("schema_validation", {})
+    if not isinstance(schema_cfg, dict):
+        schema_cfg = {}
+    else:
+        schema_cfg = deepcopy(schema_cfg)
+
+    nested_rules = schema_cfg.get("rules", {})
+    if not isinstance(nested_rules, dict):
+        nested_rules = {}
+
+    shorthand_rules = base_cfg.get("rules", {})
+    if isinstance(shorthand_rules, dict) and shorthand_rules:
+        nested_rules = {**nested_rules, **shorthand_rules}
+
+    schema_cfg["rules"] = nested_rules
+    schema_cfg.setdefault("run", True)
+    if "fail_on_error" in base_cfg and "fail_on_error" not in schema_cfg:
+        schema_cfg["fail_on_error"] = bool(base_cfg["fail_on_error"])
+    schema_cfg.setdefault("fail_on_error", False)
+
+    base_cfg["schema_validation"] = schema_cfg
+    base_cfg.pop("rules", None)
+
+    return base_cfg
+
+
 async def _toolkit_validation(
     gcs_path: str | None = None,
     session_id: str | None = None,
@@ -36,6 +79,7 @@ async def _toolkit_validation(
     run_id = run_id or default_run_id()
 
     config = coerce_config(config, "validation")
+    base_cfg = _normalize_validation_config(config)
     df = load_input(gcs_path, session_id=session_id)
 
     # Ensure it's in a session for the pipeline
@@ -53,13 +97,12 @@ async def _toolkit_validation(
     )
     export_url = save_output(df, export_path)
 
-    base_cfg = config.get("validation", config)
-
     module_cfg = {
         "validation": {
             **base_cfg,
             "logging": "off",
             "settings": {
+                **base_cfg.get("settings", {}),
                 "export": True,
                 "export_html": should_export_html(config),
             },
@@ -104,7 +147,7 @@ async def _toolkit_validation(
             warnings,
         )
 
-    status = "warn" if warnings else ("fail" if violations_found else "pass")
+    status = "fail" if violations_found else ("warn" if warnings else "pass")
 
     res = {
         "status": status,
