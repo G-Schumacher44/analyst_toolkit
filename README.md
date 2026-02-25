@@ -34,7 +34,7 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 
 - **⛓️ Pipeline Mode:** Chain multiple tools in memory using `session_id` — no intermediate saves.
 - **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score** and a detailed **Healing Ledger**.
-- **📀 Golden Templates:** Mountable library of industry-standard configurations for Fraud, Migration, and Compliance.
+- **📀 Golden Templates:** Bundled library of industry-standard configurations for Fraud, Migration, and Compliance.
 - **📚 Template Resources:** MCP `resources/list` + `resources/read` expose both standard and golden YAML templates directly to clients/agents.
 - **🤖 Auto-Heal:** One-click inference and repair — from raw data to certified output in a single tool call.
 - [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — full setup, tool reference, and host integrations
@@ -155,6 +155,7 @@ curl -X POST http://localhost:8001/rpc \
 ```
 
 Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure. HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set, or explicitly with `export_html: true` in the config.
+If template/resource reads are timing out under load, tune `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` and `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
@@ -310,7 +311,7 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 - **State Management:** Introduced `StateStore` for in-memory DataFrame persistence between tool calls via `session_id`.
 - **Data Health Score:** Every run now generates a weighted 0-100 score (Completeness, Validity, Uniqueness, Consistency).
 - **Healing Ledger:** Persistent JSON/GCS history tracking every transformation made during a run.
-- **Golden Templates:** A library of "best-practice" configs for Fraud, Migration, and Compliance (mountable via `config/golden_templates/`).
+- **Golden Templates:** A library of "best-practice" configs for Fraud, Migration, and Compliance (bundled in the image under `config/golden_templates/`).
 - **Autonomous Tools:** Added `auto_heal` (one-click cleaning) and `drift_detection` (schema/statistical comparison).
 - **Configuration Intelligence:** Added `get_config_schema` to return JSON Schemas for every module.
 
