@@ -16,6 +16,7 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -131,6 +132,26 @@ async def _toolkit_diagnostics(
         "export_url": export_url,
         "warnings": warnings,
     }
+    res = with_next_actions(
+        res,
+        [
+            next_action(
+                "infer_configs",
+                "Generate module-ready YAML configs from this profiled dataset.",
+                {"session_id": session_id},
+            ),
+            next_action(
+                "get_capability_catalog",
+                "Review editable knobs before applying inferred configs.",
+                {},
+            ),
+            next_action(
+                "auto_heal",
+                "Run one-shot normalization + imputation from inferred configs.",
+                {"session_id": session_id, "run_id": run_id},
+            ),
+        ],
+    )
     append_to_run_history(run_id, res, session_id=session_id)
     return res
 

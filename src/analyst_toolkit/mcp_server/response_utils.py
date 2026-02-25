@@ -51,3 +51,18 @@ def attach_trace_id(result: Any, trace_id: str | None = None) -> Any:
     out["trace_id"] = trace_id or new_trace_id()
     return out
 
+
+def next_action(tool: str, why: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Create a machine-friendly next step suggestion for agents/clients."""
+    return {
+        "tool": tool,
+        "why": why,
+        "arguments": arguments or {},
+    }
+
+
+def with_next_actions(result: dict[str, Any], actions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Attach next_actions to a tool response."""
+    out = dict(result)
+    out["next_actions"] = actions
+    return out
