@@ -85,6 +85,37 @@ def test_rpc_capability_catalog_tool():
     assert "outlier_detection.plotting.run" in plotting_control["example_paths"]
 
 
+def test_rpc_capability_catalog_filters_and_compact():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 32,
+        "method": "tools/call",
+        "params": {
+            "name": "get_capability_catalog",
+            "arguments": {
+                "module": "normalization",
+                "search": "fuzzy",
+                "path_prefix": "rules.fuzzy_matching",
+                "compact": True,
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert "global_controls" not in result
+    assert "highlight_examples" not in result
+    assert result["summary"]["filters_applied"]["module"] == "normalization"
+    assert result["summary"]["filters_applied"]["compact"] is True
+    assert len(result["modules"]) == 1
+    assert result["modules"][0]["tool"] == "normalization"
+    assert all(
+        knob["path"].startswith("rules.fuzzy_matching")
+        for knob in result["modules"][0]["key_knobs"]
+    )
+
+
 def test_rpc_user_quickstart_tool():
     """Verify user quickstart tool returns human-readable guide text."""
     payload = {
@@ -130,6 +161,56 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session():
         step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
     )
     assert infer_step["required_inputs"] == ["gcs_path|session_id"]
+
+
+def test_rpc_get_run_history_supports_summary_modes(mocker):
+    history = [
+        {
+            "module": "diagnostics",
+            "status": "pass",
+            "summary": {"passed": True, "row_count": 5},
+            "timestamp": "2026-02-25T00:00:00Z",
+        },
+        {
+            "module": "validation",
+            "status": "fail",
+            "summary": {"passed": False, "violations_found": ["schema_conformity"]},
+            "timestamp": "2026-02-25T00:01:00Z",
+        },
+        {
+            "module": "imputation",
+            "status": "warn",
+            "summary": {"nulls_filled": 4},
+            "timestamp": "2026-02-25T00:02:00Z",
+        },
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 33,
+        "method": "tools/call",
+        "params": {
+            "name": "get_run_history",
+            "arguments": {
+                "run_id": "run_b3",
+                "failures_only": True,
+                "latest_errors": True,
+                "latest_status_by_module": True,
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["filters"]["failures_only"] is True
+    assert result["history_count"] == 1
+    assert result["ledger"][0]["module"] == "validation"
+    assert len(result["latest_errors"]) == 1
+    assert result["latest_errors"][0]["module"] == "validation"
+    assert "validation" in result["latest_status_by_module"]
+    assert result["latest_status_by_module"]["validation"]["status"] == "fail"
 
 
 def test_rpc_get_config_schema_supports_final_audit():
