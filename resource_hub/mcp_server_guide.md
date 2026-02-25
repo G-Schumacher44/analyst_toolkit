@@ -19,7 +19,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 
 - **Pipeline Mode:** In-memory state management via `session_id` allows chaining multiple tools without manual file saving.
 - **Client Cockpit:** Tools for executive reporting, including a 0-100 Data Health Score, a "Healing Ledger" history, and an agent flight checklist.
-- **Golden Templates:** Bundled library of industry-standard configurations for Fraud, Migration, and Compliance.
+- **Golden Templates:** Example templates tuned for typical fraud/migration/compliance patterns.
 - **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
 - **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.
 
@@ -114,7 +114,7 @@ curl http://localhost:8001/health | python3 -m json.tool
 |---|---|
 | `get_data_health_report` | 0-100 health score (Completeness, Validity, Uniqueness, Consistency) |
 | `get_run_history` | Full "Healing Ledger" — every transformation made in a run |
-| `get_golden_templates` | Returns industry-standard starter configs (Fraud, Migration, Compliance) |
+| `get_golden_templates` | Returns example templates tuned for typical fraud/migration/compliance patterns |
 | `get_agent_playbook` | Structured JSON execution plan for client agents (ordered steps + gates) |
 | `get_user_quickstart` | Human quickstart payload for UI rendering (`content.format=markdown`, `content.markdown`, `quick_actions`) |
 | `get_capability_catalog` | Editable config knobs by module (includes fuzzy matching + plotting controls) |
