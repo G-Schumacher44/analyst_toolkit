@@ -25,5 +25,9 @@ export ANALYST_REPORT_PREFIX=analyst_toolkit/reports
 # Timeout (seconds) for resources/list and resources/read filesystem operations.
 export ANALYST_MCP_RESOURCE_TIMEOUT_SEC=8
 
+# If true, resources/templates/list returns URI templates.
+# Default false avoids duplicate resource/template listings in some MCP clients.
+export ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES=false
+
 # Timeout (seconds) for cockpit template loading calls.
 export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8

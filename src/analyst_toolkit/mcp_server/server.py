@@ -65,7 +65,15 @@ def _env_float(name: str, default: float) -> float:
     return parsed if parsed > 0 else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 RESOURCE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_RESOURCE_TIMEOUT_SEC", 8.0)
+ADVERTISE_RESOURCE_TEMPLATES = _env_bool("ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES", False)
 
 # Official MCP SDK server instance
 mcp_server = Server("analyst-toolkit")
@@ -160,6 +168,8 @@ async def list_resources() -> list[types.Resource]:
 @mcp_server.list_resource_templates()
 async def list_resource_templates() -> list[types.ResourceTemplate]:
     """Standard MCP resources/templates/list handler."""
+    if not ADVERTISE_RESOURCE_TEMPLATES:
+        return []
     return _resource_template_models()
 
 
@@ -284,6 +294,8 @@ async def rpc_handler(request: Request) -> JSONResponse:
         return JSONResponse(_rpc_ok(req_id, {"resources": resources}))
 
     if method == "resources/templates/list":
+        if not ADVERTISE_RESOURCE_TEMPLATES:
+            return JSONResponse(_rpc_ok(req_id, {"resourceTemplates": []}))
         templates = [
             t.model_dump(mode="json", by_alias=True, exclude_none=True)
             for t in _resource_template_models()
