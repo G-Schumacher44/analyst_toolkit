@@ -21,8 +21,16 @@ jobs:
 
       - name: Install Gitleaks
         run: |
-          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh \
-            | sh -s -- -b /usr/local/bin v8.28.0
+          set -euo pipefail
+          VERSION="8.28.0"
+          ARCHIVE="gitleaks_${VERSION}_linux_x64.tar.gz"
+          URL="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/${ARCHIVE}"
+          curl -sSfL "${URL}" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          mkdir -p "${HOME}/.local/bin"
+          install -m 0755 /tmp/gitleaks "${HOME}/.local/bin/gitleaks"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          "${HOME}/.local/bin/gitleaks" version
 
       - name: Run Gitleaks
         run: gitleaks detect --source . --no-banner --redact
