@@ -104,6 +104,30 @@ def test_rpc_user_quickstart_tool():
     assert len(result["quick_actions"]) >= 2
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
+    assert isinstance(result.get("trace_id"), str)
+    assert result["trace_id"]
+
+
+def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure():
+    """
+    Verify tool runtime failures are normalized to structured status=error payloads.
+    """
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 28,
+        "method": "tools/call",
+        "params": {"name": "diagnostics", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["module"] == "diagnostics"
+    assert isinstance(result.get("trace_id"), str)
+    assert result["error"]["category"] == "internal"
+    assert result["error"]["code"] == "tool_execution_failed"
+    assert result["error"]["retryable"] is False
+    assert result["error"]["trace_id"] == result["trace_id"]
 
 
 def test_rpc_resources_list():
@@ -159,6 +183,9 @@ def test_rpc_resources_read_not_found():
     error = response.json()["error"]
     assert error["code"] == -32602
     assert "Resource not found" in error["message"]
+    assert error["data"]["error"]["code"] == "resource_not_found"
+    assert error["data"]["error"]["category"] == "io"
+    assert isinstance(error["data"]["error"]["trace_id"], str)
 
 
 def test_rpc_resources_list_timeout(mocker):
@@ -174,6 +201,9 @@ def test_rpc_resources_list_timeout(mocker):
     error = response.json()["error"]
     assert error["code"] == -32000
     assert "timed out" in error["message"].lower()
+    assert error["data"]["error"]["code"] == "resources_list_timeout"
+    assert error["data"]["error"]["retryable"] is True
+    assert isinstance(error["data"]["error"]["trace_id"], str)
 
 
 def test_rpc_resources_read_timeout(mocker):
@@ -194,6 +224,9 @@ def test_rpc_resources_read_timeout(mocker):
     error = response.json()["error"]
     assert error["code"] == -32000
     assert "timed out" in error["message"].lower()
+    assert error["data"]["error"]["code"] == "resource_read_timeout"
+    assert error["data"]["error"]["retryable"] is True
+    assert isinstance(error["data"]["error"]["trace_id"], str)
 
 
 @pytest.mark.asyncio
@@ -264,4 +297,8 @@ async def test_rpc_tool_invocation_structure(mocker):
     }
     response = client.post("/rpc", json=payload)
     assert response.status_code == 200
-    assert response.json()["result"] == mock_result
+    result = response.json()["result"]
+    assert result["status"] == mock_result["status"]
+    assert result["module"] == mock_result["module"]
+    assert result["summary"] == mock_result["summary"]
+    assert isinstance(result.get("trace_id"), str)
