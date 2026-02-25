@@ -30,6 +30,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 - [Quick Start](#quick-start)
 - [Tool Reference](#tool-reference) ▾
 - [Pipeline Mode](#pipeline-mode-state-management)
+- [Template Resources](#template-resources)
 - [Usage Examples](#usage-examples) ▾
 - [Host Integration](#host-integration) ▾
 - [Environment Variables](#environment-variables)
@@ -74,6 +75,7 @@ curl http://localhost:8001/health | python3 -m json.tool
     "diagnostics", "validation", "outliers", "normalization",
     "duplicates", "imputation", "infer_configs", "auto_heal",
     "drift_detection", "get_config_schema", "get_golden_templates",
+    "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
     "get_run_history", "get_data_health_report"
   ]
 }
@@ -113,8 +115,9 @@ curl http://localhost:8001/health | python3 -m json.tool
 | `get_data_health_report` | 0-100 health score (Completeness, Validity, Uniqueness, Consistency) |
 | `get_run_history` | Full "Healing Ledger" — every transformation made in a run |
 | `get_golden_templates` | Returns industry-standard starter configs (Fraud, Migration, Compliance) |
-| `get_agent_instructions` | Returns the agent flight checklist and pipeline order guidance |
-| `get_cockpit_help` | Returns a guide to state management, directory structure, and plotting |
+| `get_agent_playbook` | Structured JSON execution plan for client agents (ordered steps + gates) |
+| `get_user_quickstart` | Human quickstart payload for UI rendering (`content.format=markdown`, `content.markdown`, `quick_actions`) |
+| `get_capability_catalog` | Editable config knobs by module (includes fuzzy matching + plotting controls) |
 | `final_audit` | Final certification step — produces the Healing Certificate HTML report |
 
 </details>
@@ -151,6 +154,43 @@ Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a t
 A `run_id` ties all steps together in the Healing Ledger. Pass the same `run_id` across calls to build a full audit trail.
 
 > **Config structure note:** `infer_configs` returns YAML strings. Parse each one with `yaml.safe_load` and pass the resulting dict directly to the relevant tool. Never flatten nested keys — for normalization, `standardize_text_columns`, `coerce_dtypes`, etc. must stay nested inside `rules:` or the pipeline will skip all transformations.
+
+---
+
+## Template Resources
+
+In addition to tools, the server exposes YAML templates through MCP resources so clients/agents can pull them into context without calling a tool.
+
+- Standard templates: `analyst://templates/config/{name}_template.yaml`
+- Golden templates: `analyst://templates/golden/{name}.yaml`
+
+Example JSON-RPC calls:
+
+```bash
+# List all available template resources
+curl -X POST http://localhost:8001/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "resources/list",
+    "params": {}
+  }'
+```
+
+```bash
+# Read one template resource
+curl -X POST http://localhost:8001/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "resources/read",
+    "params": {"uri": "analyst://templates/golden/fraud_detection.yaml"}
+  }'
+```
+
+The server also advertises resource templates via `resources/templates/list`.
 
 ---
 

@@ -28,10 +28,12 @@ import mcp.types as types
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from mcp.server import NotificationOptions, Server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
+from analyst_toolkit.mcp_server.templates import list_template_resources, read_template_resource
 
 # Get package version dynamically
 try:
@@ -46,6 +48,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger("analyst_toolkit.mcp_server")
 
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+RESOURCE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_RESOURCE_TIMEOUT_SEC", 8.0)
+
 # Official MCP SDK server instance
 mcp_server = Server("analyst-toolkit")
 
@@ -55,7 +71,7 @@ app = FastAPI(title="analyst-toolkit MCP Server", version=__version__)
 SERVER_INFO = {
     "protocolVersion": "2024-05-01",
     "serverInfo": {"name": "analyst-toolkit", "version": __version__},
-    "capabilities": {"tools": {}},
+    "capabilities": {"tools": {}, "resources": {"subscribe": False, "listChanged": False}},
 }
 
 
@@ -85,6 +101,69 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[types.Text
     except Exception as exc:
         logger.exception(f"Tool {name} failed")
         return [types.TextContent(type="text", text=f"Error: {str(exc)}")]
+
+
+def _resource_models() -> list[types.Resource]:
+    return [
+        types.Resource(
+            name=item["name"],
+            uri=item["uri"],
+            description=item["description"],
+            mimeType=item["mimeType"],
+        )
+        for item in list_template_resources()
+    ]
+
+
+def _resource_template_models() -> list[types.ResourceTemplate]:
+    return [
+        types.ResourceTemplate(
+            name="config_templates",
+            uriTemplate="analyst://templates/config/{name}_template.yaml",
+            description="Standard toolkit config templates (*_template.yaml).",
+            mimeType="application/x-yaml",
+        ),
+        types.ResourceTemplate(
+            name="golden_templates",
+            uriTemplate="analyst://templates/golden/{name}.yaml",
+            description="Golden templates for common use cases (fraud, migration, compliance).",
+            mimeType="application/x-yaml",
+        ),
+    ]
+
+
+async def _read_template_with_timeout(uri: str) -> str:
+    return await asyncio.wait_for(
+        asyncio.to_thread(read_template_resource, uri),
+        timeout=RESOURCE_IO_TIMEOUT_SEC,
+    )
+
+
+async def _resource_models_with_timeout() -> list[types.Resource]:
+    return await asyncio.wait_for(
+        asyncio.to_thread(_resource_models),
+        timeout=RESOURCE_IO_TIMEOUT_SEC,
+    )
+
+
+@mcp_server.list_resources()
+async def list_resources() -> list[types.Resource]:
+    """Standard MCP resources/list handler."""
+    return await _resource_models_with_timeout()
+
+
+@mcp_server.list_resource_templates()
+async def list_resource_templates() -> list[types.ResourceTemplate]:
+    """Standard MCP resources/templates/list handler."""
+    return _resource_template_models()
+
+
+@mcp_server.read_resource()
+async def read_resource(uri: Any) -> list[ReadResourceContents]:
+    """Standard MCP resources/read handler."""
+    uri_text = str(uri)
+    text = await _read_template_with_timeout(uri_text)
+    return [ReadResourceContents(content=text, mime_type="application/x-yaml")]
 
 
 # --- HTTP /rpc JSON-RPC Handlers (FridAI Legacy/Native) ---
@@ -143,6 +222,70 @@ async def rpc_handler(request: Request) -> JSONResponse:
             logger.exception(f"Tool {tool_name} raised an error")
             # Return proper JSON-RPC 2.0 error
             return JSONResponse(_rpc_error(req_id, -32603, f"Internal error: {str(exc)}"))
+
+    if method == "resources/list":
+        try:
+            model_list = await _resource_models_with_timeout()
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                _rpc_error(
+                    req_id,
+                    -32000,
+                    (
+                        "Resource listing timed out. "
+                        f"Try increasing ANALYST_MCP_RESOURCE_TIMEOUT_SEC (current={RESOURCE_IO_TIMEOUT_SEC}s)."
+                    ),
+                )
+            )
+        resources = [
+            r.model_dump(mode="json", by_alias=True, exclude_none=True) for r in model_list
+        ]
+        return JSONResponse(_rpc_ok(req_id, {"resources": resources}))
+
+    if method == "resources/templates/list":
+        templates = [
+            t.model_dump(mode="json", by_alias=True, exclude_none=True)
+            for t in _resource_template_models()
+        ]
+        return JSONResponse(_rpc_ok(req_id, {"resourceTemplates": templates}))
+
+    if method == "resources/read":
+        uri = params.get("uri")
+        if not isinstance(uri, str) or not uri:
+            return JSONResponse(_rpc_error(req_id, -32602, "Missing or invalid 'uri' in params"))
+        try:
+            text = await _read_template_with_timeout(uri)
+        except FileNotFoundError as exc:
+            return JSONResponse(_rpc_error(req_id, -32602, f"Resource not found: {str(exc)}"))
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                _rpc_error(
+                    req_id,
+                    -32000,
+                    (
+                        "Resource read timed out. "
+                        f"Try increasing ANALYST_MCP_RESOURCE_TIMEOUT_SEC (current={RESOURCE_IO_TIMEOUT_SEC}s)."
+                    ),
+                )
+            )
+        except Exception as exc:
+            logger.exception("Resource read failed")
+            return JSONResponse(_rpc_error(req_id, -32603, f"Internal error: {str(exc)}"))
+
+        return JSONResponse(
+            _rpc_ok(
+                req_id,
+                {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "application/x-yaml",
+                            "text": text,
+                        }
+                    ]
+                },
+            )
+        )
 
     return JSONResponse(_rpc_error(req_id, -32601, f"Unknown method: {method}"))
 

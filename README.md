@@ -35,6 +35,7 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - **⛓️ Pipeline Mode:** Chain multiple tools in memory using `session_id` — no intermediate saves.
 - **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score** and a detailed **Healing Ledger**.
 - **📀 Golden Templates:** Mountable library of industry-standard configurations for Fraud, Migration, and Compliance.
+- **📚 Template Resources:** MCP `resources/list` + `resources/read` expose both standard and golden YAML templates directly to clients/agents.
 - **🤖 Auto-Heal:** One-click inference and repair — from raw data to certified output in a single tool call.
 - [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — full setup, tool reference, and host integrations
 
