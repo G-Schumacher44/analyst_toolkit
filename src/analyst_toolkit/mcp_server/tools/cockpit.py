@@ -1,48 +1,456 @@
-"""MCP tool: cockpit — tools for client delivery, history, and health scoring."""
+"""MCP tool: cockpit — user/agent guidance, capability catalog, history, and health scoring."""
+
+import asyncio
+import logging
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 from analyst_toolkit.m00_utils.scoring import calculate_health_score
 from analyst_toolkit.mcp_server.io import get_run_history
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.templates import get_golden_configs
 
+logger = logging.getLogger("analyst_toolkit.mcp_server.cockpit")
 
-async def _toolkit_get_cockpit_help() -> dict:
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+TEMPLATE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC", 8.0)
+
+_TEMPLATE_SPECS = [
+    ("diagnostics", "diagnostics", "config/diag_config_template.yaml"),
+    ("validation", "validation", "config/validation_config_template.yaml"),
+    ("normalization", "normalization", "config/normalization_config_template.yaml"),
+    ("duplicates", "duplicates", "config/dups_config_template.yaml"),
+    ("outliers", "outlier_detection", "config/outlier_config_template.yaml"),
+    ("imputation", "imputation", "config/imputation_config_template.yaml"),
+    ("final_audit", "final_audit", "config/final_audit_config_template.yaml"),
+]
+
+_KEY_KNOBS: dict[str, list[dict[str, str]]] = {
+    "diagnostics": [
+        {"path": "profile.run", "description": "Master diagnostics profile toggle."},
+        {"path": "plotting.run", "description": "Enable/disable diagnostics plots."},
+        {
+            "path": "profile.settings.max_rows",
+            "description": "Preview row count in profile output.",
+        },
+        {
+            "path": "profile.settings.quality_checks.skew_threshold",
+            "description": "Threshold for skewness warnings.",
+        },
+        {"path": "profile.settings.export_html", "description": "Export diagnostics HTML report."},
+    ],
+    "validation": [
+        {"path": "schema_validation.run", "description": "Master validation toggle."},
+        {
+            "path": "schema_validation.rules.expected_columns",
+            "description": "Enforce expected schema columns.",
+        },
+        {
+            "path": "schema_validation.rules.categorical_values",
+            "description": "Allowed values for categorical fields.",
+        },
+        {
+            "path": "schema_validation.rules.numeric_ranges",
+            "description": "Numeric min/max constraints.",
+        },
+        {"path": "settings.export_html", "description": "Export validation HTML report."},
+    ],
+    "normalization": [
+        {"path": "run", "description": "Master normalization toggle."},
+        {
+            "path": "rules.standardize_text_columns",
+            "description": "Columns to trim/normalize casing.",
+        },
+        {"path": "rules.value_mappings", "description": "Explicit remapping dictionary."},
+        {
+            "path": "rules.fuzzy_matching.run",
+            "description": "Enable fuzzy typo correction for configured columns.",
+        },
+        {
+            "path": "rules.fuzzy_matching.settings.<column>.master_list",
+            "description": "Canonical values for fuzzy matching.",
+        },
+        {
+            "path": "rules.fuzzy_matching.settings.<column>.score_cutoff",
+            "description": "Minimum fuzzy score to apply corrections.",
+        },
+        {
+            "path": "rules.parse_datetimes",
+            "description": "Datetime parsing formats and strictness per column.",
+        },
+        {"path": "rules.coerce_dtypes", "description": "Explicit dtype coercions."},
+        {"path": "settings.export_html", "description": "Export normalization HTML report."},
+    ],
+    "duplicates": [
+        {"path": "run", "description": "Master duplicates module toggle."},
+        {
+            "path": "subset_columns",
+            "description": "Columns used for duplicate detection identity.",
+        },
+        {
+            "path": "mode",
+            "description": "Duplicate handling mode (e.g., remove/flag).",
+        },
+        {"path": "settings.plotting.run", "description": "Enable duplicate summary plotting."},
+        {"path": "settings.export_html", "description": "Export duplicates HTML report."},
+    ],
+    "outliers": [
+        {"path": "run", "description": "Master outlier detection toggle."},
+        {
+            "path": "detection_specs.__default__.method",
+            "description": "Default outlier method (`iqr` or `zscore`).",
+        },
+        {
+            "path": "detection_specs.<column>.iqr_multiplier",
+            "description": "Column-level IQR sensitivity tuning.",
+        },
+        {
+            "path": "detection_specs.<column>.zscore_threshold",
+            "description": "Column-level z-score sensitivity tuning.",
+        },
+        {"path": "plotting.run", "description": "Enable outlier visualization output."},
+        {"path": "export.export_html", "description": "Export outlier HTML report."},
+    ],
+    "imputation": [
+        {"path": "run", "description": "Master imputation module toggle."},
+        {
+            "path": "rules.strategies",
+            "description": "Column-wise fill strategies (mean/median/mode/constant).",
+        },
+        {"path": "settings.plotting.run", "description": "Enable before/after imputation plots."},
+        {"path": "settings.export.export_html", "description": "Export imputation HTML report."},
+    ],
+    "final_audit": [
+        {"path": "run", "description": "Master final audit/certification toggle."},
+        {"path": "final_edits.run", "description": "Enable final edit pass before certification."},
+        {
+            "path": "certification.run",
+            "description": "Run strict final certification checks.",
+        },
+        {"path": "settings.export_html", "description": "Export final audit HTML certificate."},
+    ],
+}
+
+
+def _load_template_root(root_key: str, template_path: str) -> dict[str, Any]:
+    path = Path(template_path)
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        return {}
+    root = data.get(root_key, {})
+    return root if isinstance(root, dict) else {}
+
+
+def _extract_value(root: dict[str, Any], path: str) -> Any:
     """
-    Returns a comprehensive guide on using the Cockpit and State Management.
+    Resolve dot-path values from a template.
+    Supports placeholder segments like <column> by stopping at that level.
     """
-    help_text = """
-# 🕹️ Analyst Toolkit Cockpit Guide
+    current: Any = root
+    for segment in path.split("."):
+        if segment.startswith("<") and segment.endswith(">"):
+            return "<per-column>"
+        if not isinstance(current, dict) or segment not in current:
+            return "<not set>"
+        current = current[segment]
+    return current
 
-Welcome to the 'Cockpit'. This system is designed for autonomous data auditing and self-healing.
 
-## ⛓️ State Management (Pipeline Mode)
-Every time you run a tool, the system maintains the data in an in-memory session.
-1. **The Handshake:** Your first tool call (e.g., diagnostics) creates a `session_id`.
-2. **The Chain:** Pass that `session_id` to subsequent tools. They will operate on the *transformed* data from the previous step.
-3. **The Result:** You don't need to download/upload data between steps.
+def _build_capability_catalog() -> dict[str, Any]:
+    modules: list[dict[str, Any]] = []
+    for tool_name, root_key, template_path in _TEMPLATE_SPECS:
+        root = _load_template_root(root_key, template_path)
+        knobs = []
+        for knob in _KEY_KNOBS.get(tool_name, []):
+            default_value = _extract_value(root, knob["path"])
+            knobs.append(
+                {
+                    "path": knob["path"],
+                    "default": default_value,
+                    "description": knob["description"],
+                    "user_editable": True,
+                }
+            )
+        modules.append(
+            {
+                "tool": tool_name,
+                "template_path": template_path,
+                "config_root": root_key,
+                "user_editable": True,
+                "key_knobs": knobs,
+            }
+        )
 
-## 📂 Directory Structure (GCS/Local)
-Reports are now strictly grouped for clarity:
-`reports/<session_timestamp>/<session_id>/<run_id>/<module>/...`
-- This ensures that a single multi-step audit run is always kept together in one folder.
+    return {
+        "status": "pass",
+        "summary": {
+            "editable_configs": True,
+            "inference_available": True,
+            "inference_tool": "infer_configs",
+            "manual_override_recommended": True,
+        },
+        "global_controls": [
+            {
+                "path": "<module>.run",
+                "description": "Enable/disable individual module execution.",
+                "user_editable": True,
+            },
+            {
+                "path": "module-specific",
+                "description": "Plotting toggles are module-specific; use per-module key_knobs for exact paths.",
+                "example_paths": [
+                    "diagnostics.plotting.run",
+                    "duplicates.settings.plotting.run",
+                    "outlier_detection.plotting.run",
+                    "imputation.settings.plotting.run",
+                ],
+                "user_editable": True,
+            },
+            {
+                "path": "module-specific",
+                "description": "HTML export toggles are module-specific; use per-module key_knobs for exact paths.",
+                "example_paths": [
+                    "diagnostics.profile.settings.export_html",
+                    "validation.settings.export_html",
+                    "normalization.settings.export_html",
+                    "duplicates.settings.export_html",
+                    "outlier_detection.export.export_html",
+                    "imputation.settings.export.export_html",
+                    "final_audit.settings.export_html",
+                ],
+                "user_editable": True,
+            },
+        ],
+        "highlight_examples": [
+            {
+                "feature": "Normalization fuzzy matching",
+                "paths": [
+                    "normalization.rules.fuzzy_matching.run",
+                    "normalization.rules.fuzzy_matching.settings.<column>.master_list",
+                    "normalization.rules.fuzzy_matching.settings.<column>.score_cutoff",
+                ],
+            },
+            {
+                "feature": "Plotting controls",
+                "paths": [
+                    "diagnostics.plotting.run",
+                    "outlier_detection.plotting.run",
+                    "imputation.settings.plotting.run",
+                ],
+            },
+        ],
+        "golden_templates": sorted(get_golden_configs().keys()),
+        "modules": modules,
+    }
 
-## 📊 Plotting (Opt-In)
-Plotting is turned **OFF** by default to prevent timeouts on large datasets.
-- To see graphs, pass `plotting=true` in your tool call.
-- You can limit the number of plots using `max_plots=10`.
 
-## 🧪 Key Tools
-- `get_data_health_report`: Get a 0-100 score for your current data session.
-- `get_run_history`: See the 'Ledger' of every transformation made in this run.
-- `auto_heal`: The autonomous mode. Infer and apply fixes in one step.
-- `get_golden_templates`: Discover best-practice configurations for Fraud, Migration, and more.
+async def _toolkit_get_user_quickstart() -> dict:
+    """Returns a concise, human-readable guide for operating the toolkit."""
+    guide = """
+# Analyst Toolkit Quickstart (Human)
+
+## What You Can Control
+- You can edit module YAML configs directly before runs.
+- You can keep automation (`infer_configs`) and still override any field.
+- You can enable/disable plotting and HTML export per module.
+
+## Recommended Order (Manual Pipeline)
+1. `diagnostics`
+2. `infer_configs`
+3. Review/edit configs (normalization, duplicates, outliers, imputation, validation)
+4. `normalization` -> `duplicates` -> `outliers` -> `imputation` -> `validation`
+5. `final_audit`
+6. `get_run_history` + `get_data_health_report`
+
+## Key Example: Fuzzy Matching
+In normalization config:
+- `normalization.rules.fuzzy_matching.run`
+- `normalization.rules.fuzzy_matching.settings.<column>.master_list`
+- `normalization.rules.fuzzy_matching.settings.<column>.score_cutoff`
+
+Use this to auto-correct typos while controlling aggressiveness via score cutoff.
+
+## Key Example: Plotting Controls
+- `diagnostics.plotting.run`
+- `outlier_detection.plotting.run`
+- `imputation.settings.plotting.run`
+
+Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
-    return {"status": "pass", "help": help_text}
+    return {
+        "status": "pass",
+        "content": {
+            "format": "markdown",
+            "title": "Analyst Toolkit Quickstart",
+            "markdown": guide.strip(),
+        },
+        "quick_actions": [
+            {
+                "label": "Run diagnostics",
+                "tool": "diagnostics",
+                "arguments_schema_hint": {"required": ["gcs_path|session_id", "run_id"]},
+            },
+            {
+                "label": "Infer configs",
+                "tool": "infer_configs",
+                "arguments_schema_hint": {"required": ["session_id"]},
+            },
+            {
+                "label": "Open capabilities",
+                "tool": "get_capability_catalog",
+                "arguments_schema_hint": {"required": []},
+            },
+        ],
+    }
+
+
+async def _toolkit_get_agent_playbook() -> dict:
+    """Returns strict, step-by-step playbook data for client agents."""
+    return {
+        "status": "pass",
+        "version": "1.0",
+        "goal": "Audit, clean, and certify a dataset with controlled user-editable configs.",
+        "prerequisites": [
+            "Input data path (local csv/parquet or gs:// URI) or existing session_id",
+            "Stable run_id used across calls",
+            "Optional output bucket/prefix overrides",
+        ],
+        "ordered_steps": [
+            {
+                "step": 1,
+                "tool": "diagnostics",
+                "required_inputs": ["gcs_path|session_id", "run_id"],
+                "outputs": ["session_id", "summary", "artifact_url?", "plot_urls?"],
+                "next": [2],
+            },
+            {
+                "step": 2,
+                "tool": "get_data_health_report",
+                "required_inputs": ["run_id", "session_id?"],
+                "outputs": ["health_score", "breakdown"],
+                "next": [3],
+            },
+            {
+                "step": 3,
+                "tool": "infer_configs",
+                "required_inputs": ["session_id"],
+                "outputs": ["configs (YAML strings by module)"],
+                "next": [4],
+            },
+            {
+                "step": 4,
+                "tool": "get_capability_catalog",
+                "required_inputs": [],
+                "outputs": ["editable knobs + defaults + example paths"],
+                "next": [5],
+            },
+            {
+                "step": 5,
+                "tool": "manual config review",
+                "required_inputs": ["inferred configs", "capability catalog", "user intent"],
+                "outputs": ["confirmed config per module"],
+                "notes": [
+                    "Do not flatten nested keys.",
+                    "User can override inferred config fields before execution.",
+                ],
+                "next": [6],
+            },
+            {
+                "step": 6,
+                "tool_chain": [
+                    "normalization",
+                    "duplicates",
+                    "outliers",
+                    "imputation",
+                    "validation",
+                ],
+                "required_inputs": ["session_id", "run_id", "config per tool"],
+                "outputs": ["updated session_id", "module summaries", "artifacts"],
+                "next": [7],
+            },
+            {
+                "step": 7,
+                "tool_chain": ["final_audit", "get_run_history"],
+                "required_inputs": ["session_id", "run_id"],
+                "outputs": ["final certificate artifacts", "healing ledger"],
+                "next": [],
+            },
+        ],
+        "decision_gates": [
+            {
+                "name": "automation_mode",
+                "rule": "Use auto_heal only when user explicitly requests one-shot automation.",
+            },
+            {
+                "name": "plotting_mode",
+                "rule": "Default plotting to off for large data; enable only when visual review is requested.",
+            },
+            {
+                "name": "fuzzy_matching_mode",
+                "rule": "If fuzzy matching is enabled, require explicit master_list and cutoff review.",
+            },
+        ],
+    }
+
+
+async def _toolkit_get_capability_catalog() -> dict:
+    """Returns user-editable configuration capabilities by module/template."""
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_build_capability_catalog),
+            timeout=TEMPLATE_IO_TIMEOUT_SEC,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "Capability catalog build timed out after %.1fs",
+            TEMPLATE_IO_TIMEOUT_SEC,
+        )
+        return {
+            "status": "error",
+            "error": (
+                "Capability catalog generation timed out. "
+                f"Try increasing ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC (current={TEMPLATE_IO_TIMEOUT_SEC}s)."
+            ),
+        }
 
 
 async def _toolkit_get_golden_templates() -> dict:
     """Returns a library of 'Golden Config' templates."""
-    return {"status": "pass", "templates": get_golden_configs()}
+    try:
+        templates = await asyncio.wait_for(
+            asyncio.to_thread(get_golden_configs),
+            timeout=TEMPLATE_IO_TIMEOUT_SEC,
+        )
+        return {"status": "pass", "templates": templates}
+    except asyncio.TimeoutError:
+        logger.error(
+            "Golden templates read timed out after %.1fs",
+            TEMPLATE_IO_TIMEOUT_SEC,
+        )
+        return {
+            "status": "error",
+            "error": (
+                "Golden template loading timed out. "
+                f"Try increasing ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC (current={TEMPLATE_IO_TIMEOUT_SEC}s)."
+            ),
+        }
 
 
 async def _toolkit_get_run_history(run_id: str, session_id: str | None = None) -> dict:
@@ -95,68 +503,24 @@ async def _toolkit_get_data_health_report(run_id: str, session_id: str | None = 
     }
 
 
-async def _toolkit_get_agent_instructions() -> dict:
-    """Returns the agent flight checklist."""
-    instructions = """
-# ✈️ MCP Agent Flight Checklist
-
-When you start working with a user on a data audit, follow this checklist in order. Do NOT skip steps or jump ahead.
-
-## 1. Discovery (Pre-Flight)
-Before running any tools, confirm with the user:
-- [ ] **Data Location:** GCS path or local file?
-- [ ] **Output Destination:** Reports default to the server's configured bucket. Override with `output_bucket` if needed.
-
-## 2. Diagnostics (Takeoff)
-- [ ] Run `toolkit_diagnostics` to establish a baseline profile.
-- [ ] Run `toolkit_get_data_health_report` and share the **Data Health Score** with the user before proceeding.
-
-## 3. Config Inference & Customization
-- [ ] Run `toolkit_infer_configs` using the `session_id` from step 2.
-- [ ] **Read and reason about the returned YAML configs.** Do not pass them through blindly.
-  - Check `normalization` config: are the detected text columns and type coercions correct for this dataset?
-  - Check `imputation` config: are the fill strategies appropriate (mean/median/mode/constant)?
-  - Check `duplicates` config: are the subset columns meaningful for deduplication?
-  - Check `outliers` config: are the flagged numeric columns sensible? Is the IQR multiplier appropriate?
-  - Check `validation` config: are range checks, null constraints, and categorical rules reasonable?
-- [ ] Present a **summary of the proposed configs** to the user and ask for confirmation or amendments before proceeding.
-- [ ] Optionally merge with a **Golden Template** (`toolkit_get_golden_templates`) if the use case matches (Fraud, Migration, Compliance).
-
-> ⚠️ **Config structure is critical — do NOT restructure inferred configs.**
-> `toolkit_infer_configs` returns YAML strings keyed by module name. Parse each YAML string into a dict (e.g. with `yaml.safe_load`), then pass the parsed dict directly as the `config` argument to the tool.
-> Example: `toolkit_normalization(session_id=..., config={"normalization": <parsed_yaml_dict>["normalization"]})`
-> Never hoist nested keys to the top level. For normalization, `standardize_text_columns`, `coerce_dtypes`, `rename_columns` etc. must remain nested inside `rules:` exactly as inferred. Flattening them will cause the pipeline to find no rules and skip all transformations.
-
-## 4. Manual Pipeline (Cruise) — run in this order
-Execute each step using the `session_id` and the confirmed/adjusted config. Pause after each to share the summary.
-
-1. `toolkit_normalization` — standardize text, rename columns, coerce types.
-2. `toolkit_duplicates` — flag or drop duplicate rows (if duplicates were detected).
-3. `toolkit_outliers` — flag or cap outliers (if outliers were detected).
-4. `toolkit_imputation` — fill missing values.
-5. `toolkit_validation` — enforce business rules and constraints.
-
-> ⚠️ **Do NOT use `toolkit_auto_heal` unless the user explicitly requests a fully automated one-shot fix.**
-
-## 5. Certification (Landing)
-- [ ] Run `toolkit_final_audit` to produce the Healing Certificate.
-- [ ] Run `toolkit_get_run_history` and share the full ledger with the user.
-- [ ] Provide the link to the HTML report as the final **Proof of Health**.
-
----
-
-## 💡 Pro-Tips
-- Always chain steps in memory via `session_id` — do not download/re-upload data between steps.
-- Pass `plotting=true` only when the user asks for charts (OFF by default to avoid timeouts).
-- If a step produces unexpected output (e.g. too many duplicates flagged), re-examine the config and re-run with adjusted parameters rather than proceeding blindly.
-"""
-    return {"status": "pass", "instructions": instructions}
-
+register_tool(
+    name="get_agent_playbook",
+    fn=_toolkit_get_agent_playbook,
+    description="Returns structured, ordered execution guidance for client agents.",
+    input_schema={"type": "object", "properties": {}},
+)
 
 register_tool(
-    name="get_cockpit_help",
-    fn=_toolkit_get_cockpit_help,
-    description="Returns a guide on how to use the stateful pipeline, health scoring, and directory structure.",
+    name="get_user_quickstart",
+    fn=_toolkit_get_user_quickstart,
+    description="Returns concise, human-readable usage guidance and config examples.",
+    input_schema={"type": "object", "properties": {}},
+)
+
+register_tool(
+    name="get_capability_catalog",
+    fn=_toolkit_get_capability_catalog,
+    description="Returns module capability knobs sourced from YAML templates, including defaults.",
     input_schema={"type": "object", "properties": {}},
 )
 
@@ -199,11 +563,4 @@ register_tool(
         },
         "required": ["run_id"],
     },
-)
-
-register_tool(
-    name="get_agent_instructions",
-    fn=_toolkit_get_agent_instructions,
-    description="Returns the 'Flight Checklist' for agents.",
-    input_schema={"type": "object", "properties": {}},
 )

@@ -8,8 +8,28 @@ on:
     branches: [ main, master ]
 
 jobs:
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh \
+            | sh -s -- -b /usr/local/bin v8.28.0
+
+      - name: Run Gitleaks
+        run: gitleaks detect --source . --no-banner --redact
+
   lint-and-test:
     name: Lint, Test, and Docker Build
+    needs: [secret-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: write

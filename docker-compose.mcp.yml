@@ -34,14 +34,12 @@ services:
     volumes:
       # Mount GCS service account key — requires GCP_CREDS_PATH to be set in shell/.envrc
       - ${GCP_CREDS_PATH:-/dev/null}:/run/secrets/gcp_creds:ro
-      # Mount Golden Templates for easy updates/additions
-      - ./config/golden_templates:/app/config/golden_templates
       # Mount exports for local persistence of history and reports
       - ./exports:/app/exports
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
