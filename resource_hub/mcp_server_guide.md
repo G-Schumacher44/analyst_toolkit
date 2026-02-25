@@ -19,7 +19,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 
 - **Pipeline Mode:** In-memory state management via `session_id` allows chaining multiple tools without manual file saving.
 - **Client Cockpit:** Tools for executive reporting, including a 0-100 Data Health Score, a "Healing Ledger" history, and an agent flight checklist.
-- **Golden Templates:** Mountable library of industry-standard configurations for Fraud, Migration, and Compliance.
+- **Golden Templates:** Bundled library of industry-standard configurations for Fraud, Migration, and Compliance.
 - **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
 - **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.
 
@@ -58,7 +58,7 @@ docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
 
 docker run -p 8001:8001 \
   -v ~/.secrets/gcp_creds.json:/secrets/gcp_creds.json \
-  -e GCP_CREDS_PATH=/secrets/gcp_creds.json \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_creds.json \
   ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
 ```
 
@@ -243,8 +243,7 @@ SESSION=$(curl -s -X POST http://localhost:8001/rpc \
   -d '{
     "jsonrpc": "2.0", "id": 1, "method": "tools/call",
     "params": {"name": "diagnostics", "arguments": {"gcs_path": "data/raw/file.csv", "run_id": "run_001"}}
-  }' | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['content'][0]['text'])" \
-  | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['session_id'])")
+  }' | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['session_id'])")
 
 # Step 2 — Normalization (reads from state)
 curl -X POST http://localhost:8001/rpc \
@@ -311,7 +310,7 @@ curl -X POST http://localhost:8001/rpc \
   "status": "pass",
   "run_id": "audit_001",
   "health_score": 82,
-  "grade": "Yellow",
+  "health_status": "yellow",
   "breakdown": {
     "completeness": 91,
     "validity": 78,
@@ -358,7 +357,7 @@ You can also compare two in-memory sessions:
 
 ### Use a Golden Template
 
-Fetch available templates, then pass one as your config:
+Fetch available templates, then read one directly as a resource:
 
 ```bash
 # List available templates
@@ -369,21 +368,16 @@ curl -X POST http://localhost:8001/rpc \
     "params": {"name": "get_golden_templates", "arguments": {}}
   }'
 
-# Use fraud_detection template config in a run
+# Read fraud_detection YAML template
 curl -X POST http://localhost:8001/rpc \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-    "params": {
-      "name": "auto_heal",
-      "arguments": {
-        "gcs_path": "data/raw/transactions.csv",
-        "config": "<paste fraud_detection config block here>",
-        "run_id": "fraud_run_001"
-      }
-    }
+    "jsonrpc": "2.0", "id": 2, "method": "resources/read",
+    "params": {"uri": "analyst://templates/golden/fraud_detection.yaml"}
   }'
 ```
+
+Use the returned YAML as your starting point, then pass module-specific sections into tool `config` objects.
 
 ---
 
@@ -424,7 +418,7 @@ Add to `~/.config/claude/claude_desktop_config.json` (Mac: `~/Library/Applicatio
       "args": [
         "run", "--rm", "-i",
         "-v", "/path/to/data:/app/data",
-        "-e", "GCP_CREDS_PATH=/secrets/gcp_creds.json",
+        "-e", "GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_creds.json",
         "-v", "~/.secrets/gcp_creds.json:/secrets/gcp_creds.json",
         "ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest",
         "python", "-m", "analyst_toolkit.mcp_server.server", "--stdio"
@@ -466,10 +460,13 @@ In your FridAI `remote_manager` config, point to the running server:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GCP_CREDS_PATH` | For GCS | — | Host path to service account JSON key |
+| `GCP_CREDS_PATH` | For compose + GCS | — | Host path to service account JSON key (compose maps this to `GOOGLE_APPLICATION_CREDENTIALS`) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | For direct docker run + GCS | — | In-container path to service account JSON key |
 | `ANALYST_REPORT_BUCKET` | No | _(unset — local mode)_ | GCS bucket for HTML/XLSX/plot upload, e.g. `gs://my-bucket` |
 | `ANALYST_REPORT_PREFIX` | No | `analyst_toolkit/reports` | Blob path prefix within the bucket |
 | `ANALYST_MCP_PORT` | No | `8001` | Override the server port |
+| `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | No | `8.0` | Timeout for MCP `resources/list` and `resources/read` filesystem work |
+| `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
 

@@ -20,3 +20,10 @@ export ANALYST_REPORT_BUCKET=gs://your-bucket-name
 # Blob path prefix within the bucket.
 # Reports land at: {bucket}/{prefix}/{session_ts}/{run_id}/{module}/
 export ANALYST_REPORT_PREFIX=analyst_toolkit/reports
+
+# --- MCP Resource/Template Timeout Guards ---
+# Timeout (seconds) for resources/list and resources/read filesystem operations.
+export ANALYST_MCP_RESOURCE_TIMEOUT_SEC=8
+
+# Timeout (seconds) for cockpit template loading calls.
+export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8
