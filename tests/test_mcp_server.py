@@ -108,6 +108,47 @@ def test_rpc_user_quickstart_tool():
     assert result["trace_id"]
 
 
+def test_rpc_get_config_schema_supports_final_audit():
+    """Verify get_config_schema returns final_audit schema."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "tools/call",
+        "params": {"name": "get_config_schema", "arguments": {"module_name": "final_audit"}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["module"] == "final_audit"
+    props = result["schema"]["properties"]
+    assert "certification" in props
+    cert_props = props["certification"]["$ref"]
+    assert cert_props
+
+
+def test_rpc_get_config_schema_outliers_matches_runtime_contract_paths():
+    """Verify outliers schema exposes canonical outlier_detection.detection_specs path."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "method": "tools/call",
+        "params": {"name": "get_config_schema", "arguments": {"module_name": "outliers"}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["module"] == "outliers"
+    props = result["schema"]["properties"]
+    assert "outlier_detection" in props
+    outlier_ref = props["outlier_detection"]["$ref"]
+    assert outlier_ref.endswith("OutlierDetectionConfig")
+    defs = result["schema"]["$defs"]
+    detection_props = defs["OutlierDetectionConfig"]["properties"]
+    assert "detection_specs" in detection_props
+
+
 def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure():
     """
     Verify tool runtime failures are normalized to structured status=error payloads.
