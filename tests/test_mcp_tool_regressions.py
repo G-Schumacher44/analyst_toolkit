@@ -8,6 +8,7 @@ import analyst_toolkit.mcp_server.tools.diagnostics as diagnostics_tool
 import analyst_toolkit.mcp_server.tools.duplicates as duplicates_tool
 import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
+import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
 
 
@@ -150,3 +151,77 @@ async def test_toolkit_infer_configs_includes_apply_next_actions(monkeypatch, mo
     assert "normalization" in tools
     assert "validation" in tools
     assert "get_capability_catalog" in tools
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
+    """
+    Contract test: infer_configs YAML output can be passed directly into module tools.
+    """
+    df = pd.DataFrame({"id": [1, 2], "name": ["alice", "bob"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "normalization": (
+                "normalization:\n"
+                "  rules:\n"
+                "    standardize_text_columns: [name]\n"
+            ),
+            "validation": (
+                "validation:\n"
+                "  rules:\n"
+                "    expected_columns: [id, name]\n"
+            ),
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    inferred = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_roundtrip",
+        modules=["normalization", "validation"],
+    )
+    assert inferred["status"] == "pass"
+    assert "normalization" in inferred["configs"]
+    assert "validation" in inferred["configs"]
+
+    mocker.patch.object(normalization_tool, "load_input", return_value=df)
+    mocker.patch.object(normalization_tool, "apply_normalization", return_value=(df, None, {}))
+    mocker.patch.object(normalization_tool, "run_normalization_pipeline", return_value=df)
+    mocker.patch.object(normalization_tool, "save_to_session", return_value="sess_roundtrip")
+    mocker.patch.object(normalization_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(normalization_tool, "save_output", return_value="gs://dummy/norm.csv")
+    mocker.patch.object(normalization_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(normalization_tool, "should_export_html", return_value=False)
+
+    norm_result = await normalization_tool._toolkit_normalization(
+        session_id="sess_roundtrip",
+        run_id="run_roundtrip",
+        config={"normalization": inferred["configs"]["normalization"]},
+    )
+    assert norm_result["status"] == "pass"
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(validation_tool, "save_to_session", return_value="sess_roundtrip")
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/val.csv")
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=df)
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(validation_tool, "should_export_html", return_value=False)
+    mocker.patch.object(
+        validation_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True}},
+    )
+
+    val_result = await validation_tool._toolkit_validation(
+        session_id="sess_roundtrip",
+        run_id="run_roundtrip",
+        config={"validation": inferred["configs"]["validation"]},
+    )
+    assert val_result["status"] == "pass"
