@@ -1,7 +1,10 @@
 """MCP tool: toolkit_auto_heal — infer and apply cleaning rules in one go."""
 
+import asyncio
+
 import yaml
 
+from analyst_toolkit.mcp_server.job_state import JobStore
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     default_run_id,
@@ -12,7 +15,7 @@ from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_config
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
 
 
-async def _toolkit_auto_heal(
+async def _run_auto_heal_pipeline(
     gcs_path: str | None = None,
     session_id: str | None = None,
     run_id: str | None = None,
@@ -114,6 +117,85 @@ async def _toolkit_auto_heal(
     return res
 
 
+async def _auto_heal_worker(
+    job_id: str,
+    gcs_path: str | None,
+    session_id: str | None,
+    run_id: str,
+):
+    JobStore.mark_running(job_id)
+    try:
+        result = await _run_auto_heal_pipeline(
+            gcs_path=gcs_path,
+            session_id=session_id,
+            run_id=run_id,
+        )
+        JobStore.mark_succeeded(job_id, result=result)
+    except Exception as exc:
+        JobStore.mark_failed(
+            job_id,
+            {
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            },
+        )
+
+
+async def _toolkit_auto_heal(
+    gcs_path: str | None = None,
+    session_id: str | None = None,
+    run_id: str | None = None,
+    async_mode: bool = False,
+) -> dict:
+    """
+    Run inference + healing in sync mode (default) or queue a background async job.
+    """
+    run_id = run_id or default_run_id()
+
+    if async_mode:
+        job_id = JobStore.create(
+            module="auto_heal",
+            run_id=run_id,
+            inputs={
+                "gcs_path": gcs_path,
+                "session_id": session_id,
+                "run_id": run_id,
+            },
+        )
+        try:
+            asyncio.create_task(_auto_heal_worker(job_id, gcs_path, session_id, run_id))
+        except Exception as exc:
+            JobStore.mark_failed(
+                job_id,
+                {
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            )
+            return {
+                "status": "error",
+                "module": "auto_heal",
+                "run_id": run_id,
+                "job_id": job_id,
+                "message": "Failed to start async auto_heal job.",
+            }
+
+        return {
+            "status": "accepted",
+            "module": "auto_heal",
+            "run_id": run_id,
+            "job_id": job_id,
+            "summary": {"state": "queued"},
+            "message": "Auto-heal job accepted. Poll get_job_status(job_id).",
+        }
+
+    return await _run_auto_heal_pipeline(
+        gcs_path=gcs_path,
+        session_id=session_id,
+        run_id=run_id,
+    )
+
+
 _INPUT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -128,6 +210,11 @@ _INPUT_SCHEMA = {
         "run_id": {
             "type": "string",
             "description": "Optional run identifier.",
+        },
+        "async_mode": {
+            "type": "boolean",
+            "description": "If true, queue background execution and return job_id immediately.",
+            "default": False,
         },
     },
     "anyOf": [

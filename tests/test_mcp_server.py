@@ -53,6 +53,8 @@ def test_rpc_tools_list():
     assert "get_user_quickstart" in tool_names
     assert "get_capability_catalog" in tool_names
     assert "preflight_config" in tool_names
+    assert "get_job_status" in tool_names
+    assert "list_jobs" in tool_names
     assert "get_cockpit_help" not in tool_names
     assert "get_agent_instructions" not in tool_names
 
