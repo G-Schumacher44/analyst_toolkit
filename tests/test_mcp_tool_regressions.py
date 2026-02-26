@@ -164,16 +164,8 @@ async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
 
     def fake_infer_configs(**kwargs):
         return {
-            "normalization": (
-                "normalization:\n"
-                "  rules:\n"
-                "    standardize_text_columns: [name]\n"
-            ),
-            "validation": (
-                "validation:\n"
-                "  rules:\n"
-                "    expected_columns: [id, name]\n"
-            ),
+            "normalization": ("normalization:\n  rules:\n    standardize_text_columns: [name]\n"),
+            "validation": ("validation:\n  rules:\n    expected_columns: [id, name]\n"),
         }
 
     infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")

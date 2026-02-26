@@ -134,9 +134,7 @@ def test_rpc_user_quickstart_tool():
     assert "plotting" in result["content"]["markdown"].lower()
     assert "machine_guide" in result
     assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
-    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == [
-        "gcs_path|session_id"
-    ]
+    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == ["gcs_path|session_id"]
     assert len(result["quick_actions"]) >= 2
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])

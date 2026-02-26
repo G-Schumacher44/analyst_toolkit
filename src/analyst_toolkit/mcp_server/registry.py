@@ -22,6 +22,7 @@ def register_tool(name: str, fn, description: str, input_schema: dict) -> None:
     """
     Register an async callable as an MCP tool.
     """
+
     async def _wrapped_fn(**kwargs):
         trace_id = new_trace_id()
         try:

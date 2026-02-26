@@ -166,8 +166,7 @@ class FinalAuditConfig(BaseModel):
             ),
         ),
         description=(
-            "Certification block. Canonical rules path: "
-            "certification.schema_validation.rules.*"
+            "Certification block. Canonical rules path: certification.schema_validation.rules.*"
         ),
     )
     settings: Dict[str, Any] = Field(

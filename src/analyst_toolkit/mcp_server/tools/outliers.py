@@ -44,13 +44,9 @@ def _normalize_outliers_config(base_cfg: dict) -> dict:
 
     if isinstance(method, str) and method in {"iqr", "zscore"}:
         spec: dict[str, object] = {"method": method}
-        if method == "iqr" and isinstance(
-            normalized.get("iqr_multiplier"), (int, float)
-        ):
+        if method == "iqr" and isinstance(normalized.get("iqr_multiplier"), (int, float)):
             spec["iqr_multiplier"] = float(normalized["iqr_multiplier"])
-        if method == "zscore" and isinstance(
-            normalized.get("zscore_threshold"), (int, float)
-        ):
+        if method == "zscore" and isinstance(normalized.get("zscore_threshold"), (int, float)):
             spec["zscore_threshold"] = float(normalized["zscore_threshold"])
 
         if isinstance(columns, list) and columns:
