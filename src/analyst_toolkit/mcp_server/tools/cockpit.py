@@ -591,9 +591,12 @@ async def _toolkit_get_run_history(
     failures_only: bool = False,
     latest_errors: bool = False,
     latest_status_by_module: bool = False,
+    limit: int | None = None,
+    summary_only: bool = False,
 ) -> dict:
     """Returns the 'Prescription & Healing Ledger'."""
     history = get_run_history(run_id, session_id=session_id)
+    total_history_count = len(history)
 
     if failures_only:
         history = [
@@ -602,6 +605,9 @@ async def _toolkit_get_run_history(
             if entry.get("status") in {"fail", "error"}
             or bool(entry.get("summary", {}).get("passed") is False)
         ]
+
+    if isinstance(limit, int) and limit > 0:
+        history = history[-limit:]
 
     latest_errors_payload: list[dict[str, Any]] = []
     if latest_errors:
@@ -624,6 +630,8 @@ async def _toolkit_get_run_history(
             }
         latest_status_payload = by_module
 
+    ledger = [_history_summary(entry) for entry in history] if summary_only else history
+
     return {
         "status": "pass",
         "run_id": run_id,
@@ -632,11 +640,23 @@ async def _toolkit_get_run_history(
             "failures_only": failures_only,
             "latest_errors": latest_errors,
             "latest_status_by_module": latest_status_by_module,
+            "limit": limit if isinstance(limit, int) and limit > 0 else None,
+            "summary_only": bool(summary_only),
         },
-        "history_count": len(history),
-        "ledger": history,
+        "history_count": len(ledger),
+        "total_history_count": total_history_count,
+        "ledger": ledger,
         "latest_errors": latest_errors_payload,
         "latest_status_by_module": latest_status_payload,
+    }
+
+
+def _history_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "module": entry.get("module"),
+        "status": entry.get("status"),
+        "timestamp": entry.get("timestamp"),
+        "summary": entry.get("summary", {}),
     }
 
 
@@ -752,6 +772,16 @@ register_tool(
             "latest_status_by_module": {
                 "type": "boolean",
                 "description": "If true, include the most recent status per module.",
+                "default": False,
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Optional max number of most recent ledger entries to return.",
+                "minimum": 1,
+            },
+            "summary_only": {
+                "type": "boolean",
+                "description": "If true, return a compact ledger (module/status/timestamp/summary).",
                 "default": False,
             },
         },
