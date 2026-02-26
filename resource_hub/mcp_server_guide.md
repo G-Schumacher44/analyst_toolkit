@@ -75,6 +75,7 @@ curl http://localhost:8001/health | python3 -m json.tool
     "diagnostics", "validation", "outliers", "normalization",
     "duplicates", "imputation", "infer_configs", "auto_heal",
     "drift_detection", "get_config_schema", "preflight_config", "get_golden_templates",
+    "get_job_status", "list_jobs",
     "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
     "get_run_history", "get_data_health_report"
   ]
@@ -108,6 +109,8 @@ curl http://localhost:8001/health | python3 -m json.tool
 | `drift_detection` | Compares two datasets for schema and statistical drift |
 | `get_config_schema` | Returns the JSON Schema for any module's config |
 | `preflight_config` | Normalizes a candidate config and returns effective runtime shape before execution |
+| `get_job_status` | Poll status/result for async jobs (`job_id`) |
+| `list_jobs` | List recent async jobs and optionally filter by state |
 
 ### Cockpit Tools
 
@@ -292,6 +295,40 @@ curl -X POST http://localhost:8001/rpc \
         "gcs_path": "data/raw/file.csv",
         "run_id": "heal_001"
       }
+    }
+  }'
+```
+
+For long-running data, queue async execution and poll status:
+
+```bash
+# Queue
+curl -X POST http://localhost:8001/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 41,
+    "method": "tools/call",
+    "params": {
+      "name": "auto_heal",
+      "arguments": {
+        "gcs_path": "gs://bucket/path.csv",
+        "run_id": "auto_heal_001",
+        "async_mode": true
+      }
+    }
+  }'
+
+# Poll
+curl -X POST http://localhost:8001/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 42,
+    "method": "tools/call",
+    "params": {
+      "name": "get_job_status",
+      "arguments": {"job_id": "job_xxxxxxxx"}
     }
   }'
 ```

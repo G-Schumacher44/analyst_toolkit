@@ -4,6 +4,7 @@ import types
 import pandas as pd
 import pytest
 
+import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_tool
 import analyst_toolkit.mcp_server.tools.diagnostics as diagnostics_tool
 import analyst_toolkit.mcp_server.tools.duplicates as duplicates_tool
 import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
@@ -225,3 +226,35 @@ async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
         config={"validation": inferred["configs"]["validation"]},
     )
     assert val_result["status"] == "pass"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_auto_heal_async_mode_returns_job_id_and_queues(mocker):
+    auto_heal_tool.JobStore.clear()
+
+    captured = {}
+
+    def fake_create_task(coro):
+        captured["coro"] = coro
+        return object()
+
+    mocker.patch.object(auto_heal_tool.asyncio, "create_task", side_effect=fake_create_task)
+
+    result = await auto_heal_tool._toolkit_auto_heal(
+        gcs_path="gs://bucket/path.csv",
+        run_id="auto_heal_async_test",
+        async_mode=True,
+    )
+
+    assert result["status"] == "accepted"
+    assert result["module"] == "auto_heal"
+    assert isinstance(result["job_id"], str)
+
+    job = auto_heal_tool.JobStore.get(result["job_id"])
+    assert job is not None
+    assert job["state"] == "queued"
+
+    # Close captured coroutine to avoid un-awaited coroutine warnings in tests.
+    coro = captured.get("coro")
+    if coro is not None:
+        coro.close()
