@@ -4,6 +4,7 @@ import os
 import tempfile
 
 from analyst_toolkit.mcp_server.io import load_input, save_to_session
+from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 
 
 async def _toolkit_infer_configs(
@@ -67,12 +68,55 @@ async def _toolkit_infer_configs(
         if temp_file:
             os.unlink(temp_file.name)
 
-    return {
-        "status": "pass",
-        "module": "infer_configs",
-        "session_id": session_id,
-        "configs": configs,
-    }
+    module_order = [
+        "normalization",
+        "duplicates",
+        "outliers",
+        "imputation",
+        "validation",
+        "final_audit",
+    ]
+    apply_actions = [
+        next_action(
+            module,
+            f"Apply inferred config for {module}.",
+            {
+                "session_id": session_id,
+                "run_id": "<set_run_id>",
+                "config": f"<configs.{module}>",
+            },
+        )
+        for module in module_order
+        if module in configs
+    ]
+
+    capability_action = next_action(
+        "get_capability_catalog",
+        "Cross-check inferred YAML paths against supported capability knobs.",
+        {},
+    )
+
+    if not apply_actions:
+        apply_actions = [
+            next_action(
+                "get_capability_catalog",
+                "No executable module configs were inferred; review available knobs manually.",
+                {},
+            )
+        ]
+        next_steps = apply_actions
+    else:
+        next_steps = apply_actions + [capability_action]
+
+    return with_next_actions(
+        {
+            "status": "pass",
+            "module": "infer_configs",
+            "session_id": session_id,
+            "configs": configs,
+        },
+        next_steps,
+    )
 
 
 _INPUT_SCHEMA = {

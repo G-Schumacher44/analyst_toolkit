@@ -200,10 +200,44 @@ def should_export_html(config: dict) -> bool:
 
 def save_output(df: pd.DataFrame, path: str) -> str:
     if path.startswith("gs://"):
-        if path.endswith(".parquet"):
-            df.to_parquet(path, index=False)
-        else:
-            df.to_csv(path, index=False)
+        # Write to a local temp file first, then upload via google-cloud-storage.
+        # This avoids filesystem-layer overwrite flows that may require delete perms.
+        suffix = ".parquet" if path.endswith(".parquet") else ".csv"
+        content_type = "application/octet-stream" if suffix == ".parquet" else "text/csv"
+
+        tmp_path = ""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp_path = tmp.name
+            if suffix == ".parquet":
+                df.to_parquet(tmp_path, index=False)
+            else:
+                df.to_csv(tmp_path, index=False)
+
+            try:
+                from google.cloud import storage
+
+                stripped = path.removeprefix("gs://")
+                bucket_name, _, blob_path = stripped.partition("/")
+                if not bucket_name or not blob_path:
+                    raise ValueError(f"Invalid GCS path: {path}")
+
+                client = storage.Client()
+                bucket = client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                blob.upload_from_filename(tmp_path, content_type=content_type)
+            except ImportError:
+                # Backward-compatible fallback for environments using gcsfs-style paths.
+                if suffix == ".parquet":
+                    df.to_parquet(path, index=False)
+                else:
+                    df.to_csv(path, index=False)
+        finally:
+            if tmp_path:
+                try:
+                    Path(tmp_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
         return path
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)

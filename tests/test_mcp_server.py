@@ -85,6 +85,37 @@ def test_rpc_capability_catalog_tool():
     assert "outlier_detection.plotting.run" in plotting_control["example_paths"]
 
 
+def test_rpc_capability_catalog_filters_and_compact():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 32,
+        "method": "tools/call",
+        "params": {
+            "name": "get_capability_catalog",
+            "arguments": {
+                "module": "normalization",
+                "search": "fuzzy",
+                "path_prefix": "rules.fuzzy_matching",
+                "compact": True,
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert "global_controls" not in result
+    assert "highlight_examples" not in result
+    assert result["summary"]["filters_applied"]["module"] == "normalization"
+    assert result["summary"]["filters_applied"]["compact"] is True
+    assert len(result["modules"]) == 1
+    assert result["modules"][0]["tool"] == "normalization"
+    assert all(
+        knob["path"].startswith("rules.fuzzy_matching")
+        for knob in result["modules"][0]["key_knobs"]
+    )
+
+
 def test_rpc_user_quickstart_tool():
     """Verify user quickstart tool returns human-readable guide text."""
     payload = {
@@ -101,9 +132,146 @@ def test_rpc_user_quickstart_tool():
     assert result["content"]["title"] == "Analyst Toolkit Quickstart"
     assert "fuzzy matching" in result["content"]["markdown"].lower()
     assert "plotting" in result["content"]["markdown"].lower()
+    assert "machine_guide" in result
+    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
+    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == ["gcs_path|session_id"]
     assert len(result["quick_actions"]) >= 2
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
+    infer_quick = next(a for a in result["quick_actions"] if a["tool"] == "infer_configs")
+    assert infer_quick["arguments_schema_hint"]["required"] == ["gcs_path|session_id"]
+    assert isinstance(result.get("trace_id"), str)
+    assert result["trace_id"]
+
+
+def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 31,
+        "method": "tools/call",
+        "params": {"name": "get_agent_playbook", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    infer_step = next(
+        step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
+    )
+    assert infer_step["required_inputs"] == ["gcs_path|session_id"]
+
+
+def test_rpc_get_run_history_supports_summary_modes(mocker):
+    history = [
+        {
+            "module": "diagnostics",
+            "status": "pass",
+            "summary": {"passed": True, "row_count": 5},
+            "timestamp": "2026-02-25T00:00:00Z",
+        },
+        {
+            "module": "validation",
+            "status": "fail",
+            "summary": {"passed": False, "violations_found": ["schema_conformity"]},
+            "timestamp": "2026-02-25T00:01:00Z",
+        },
+        {
+            "module": "imputation",
+            "status": "warn",
+            "summary": {"nulls_filled": 4},
+            "timestamp": "2026-02-25T00:02:00Z",
+        },
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 33,
+        "method": "tools/call",
+        "params": {
+            "name": "get_run_history",
+            "arguments": {
+                "run_id": "run_b3",
+                "failures_only": True,
+                "latest_errors": True,
+                "latest_status_by_module": True,
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["filters"]["failures_only"] is True
+    assert result["history_count"] == 1
+    assert result["ledger"][0]["module"] == "validation"
+    assert len(result["latest_errors"]) == 1
+    assert result["latest_errors"][0]["module"] == "validation"
+    assert "validation" in result["latest_status_by_module"]
+    assert result["latest_status_by_module"]["validation"]["status"] == "fail"
+
+
+def test_rpc_get_config_schema_supports_final_audit():
+    """Verify get_config_schema returns final_audit schema."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "tools/call",
+        "params": {"name": "get_config_schema", "arguments": {"module_name": "final_audit"}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["module"] == "final_audit"
+    props = result["schema"]["properties"]
+    assert "certification" in props
+    cert_props = props["certification"]["$ref"]
+    assert cert_props
+
+
+def test_rpc_get_config_schema_outliers_matches_runtime_contract_paths():
+    """Verify outliers schema exposes canonical outlier_detection.detection_specs path."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "method": "tools/call",
+        "params": {"name": "get_config_schema", "arguments": {"module_name": "outliers"}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["module"] == "outliers"
+    props = result["schema"]["properties"]
+    assert "outlier_detection" in props
+    outlier_ref = props["outlier_detection"]["$ref"]
+    assert outlier_ref.endswith("OutlierDetectionConfig")
+    defs = result["schema"]["$defs"]
+    detection_props = defs["OutlierDetectionConfig"]["properties"]
+    assert "detection_specs" in detection_props
+
+
+def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure():
+    """
+    Verify tool runtime failures are normalized to structured status=error payloads.
+    """
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 28,
+        "method": "tools/call",
+        "params": {"name": "diagnostics", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["module"] == "diagnostics"
+    assert isinstance(result.get("trace_id"), str)
+    assert result["error"]["category"] == "internal"
+    assert result["error"]["code"] == "tool_execution_failed"
+    assert result["error"]["retryable"] is False
+    assert result["error"]["trace_id"] == result["trace_id"]
 
 
 def test_rpc_resources_list():
@@ -119,12 +287,22 @@ def test_rpc_resources_list():
 
 
 def test_rpc_resource_templates_list():
-    """Verify MCP resources/templates/list returns URI templates."""
+    """Verify MCP resources/templates/list is empty by default to avoid client duplication."""
     payload = {"jsonrpc": "2.0", "id": 23, "method": "resources/templates/list", "params": {}}
     response = client.post("/rpc", json=payload)
     assert response.status_code == 200
     result = response.json()["result"]
     assert "resourceTemplates" in result
+    assert result["resourceTemplates"] == []
+
+
+def test_rpc_resource_templates_list_when_enabled(monkeypatch):
+    """Verify MCP resources/templates/list returns URI templates when explicitly enabled."""
+    monkeypatch.setattr(server_module, "ADVERTISE_RESOURCE_TEMPLATES", True)
+    payload = {"jsonrpc": "2.0", "id": 35, "method": "resources/templates/list", "params": {}}
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
     template_uris = [t["uriTemplate"] for t in result["resourceTemplates"]]
     assert "analyst://templates/config/{name}_template.yaml" in template_uris
     assert "analyst://templates/golden/{name}.yaml" in template_uris
@@ -159,6 +337,9 @@ def test_rpc_resources_read_not_found():
     error = response.json()["error"]
     assert error["code"] == -32602
     assert "Resource not found" in error["message"]
+    assert error["data"]["error"]["code"] == "resource_not_found"
+    assert error["data"]["error"]["category"] == "io"
+    assert isinstance(error["data"]["error"]["trace_id"], str)
 
 
 def test_rpc_resources_list_timeout(mocker):
@@ -174,6 +355,9 @@ def test_rpc_resources_list_timeout(mocker):
     error = response.json()["error"]
     assert error["code"] == -32000
     assert "timed out" in error["message"].lower()
+    assert error["data"]["error"]["code"] == "resources_list_timeout"
+    assert error["data"]["error"]["retryable"] is True
+    assert isinstance(error["data"]["error"]["trace_id"], str)
 
 
 def test_rpc_resources_read_timeout(mocker):
@@ -194,6 +378,9 @@ def test_rpc_resources_read_timeout(mocker):
     error = response.json()["error"]
     assert error["code"] == -32000
     assert "timed out" in error["message"].lower()
+    assert error["data"]["error"]["code"] == "resource_read_timeout"
+    assert error["data"]["error"]["retryable"] is True
+    assert isinstance(error["data"]["error"]["trace_id"], str)
 
 
 @pytest.mark.asyncio
@@ -264,4 +451,8 @@ async def test_rpc_tool_invocation_structure(mocker):
     }
     response = client.post("/rpc", json=payload)
     assert response.status_code == 200
-    assert response.json()["result"] == mock_result
+    result = response.json()["result"]
+    assert result["status"] == mock_result["status"]
+    assert result["module"] == mock_result["module"]
+    assert result["summary"] == mock_result["summary"]
+    assert isinstance(result.get("trace_id"), str)

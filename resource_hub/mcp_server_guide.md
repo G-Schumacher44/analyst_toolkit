@@ -113,11 +113,11 @@ curl http://localhost:8001/health | python3 -m json.tool
 | Tool | Description |
 |---|---|
 | `get_data_health_report` | 0-100 health score (Completeness, Validity, Uniqueness, Consistency) |
-| `get_run_history` | Full "Healing Ledger" — every transformation made in a run |
+| `get_run_history` | Full "Healing Ledger" with optional summary filters (`failures_only`, `latest_errors`, `latest_status_by_module`) |
 | `get_golden_templates` | Returns example templates tuned for typical fraud/migration/compliance patterns |
 | `get_agent_playbook` | Structured JSON execution plan for client agents (ordered steps + gates) |
 | `get_user_quickstart` | Human quickstart payload for UI rendering (`content.format=markdown`, `content.markdown`, `quick_actions`) |
-| `get_capability_catalog` | Editable config knobs by module (includes fuzzy matching + plotting controls) |
+| `get_capability_catalog` | Editable config knobs by module (supports `module`, `search`, `path_prefix`, `compact` filters) |
 | `final_audit` | Final certification step — produces the Healing Certificate HTML report |
 
 </details>
@@ -154,6 +154,11 @@ Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a t
 A `run_id` ties all steps together in the Healing Ledger. Pass the same `run_id` across calls to build a full audit trail.
 
 > **Config structure note:** `infer_configs` returns YAML strings. Parse each one with `yaml.safe_load` and pass the resulting dict directly to the relevant tool. Never flatten nested keys — for normalization, `standardize_text_columns`, `coerce_dtypes`, etc. must stay nested inside `rules:` or the pipeline will skip all transformations.
+>
+> Canonical nested paths to preserve:
+> - Outliers: `outlier_detection.detection_specs.<column>.*`
+> - Validation: `validation.schema_validation.rules.*`
+> - Final audit certification: `final_audit.certification.schema_validation.rules.*`
 
 ---
 
@@ -190,7 +195,12 @@ curl -X POST http://localhost:8001/rpc \
   }'
 ```
 
-The server also advertises resource templates via `resources/templates/list`.
+By default, `resources/templates/list` returns an empty list so clients that render resources + templates together do not show duplicates.
+If your host needs URI templates explicitly, enable:
+
+```bash
+export ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES=true
+```
 
 ---
 
@@ -322,6 +332,31 @@ curl -X POST http://localhost:8001/rpc \
 
 ---
 
+### Capability Catalog (Filtered for Agent UX)
+
+Use filters to return only knobs relevant to the current agent task:
+
+```bash
+curl -X POST http://localhost:8001/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "tools/call",
+    "params": {
+      "name": "get_capability_catalog",
+      "arguments": {
+        "module": "normalization",
+        "search": "fuzzy",
+        "path_prefix": "rules.fuzzy_matching",
+        "compact": true
+      }
+    }
+  }'
+```
+
+---
+
 ### Drift Detection
 
 Compare a baseline dataset to a new one:
@@ -399,6 +434,17 @@ curl -X POST http://localhost:8001/rpc \
   }'
 ```
 
+For summary-oriented agent flows (less payload, faster triage), pass filters:
+
+```json
+{
+  "run_id": "audit_001",
+  "failures_only": true,
+  "latest_errors": true,
+  "latest_status_by_module": true
+}
+```
+
 </details>
 
 ---
@@ -466,6 +512,7 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_REPORT_PREFIX` | No | `analyst_toolkit/reports` | Blob path prefix within the bucket |
 | `ANALYST_MCP_PORT` | No | `8001` | Override the server port |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | No | `8.0` | Timeout for MCP `resources/list` and `resources/read` filesystem work |
+| `ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES` | No | `false` | If `true`, `resources/templates/list` returns URI templates (otherwise empty to avoid duplicate UI listings) |
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.

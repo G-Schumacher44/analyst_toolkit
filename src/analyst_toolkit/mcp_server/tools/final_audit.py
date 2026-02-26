@@ -21,6 +21,7 @@ from analyst_toolkit.mcp_server.io import (
     save_to_session,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -215,6 +216,21 @@ async def _toolkit_final_audit(
         "export_url": export_url,
         "warnings": warnings,
     }
+    res = with_next_actions(
+        res,
+        [
+            next_action(
+                "get_run_history",
+                "Review the full healing ledger and module summaries for this run.",
+                {"run_id": run_id, "session_id": session_id},
+            ),
+            next_action(
+                "get_data_health_report",
+                "Compute consolidated health score after certification.",
+                {"run_id": run_id, "session_id": session_id},
+            ),
+        ],
+    )
     append_to_run_history(run_id, res, session_id=session_id)
     return res
 

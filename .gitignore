@@ -122,3 +122,8 @@ pytest_cache/
 !resource_hub/config.zip
 .claude
 .claude/*
+
+# ===============================
+# Local Planning Notes (untracked)
+# ===============================
+local_plans/

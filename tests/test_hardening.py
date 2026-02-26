@@ -3,8 +3,10 @@ test_hardening.py — Unit tests for StateStore thread safety, coerce_config YAM
 check_upload warning surfacing, TTL eviction, and pipeline integration.
 """
 
+import sys
 import threading
 import time
+import types
 
 import pandas as pd
 import pytest
@@ -15,6 +17,7 @@ from analyst_toolkit.mcp_server.io import (
     check_upload,
     coerce_config,
     get_run_history,
+    save_output,
 )
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -203,6 +206,71 @@ def test_check_upload_accumulates_multiple_warnings():
     check_upload("", "report.html", warnings)
     check_upload("", "report.xlsx", warnings)
     assert len(warnings) == 2
+
+
+def _install_fake_google_storage(monkeypatch, calls: list):
+    class FakeBlob:
+        def __init__(self, name: str):
+            self.name = name
+
+        def upload_from_filename(self, filename: str, content_type: str | None = None):
+            calls.append(("upload", self.name, content_type, filename))
+
+    class FakeBucket:
+        def __init__(self, name: str):
+            self.name = name
+
+        def blob(self, blob_name: str):
+            calls.append(("blob", self.name, blob_name))
+            return FakeBlob(blob_name)
+
+    class FakeClient:
+        def bucket(self, bucket_name: str):
+            calls.append(("bucket", bucket_name))
+            return FakeBucket(bucket_name)
+
+    storage_mod = types.ModuleType("google.cloud.storage")
+    setattr(storage_mod, "Client", FakeClient)
+
+    cloud_mod = types.ModuleType("google.cloud")
+    setattr(cloud_mod, "storage", storage_mod)
+
+    google_mod = types.ModuleType("google")
+    setattr(google_mod, "cloud", cloud_mod)
+
+    monkeypatch.setitem(sys.modules, "google", google_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_mod)
+
+
+def test_save_output_gcs_uses_storage_upload(sample_df, monkeypatch):
+    calls: list = []
+    _install_fake_google_storage(monkeypatch, calls)
+
+    path = "gs://example-bucket/runs/run_1/imputation_output.csv"
+    out = save_output(sample_df, path)
+
+    assert out == path
+    assert ("bucket", "example-bucket") in calls
+    assert ("blob", "example-bucket", "runs/run_1/imputation_output.csv") in calls
+    uploads = [c for c in calls if c[0] == "upload"]
+    assert len(uploads) == 1
+    assert uploads[0][1] == "runs/run_1/imputation_output.csv"
+    assert uploads[0][2] == "text/csv"
+
+
+def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
+    calls: list = []
+    _install_fake_google_storage(monkeypatch, calls)
+
+    path = "gs://example-bucket/runs/shared_run/imputation_output.csv"
+    save_output(sample_df, path)
+    save_output(sample_df, path)
+
+    uploads = [c for c in calls if c[0] == "upload"]
+    assert len(uploads) == 2
+    assert uploads[0][1] == "runs/shared_run/imputation_output.csv"
+    assert uploads[1][1] == "runs/shared_run/imputation_output.csv"
 
 
 # ---------------------------------------------------------------------------

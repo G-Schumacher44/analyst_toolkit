@@ -6,7 +6,7 @@ from analyst_toolkit.mcp_server.config_models import CONFIG_MODELS
 async def _toolkit_get_config_schema(module_name: str) -> dict:
     """
     Return the JSON Schema for a specific module's configuration.
-    Valid modules: diagnostics, validation, normalization, imputation, outliers, duplicates.
+    Valid modules are derived from CONFIG_MODELS.
     """
     if module_name not in CONFIG_MODELS:
         return {

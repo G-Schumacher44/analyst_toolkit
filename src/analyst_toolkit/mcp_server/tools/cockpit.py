@@ -261,6 +261,85 @@ def _build_capability_catalog() -> dict[str, Any]:
     }
 
 
+def _filter_capability_catalog(
+    catalog: dict[str, Any],
+    module: str | None = None,
+    search: str | None = None,
+    path_prefix: str | None = None,
+    compact: bool = False,
+) -> dict[str, Any]:
+    """Apply optional filters to capability catalog output."""
+    modules = list(catalog.get("modules", []))
+    search_lc = (search or "").strip().lower()
+    prefix = (path_prefix or "").strip()
+
+    if module:
+        modules = [m for m in modules if m.get("tool") == module]
+
+    if prefix:
+        filtered: list[dict[str, Any]] = []
+        for m in modules:
+            knobs = [
+                k
+                for k in m.get("key_knobs", [])
+                if isinstance(k, dict) and str(k.get("path", "")).startswith(prefix)
+            ]
+            if knobs:
+                m2 = dict(m)
+                m2["key_knobs"] = knobs
+                filtered.append(m2)
+        modules = filtered
+
+    if search_lc:
+        filtered = []
+        for m in modules:
+            tool_name = str(m.get("tool", "")).lower()
+            template_path = str(m.get("template_path", "")).lower()
+            knobs = m.get("key_knobs", [])
+            matched_knobs = [
+                k
+                for k in knobs
+                if search_lc in str(k.get("path", "")).lower()
+                or search_lc in str(k.get("description", "")).lower()
+            ]
+            if search_lc in tool_name or search_lc in template_path or matched_knobs:
+                m2 = dict(m)
+                m2["key_knobs"] = matched_knobs if matched_knobs else knobs
+                filtered.append(m2)
+        modules = filtered
+
+    out = dict(catalog)
+    out["modules"] = modules
+    out["summary"] = {
+        **catalog.get("summary", {}),
+        "module_count": len(modules),
+        "filters_applied": {
+            "module": module or "",
+            "search": search or "",
+            "path_prefix": path_prefix or "",
+            "compact": bool(compact),
+        },
+    }
+
+    if compact:
+        out["modules"] = [
+            {
+                "tool": m.get("tool"),
+                "config_root": m.get("config_root"),
+                "key_knobs": [
+                    {"path": k.get("path"), "default": k.get("default")}
+                    for k in m.get("key_knobs", [])
+                ],
+            }
+            for m in modules
+        ]
+        out.pop("global_controls", None)
+        out.pop("highlight_examples", None)
+        out.pop("golden_templates", None)
+
+    return out
+
+
 async def _toolkit_get_user_quickstart() -> dict:
     """Returns a concise, human-readable guide for operating the toolkit."""
     guide = """
@@ -294,6 +373,46 @@ Use this to auto-correct typos while controlling aggressiveness via score cutoff
 
 Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
+    machine_guide = {
+        "ordered_steps": [
+            {
+                "step": 1,
+                "tool": "diagnostics",
+                "required_inputs": ["gcs_path|session_id", "run_id"],
+            },
+            {
+                "step": 2,
+                "tool": "infer_configs",
+                "required_inputs": ["gcs_path|session_id"],
+            },
+            {
+                "step": 3,
+                "tool_chain": [
+                    "normalization",
+                    "duplicates",
+                    "outliers",
+                    "imputation",
+                    "validation",
+                ],
+                "required_inputs": ["session_id", "run_id", "config"],
+            },
+            {
+                "step": 4,
+                "tool": "final_audit",
+                "required_inputs": ["session_id", "run_id"],
+            },
+        ],
+        "example_calls": [
+            {
+                "tool": "diagnostics",
+                "arguments": {"gcs_path": "gs://bucket/data.csv", "run_id": "run_001"},
+            },
+            {
+                "tool": "infer_configs",
+                "arguments": {"session_id": "<session_id_from_diagnostics>"},
+            },
+        ],
+    }
     return {
         "status": "pass",
         "content": {
@@ -301,6 +420,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             "title": "Analyst Toolkit Quickstart",
             "markdown": guide.strip(),
         },
+        "machine_guide": machine_guide,
         "quick_actions": [
             {
                 "label": "Run diagnostics",
@@ -310,7 +430,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             {
                 "label": "Infer configs",
                 "tool": "infer_configs",
-                "arguments_schema_hint": {"required": ["session_id"]},
+                "arguments_schema_hint": {"required": ["gcs_path|session_id"]},
             },
             {
                 "label": "Open capabilities",
@@ -350,7 +470,7 @@ async def _toolkit_get_agent_playbook() -> dict:
             {
                 "step": 3,
                 "tool": "infer_configs",
-                "required_inputs": ["session_id"],
+                "required_inputs": ["gcs_path|session_id"],
                 "outputs": ["configs (YAML strings by module)"],
                 "next": [4],
             },
@@ -410,12 +530,24 @@ async def _toolkit_get_agent_playbook() -> dict:
     }
 
 
-async def _toolkit_get_capability_catalog() -> dict:
+async def _toolkit_get_capability_catalog(
+    module: str | None = None,
+    search: str | None = None,
+    path_prefix: str | None = None,
+    compact: bool = False,
+) -> dict:
     """Returns user-editable configuration capabilities by module/template."""
     try:
-        return await asyncio.wait_for(
+        catalog = await asyncio.wait_for(
             asyncio.to_thread(_build_capability_catalog),
             timeout=TEMPLATE_IO_TIMEOUT_SEC,
+        )
+        return _filter_capability_catalog(
+            catalog,
+            module=module,
+            search=search,
+            path_prefix=path_prefix,
+            compact=compact,
         )
     except asyncio.TimeoutError:
         logger.error(
@@ -453,15 +585,58 @@ async def _toolkit_get_golden_templates() -> dict:
         }
 
 
-async def _toolkit_get_run_history(run_id: str, session_id: str | None = None) -> dict:
+async def _toolkit_get_run_history(
+    run_id: str,
+    session_id: str | None = None,
+    failures_only: bool = False,
+    latest_errors: bool = False,
+    latest_status_by_module: bool = False,
+) -> dict:
     """Returns the 'Prescription & Healing Ledger'."""
     history = get_run_history(run_id, session_id=session_id)
+
+    if failures_only:
+        history = [
+            entry
+            for entry in history
+            if entry.get("status") in {"fail", "error"}
+            or bool(entry.get("summary", {}).get("passed") is False)
+        ]
+
+    latest_errors_payload: list[dict[str, Any]] = []
+    if latest_errors:
+        latest_errors_payload = [
+            entry
+            for entry in reversed(history)
+            if entry.get("status") in {"fail", "error"}
+            or bool(entry.get("summary", {}).get("passed") is False)
+        ][:5]
+
+    latest_status_payload: dict[str, Any] = {}
+    if latest_status_by_module:
+        by_module: dict[str, dict[str, Any]] = {}
+        for entry in history:
+            module = str(entry.get("module", "unknown"))
+            by_module[module] = {
+                "status": entry.get("status", "unknown"),
+                "timestamp": entry.get("timestamp"),
+                "summary": entry.get("summary", {}),
+            }
+        latest_status_payload = by_module
+
     return {
         "status": "pass",
         "run_id": run_id,
         "session_id": session_id,
+        "filters": {
+            "failures_only": failures_only,
+            "latest_errors": latest_errors,
+            "latest_status_by_module": latest_status_by_module,
+        },
         "history_count": len(history),
         "ledger": history,
+        "latest_errors": latest_errors_payload,
+        "latest_status_by_module": latest_status_payload,
     }
 
 
@@ -521,7 +696,28 @@ register_tool(
     name="get_capability_catalog",
     fn=_toolkit_get_capability_catalog,
     description="Returns module capability knobs sourced from YAML templates, including defaults.",
-    input_schema={"type": "object", "properties": {}},
+    input_schema={
+        "type": "object",
+        "properties": {
+            "module": {
+                "type": "string",
+                "description": "Optional tool/module name filter (e.g., 'normalization').",
+            },
+            "search": {
+                "type": "string",
+                "description": "Optional case-insensitive text filter over knob paths/descriptions.",
+            },
+            "path_prefix": {
+                "type": "string",
+                "description": "Optional path prefix filter for knob paths.",
+            },
+            "compact": {
+                "type": "boolean",
+                "description": "If true, return a compact payload with minimal module fields.",
+                "default": False,
+            },
+        },
+    },
 )
 
 register_tool(
@@ -542,6 +738,21 @@ register_tool(
             "session_id": {
                 "type": "string",
                 "description": "Optional session scope. Recommended when reusing run_id values.",
+            },
+            "failures_only": {
+                "type": "boolean",
+                "description": "If true, only include failed/error history entries in ledger.",
+                "default": False,
+            },
+            "latest_errors": {
+                "type": "boolean",
+                "description": "If true, include up to 5 most recent failed/error entries.",
+                "default": False,
+            },
+            "latest_status_by_module": {
+                "type": "boolean",
+                "description": "If true, include the most recent status per module.",
+                "default": False,
             },
         },
         "required": ["run_id"],

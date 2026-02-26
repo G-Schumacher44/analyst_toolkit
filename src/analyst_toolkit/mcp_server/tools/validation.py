@@ -22,6 +22,7 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -168,6 +169,39 @@ async def _toolkit_validation(
         "export_url": export_url,
         "warnings": warnings,
     }
+    if passed:
+        next_steps = [
+            next_action(
+                "final_audit",
+                "Validation passed; run final certification and generate final artifacts.",
+                {"session_id": session_id, "run_id": run_id},
+            ),
+            next_action(
+                "get_run_history",
+                "Inspect module-level execution ledger for this run.",
+                {"run_id": run_id, "session_id": session_id},
+            ),
+        ]
+    else:
+        next_steps = [
+            next_action(
+                "infer_configs",
+                "Generate config updates to resolve validation failures.",
+                {"session_id": session_id, "modules": ["validation"]},
+            ),
+            next_action(
+                "get_capability_catalog",
+                "Review validation rule knobs and acceptable config paths.",
+                {},
+            ),
+            next_action(
+                "validation",
+                "Re-run validation after adjusting rules/config.",
+                {"session_id": session_id, "run_id": run_id},
+            ),
+        ]
+
+    res = with_next_actions(res, next_steps)
     append_to_run_history(run_id, res, session_id=session_id)
     return res
 
