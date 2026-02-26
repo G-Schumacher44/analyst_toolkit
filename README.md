@@ -61,6 +61,8 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - [📦 Config Templates](config/) — Full set of starter YAMLs for each module (in `config/`)
 - [📘 Usage Guide](resource_hub/usage_guide.md) — Running the toolkit via notebooks or CLI
 - [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) — Full breakdown of how each module is used in notebooks
+- [🤝 Contributing Guide](CONTRIBUTING.md) — Development workflow, quality gates, and PR expectations
+- [📝 Changelog](CHANGELOG.md) — Versioned, deterministic release notes
 
 ---
 
@@ -406,6 +408,17 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 ```
 
 </details>
+
+---
+
+## 🤝 Contributing & Support
+
+- [Contributing Guide](CONTRIBUTING.md) — setup, branch workflow, and quality gates
+- [Security Policy](SECURITY.md) — responsible vulnerability disclosure process
+- [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md)
+- [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request.md)
+- [Documentation Template](.github/ISSUE_TEMPLATE/documentation.md)
+- [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)
 
 ---
 
