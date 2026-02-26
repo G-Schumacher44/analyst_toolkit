@@ -206,6 +206,8 @@ def test_rpc_get_run_history_supports_summary_modes(mocker):
     result = response.json()["result"]
     assert result["status"] == "pass"
     assert result["filters"]["failures_only"] is True
+    assert result["filters"]["summary_only"] is True
+    assert result["filters"]["limit"] == 50
     assert result["history_count"] == 1
     assert result["ledger"][0]["module"] == "validation"
     assert len(result["latest_errors"]) == 1
@@ -318,6 +320,83 @@ def test_rpc_preflight_config_normalizes_outliers_shorthand():
     specs = result["effective_config"]["detection_specs"]
     assert specs["transaction_amount"]["method"] == "iqr"
     assert specs["frequency_24h"]["method"] == "iqr"
+
+
+def test_rpc_preflight_config_strict_fails_on_warnings():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 38,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "validation",
+                "strict": True,
+                "config": {
+                    "rules": {
+                        "schema_validation": {
+                            "rules": {
+                                "expected_columns": ["tag_id", "species"],
+                            }
+                        }
+                    }
+                },
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["summary"]["strict"] is True
+    assert result["warnings"]
+    assert "schema_validation" in result["warnings"][0]
+
+
+def test_rpc_preflight_config_strict_fails_on_unknown_keys():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 39,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "outliers",
+                "strict": True,
+                "config": {
+                    "method": "iqr",
+                    "columns": ["transaction_amount"],
+                    "unexpected_flag": True,
+                },
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["unknown_keys"] == ["unexpected_flag"]
+    assert result["summary"]["unknown_key_count"] == 1
+    assert any("Unknown top-level keys" in w for w in result["warnings"])
+
+
+def test_rpc_preflight_config_non_strict_warns_on_unknown_keys():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {"module_name": "normalization", "config": {"foo": 1}},
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["unknown_keys"] == ["foo"]
+    assert result["summary"]["unknown_key_count"] == 1
+    assert any("Unknown top-level keys" in w for w in result["warnings"])
 
 
 def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure():
@@ -477,6 +556,85 @@ async def test_toolkit_get_golden_templates_timeout(mocker):
     result = await cockpit_module._toolkit_get_golden_templates()
     assert result["status"] == "error"
     assert "timed out" in result["error"].lower()
+
+
+def test_rpc_get_run_history_limit_and_summary_only(mocker):
+    history = [
+        {
+            "module": "diagnostics",
+            "status": "pass",
+            "summary": {"row_count": 10},
+            "timestamp": "2026-02-25T00:00:00Z",
+            "artifact_url": "https://example.com/a",
+        },
+        {
+            "module": "normalization",
+            "status": "warn",
+            "summary": {"changes_made": 3},
+            "timestamp": "2026-02-25T00:01:00Z",
+            "artifact_url": "https://example.com/b",
+        },
+        {
+            "module": "validation",
+            "status": "fail",
+            "summary": {"passed": False},
+            "timestamp": "2026-02-25T00:02:00Z",
+            "artifact_url": "https://example.com/c",
+        },
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "method": "tools/call",
+        "params": {
+            "name": "get_run_history",
+            "arguments": {
+                "run_id": "run_b4",
+                "limit": 2,
+                "summary_only": True,
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["filters"]["limit"] == 2
+    assert result["filters"]["summary_only"] is True
+    assert result["total_history_count"] == 3
+    assert result["history_count"] == 2
+    assert [entry["module"] for entry in result["ledger"]] == ["normalization", "validation"]
+    assert all(
+        set(entry.keys()) == {"module", "status", "timestamp", "summary"}
+        for entry in result["ledger"]
+    )
+
+
+def test_rpc_get_run_history_defaults_to_compact_mode(mocker):
+    history = [
+        {"module": "diagnostics", "status": "pass", "summary": {"row_count": 1}, "timestamp": "t1"},
+        {"module": "validation", "status": "pass", "summary": {"passed": True}, "timestamp": "t2"},
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "tools/call",
+        "params": {"name": "get_run_history", "arguments": {"run_id": "run_defaults"}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["filters"]["summary_only"] is True
+    assert result["filters"]["limit"] == 50
+    assert result["history_count"] == 2
+    assert all(
+        set(entry.keys()) == {"module", "status", "timestamp", "summary"}
+        for entry in result["ledger"]
+    )
 
 
 def test_rpc_tool_not_found():

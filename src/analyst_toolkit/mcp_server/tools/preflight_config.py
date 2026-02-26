@@ -21,6 +21,58 @@ def _rules_path_hint(module_name: str) -> str:
     return mapping.get(module_name, "<module-specific>")
 
 
+def _allowed_keys(module_name: str) -> set[str]:
+    common = {"run", "logging", "input_path", "settings", "export_html"}
+    if module_name == "validation":
+        return common | {
+            "validation",
+            "rules",
+            "schema_validation",
+            "fail_on_error",
+        }
+    if module_name == "final_audit":
+        return common | {
+            "final_audit",
+            "raw_data_path",
+            "final_edits",
+            "certification",
+            "rules",
+            "disallowed_null_columns",
+            "fail_on_error",
+        }
+    if module_name == "outliers":
+        return common | {
+            "outlier_detection",
+            "detection_specs",
+            "exclude_columns",
+            "append_flags",
+            "plotting",
+            "export",
+            "checkpoint",
+            "method",
+            "columns",
+            "iqr_multiplier",
+            "zscore_threshold",
+        }
+    if module_name == "normalization":
+        return common | {"normalization", "rules"}
+    if module_name == "imputation":
+        return common | {"imputation", "rules"}
+    if module_name == "duplicates":
+        return common | {"duplicates", "subset_columns", "mode"}
+    if module_name == "diagnostics":
+        return common | {"diagnostics", "plotting", "max_plots", "profile"}
+    return set()
+
+
+def _unknown_keys(module_name: str, config: dict[str, Any]) -> list[str]:
+    allowed = _allowed_keys(module_name)
+    if not allowed:
+        return []
+    unknown = [k for k in config.keys() if k not in allowed]
+    return sorted(set(unknown))
+
+
 def _shape_warnings(module_name: str, config: dict[str, Any]) -> list[str]:
     warnings: list[str] = []
 
@@ -51,7 +103,11 @@ def _shape_warnings(module_name: str, config: dict[str, Any]) -> list[str]:
     return warnings
 
 
-async def _toolkit_preflight_config(module_name: str, config: dict | None = None) -> dict:
+async def _toolkit_preflight_config(
+    module_name: str,
+    config: dict | None = None,
+    strict: bool = False,
+) -> dict:
     """Normalize config input into the effective module config shape before execution."""
     if module_name not in CONFIG_MODELS:
         return {
@@ -67,7 +123,30 @@ async def _toolkit_preflight_config(module_name: str, config: dict | None = None
     root_key = "outlier_detection" if module_name == "outliers" else module_name
 
     warnings = _shape_warnings(module_name, raw_config)
+    unknown_keys = _unknown_keys(module_name, raw_config)
+    if unknown_keys:
+        warnings.append(
+            "Unknown top-level keys detected and ignored by runtime: " + ", ".join(unknown_keys)
+        )
     changed = coerced != raw_config or normalized != coerced
+
+    if strict and (warnings or unknown_keys):
+        return {
+            "status": "error",
+            "module": module_name,
+            "summary": {
+                "normalized": True,
+                "input_changed": changed,
+                "effective_rules_path": _rules_path_hint(module_name),
+                "strict": True,
+                "unknown_key_count": len(unknown_keys),
+            },
+            "warnings": warnings,
+            "unknown_keys": unknown_keys,
+            "message": "Strict preflight failed due to config warnings or unknown keys.",
+            "effective_config": normalized,
+            "canonical_config": {root_key: normalized},
+        }
 
     return {
         "status": "pass",
@@ -76,8 +155,11 @@ async def _toolkit_preflight_config(module_name: str, config: dict | None = None
             "normalized": True,
             "input_changed": changed,
             "effective_rules_path": _rules_path_hint(module_name),
+            "strict": bool(strict),
+            "unknown_key_count": len(unknown_keys),
         },
         "warnings": warnings,
+        "unknown_keys": unknown_keys,
         "effective_config": normalized,
         "canonical_config": {root_key: normalized},
     }
@@ -95,6 +177,11 @@ _INPUT_SCHEMA = {
             "type": "object",
             "description": "Raw config candidate to normalize into the effective module shape.",
             "default": {},
+        },
+        "strict": {
+            "type": "boolean",
+            "description": "If true, fail when warnings or unknown top-level keys are detected.",
+            "default": False,
         },
     },
     "required": ["module_name"],

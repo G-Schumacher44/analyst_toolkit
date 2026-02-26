@@ -27,7 +27,27 @@ def _env_float(name: str, default: float) -> float:
     return parsed if parsed > 0 else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
 TEMPLATE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC", 8.0)
+RUN_HISTORY_DEFAULT_SUMMARY_ONLY = _env_bool("ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT", True)
+RUN_HISTORY_DEFAULT_LIMIT = _env_int("ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT", 50)
 
 _TEMPLATE_SPECS = [
     ("diagnostics", "diagnostics", "config/diag_config_template.yaml"),
@@ -591,9 +611,12 @@ async def _toolkit_get_run_history(
     failures_only: bool = False,
     latest_errors: bool = False,
     latest_status_by_module: bool = False,
+    limit: int | None = None,
+    summary_only: bool | None = None,
 ) -> dict:
     """Returns the 'Prescription & Healing Ledger'."""
     history = get_run_history(run_id, session_id=session_id)
+    total_history_count = len(history)
 
     if failures_only:
         history = [
@@ -602,6 +625,15 @@ async def _toolkit_get_run_history(
             if entry.get("status") in {"fail", "error"}
             or bool(entry.get("summary", {}).get("passed") is False)
         ]
+
+    summary_only_effective = (
+        bool(summary_only) if isinstance(summary_only, bool) else RUN_HISTORY_DEFAULT_SUMMARY_ONLY
+    )
+    limit_effective = limit if isinstance(limit, int) and limit > 0 else None
+    if limit_effective is None and summary_only_effective:
+        limit_effective = RUN_HISTORY_DEFAULT_LIMIT
+    if isinstance(limit_effective, int) and limit_effective > 0:
+        history = history[-limit_effective:]
 
     latest_errors_payload: list[dict[str, Any]] = []
     if latest_errors:
@@ -624,6 +656,8 @@ async def _toolkit_get_run_history(
             }
         latest_status_payload = by_module
 
+    ledger = [_history_summary(entry) for entry in history] if summary_only_effective else history
+
     return {
         "status": "pass",
         "run_id": run_id,
@@ -632,11 +666,27 @@ async def _toolkit_get_run_history(
             "failures_only": failures_only,
             "latest_errors": latest_errors,
             "latest_status_by_module": latest_status_by_module,
+            "limit": limit_effective,
+            "summary_only": summary_only_effective,
+            "defaults": {
+                "summary_only_default": RUN_HISTORY_DEFAULT_SUMMARY_ONLY,
+                "limit_default": RUN_HISTORY_DEFAULT_LIMIT,
+            },
         },
-        "history_count": len(history),
-        "ledger": history,
+        "history_count": len(ledger),
+        "total_history_count": total_history_count,
+        "ledger": ledger,
         "latest_errors": latest_errors_payload,
         "latest_status_by_module": latest_status_payload,
+    }
+
+
+def _history_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "module": entry.get("module"),
+        "status": entry.get("status"),
+        "timestamp": entry.get("timestamp"),
+        "summary": entry.get("summary", {}),
     }
 
 
@@ -753,6 +803,16 @@ register_tool(
                 "type": "boolean",
                 "description": "If true, include the most recent status per module.",
                 "default": False,
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Optional max number of most recent ledger entries to return.",
+                "minimum": 1,
+            },
+            "summary_only": {
+                "type": "boolean",
+                "description": "If true, return a compact ledger (module/status/timestamp/summary).",
+                "default": True,
             },
         },
         "required": ["run_id"],

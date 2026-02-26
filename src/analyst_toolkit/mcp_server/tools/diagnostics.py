@@ -5,12 +5,13 @@ from pathlib import Path
 from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    build_artifact_contract,
     check_upload,
     coerce_config,
-    default_run_id,
+    fold_status_with_artifacts,
     generate_default_export_path,
-    get_session_run_id,
     load_input,
+    resolve_run_context,
     save_output,
     save_to_session,
     should_export_html,
@@ -28,9 +29,7 @@ async def _toolkit_diagnostics(
     **kwargs,
 ) -> dict:
     """Run data profiling and structural diagnostics on the dataset."""
-    if not run_id and session_id:
-        run_id = get_session_run_id(session_id)
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "diagnostics")
     df = load_input(gcs_path, session_id=session_id)
@@ -79,6 +78,7 @@ async def _toolkit_diagnostics(
     plot_urls = {}
 
     warnings: list = []
+    warnings.extend(lifecycle["warnings"])
 
     if should_export_html(config):
         artifact_path = f"exports/reports/diagnostics/{run_id}_diagnostics_report.html"
@@ -115,8 +115,26 @@ async def _toolkit_diagnostics(
                         if url:
                             plot_urls[plot_file.name] = url
 
+    artifact_contract = build_artifact_contract(
+        export_url,
+        artifact_url=artifact_url,
+        xlsx_url=xlsx_url,
+        plot_urls=plot_urls,
+        expect_html=should_export_html(config),
+        expect_xlsx=should_export_html(config),
+        expect_plots=run_plots and should_export_html(config),
+        required_html=should_export_html(config),
+        required_xlsx=False,
+    )
+    warnings.extend(artifact_contract["artifact_warnings"])
+
+    base_status = "warn" if warnings else "pass"
+    status = fold_status_with_artifacts(
+        base_status, artifact_contract["missing_required_artifacts"]
+    )
+
     res = {
-        "status": "warn" if warnings else "pass",
+        "status": status,
         "module": "diagnostics",
         "run_id": run_id,
         "session_id": session_id,
@@ -131,6 +149,11 @@ async def _toolkit_diagnostics(
         "plot_urls": plot_urls,
         "export_url": export_url,
         "warnings": warnings,
+        "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
+        "artifact_matrix": artifact_contract["artifact_matrix"],
+        "expected_artifacts": artifact_contract["expected_artifacts"],
+        "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
+        "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
     res = with_next_actions(
         res,

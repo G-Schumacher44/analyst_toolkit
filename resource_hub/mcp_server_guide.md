@@ -108,16 +108,16 @@ curl http://localhost:8001/health | python3 -m json.tool
 | `auto_heal` | One-click: runs `infer_configs` → `normalization` → `imputation` |
 | `drift_detection` | Compares two datasets for schema and statistical drift |
 | `get_config_schema` | Returns the JSON Schema for any module's config |
-| `preflight_config` | Normalizes a candidate config and returns effective runtime shape before execution |
+| `preflight_config` | Normalizes candidate config and returns effective runtime shape; supports `strict=true` to fail on warnings/unknown top-level keys |
 | `get_job_status` | Poll status/result for async jobs (`job_id`) |
-| `list_jobs` | List recent async jobs and optionally filter by state |
+| `list_jobs` | List recent async jobs and optionally filter by state (job state persists across restarts) |
 
 ### Cockpit Tools
 
 | Tool | Description |
 |---|---|
 | `get_data_health_report` | 0-100 health score (Completeness, Validity, Uniqueness, Consistency) |
-| `get_run_history` | Full "Healing Ledger" with optional summary filters (`failures_only`, `latest_errors`, `latest_status_by_module`) |
+| `get_run_history` | Full "Healing Ledger" with filters (`failures_only`, `latest_errors`, `latest_status_by_module`) and payload controls (`limit`, `summary_only`) |
 | `get_golden_templates` | Returns example templates tuned for typical fraud/migration/compliance patterns |
 | `get_agent_playbook` | Structured JSON execution plan for client agents (ordered steps + gates) |
 | `get_user_quickstart` | Human quickstart payload for UI rendering (`content.format=markdown`, `content.markdown`, `quick_actions`) |
@@ -156,6 +156,10 @@ Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a t
 ```
 
 A `run_id` ties all steps together in the Healing Ledger. Pass the same `run_id` across calls to build a full audit trail.
+
+If a tool call provides both `session_id` and `run_id`, the server enforces lifecycle consistency by default:
+- If the session already has a bound run id and it differs from the requested run id, the tool coerces to the session run id and emits a warning.
+- To allow explicit overrides, set `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1`.
 
 > **Config structure note:** `infer_configs` returns YAML strings. Parse each one with `yaml.safe_load` and pass the resulting dict directly to the relevant tool. Never flatten nested keys — for normalization, `standardize_text_columns`, `coerce_dtypes`, etc. must stay nested inside `rules:` or the pipeline will skip all transformations.
 >
@@ -479,9 +483,15 @@ For summary-oriented agent flows (less payload, faster triage), pass filters:
   "run_id": "audit_001",
   "failures_only": true,
   "latest_errors": true,
-  "latest_status_by_module": true
+  "latest_status_by_module": true,
+  "limit": 25,
+  "summary_only": true
 }
 ```
+
+`get_run_history` now defaults to compact mode when omitted:
+- `summary_only=true`
+- `limit=50`
 
 </details>
 
@@ -552,6 +562,12 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | No | `8.0` | Timeout for MCP `resources/list` and `resources/read` filesystem work |
 | `ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES` | No | `false` | If `true`, `resources/templates/list` returns URI templates (otherwise empty to avoid duplicate UI listings) |
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
+| `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
+| `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |
+| `ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT` | No | `true` | Default compact ledger mode for `get_run_history` when caller omits `summary_only` |
+| `ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT` | No | `50` | Default max ledger entries returned in compact mode when caller omits `limit` |
+| `ANALYST_MCP_DEDUP_RUN_ID_WARNINGS` | No | `true` | Deduplicate repeated run-id coercion warnings for the same session/request pair |
+| `ANALYST_MCP_ALLOW_EMPTY_CERT_RULES` | No | `false` | If `false`, `final_audit` fails closed when certification rule contract is empty |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
 

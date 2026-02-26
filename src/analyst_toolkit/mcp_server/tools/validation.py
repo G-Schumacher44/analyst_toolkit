@@ -9,13 +9,14 @@ from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.mcp_server.config_normalizers import normalize_validation_config
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    build_artifact_contract,
     check_upload,
     coerce_config,
-    default_run_id,
+    fold_status_with_artifacts,
     generate_default_export_path,
     get_session_metadata,
-    get_session_run_id,
     load_input,
+    resolve_run_context,
     save_output,
     save_to_session,
     should_export_html,
@@ -33,9 +34,7 @@ async def _toolkit_validation(
     **kwargs,
 ) -> dict:
     """Run schema and data validation on the dataset at gcs_path or session_id."""
-    if not run_id and session_id:
-        run_id = get_session_run_id(session_id)
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "validation")
     base_cfg = normalize_validation_config(config)
@@ -91,6 +90,7 @@ async def _toolkit_validation(
     artifact_url = ""
     xlsx_url = ""
     warnings: list = []
+    warnings.extend(lifecycle["warnings"])
     if should_export_html(config):
         artifact_path = f"exports/reports/validation/{run_id}_validation_report.html"
         artifact_url = check_upload(
@@ -108,7 +108,19 @@ async def _toolkit_validation(
             warnings,
         )
 
-    status = "fail" if violations_found else ("warn" if warnings else "pass")
+    artifact_contract = build_artifact_contract(
+        export_url,
+        artifact_url=artifact_url,
+        xlsx_url=xlsx_url,
+        expect_html=should_export_html(config),
+        expect_xlsx=should_export_html(config),
+        required_html=should_export_html(config),
+    )
+    warnings.extend(artifact_contract["artifact_warnings"])
+    base_status = "fail" if violations_found else ("warn" if warnings else "pass")
+    status = fold_status_with_artifacts(
+        base_status, artifact_contract["missing_required_artifacts"]
+    )
 
     res = {
         "status": status,
@@ -131,6 +143,11 @@ async def _toolkit_validation(
         "xlsx_url": xlsx_url,
         "export_url": export_url,
         "warnings": warnings,
+        "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
+        "artifact_matrix": artifact_contract["artifact_matrix"],
+        "expected_artifacts": artifact_contract["expected_artifacts"],
+        "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
+        "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
     if passed:
         next_steps = [

@@ -9,20 +9,35 @@ from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
 )
 from analyst_toolkit.mcp_server.config_normalizers import normalize_final_audit_config
 from analyst_toolkit.mcp_server.io import (
+    ALLOW_EMPTY_CERT_RULES,
     append_to_run_history,
+    build_artifact_contract,
     check_upload,
     coerce_config,
-    default_run_id,
+    fold_status_with_artifacts,
     generate_default_export_path,
     get_session_metadata,
-    get_session_run_id,
     load_input,
+    resolve_run_context,
     save_output,
     save_to_session,
     upload_artifact,
 )
 from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.schemas import base_input_schema
+
+
+def _has_effective_certification_rules(rules: dict) -> bool:
+    if not isinstance(rules, dict):
+        return False
+    checks = [
+        rules.get("expected_columns"),
+        rules.get("expected_types"),
+        rules.get("categorical_values"),
+        rules.get("numeric_ranges"),
+        rules.get("disallowed_null_columns"),
+    ]
+    return any(bool(item) for item in checks)
 
 
 async def _toolkit_final_audit(
@@ -36,9 +51,7 @@ async def _toolkit_final_audit(
     Run the final certification audit.
     Applies final edits and generates the 'Big HTML Report' (Healing Certificate).
     """
-    if not run_id and session_id:
-        run_id = get_session_run_id(session_id)
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "final_audit")
     base_cfg = normalize_final_audit_config(config)
@@ -97,6 +110,7 @@ async def _toolkit_final_audit(
     export_url = save_output(df_certified, export_path)
 
     warnings: list = []
+    warnings.extend(lifecycle["warnings"])
 
     # M10 exports to these locations (matches final_audit_pipeline.py defaults)
     artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
@@ -114,6 +128,10 @@ async def _toolkit_final_audit(
     )
 
     cert_cfg = base_cfg.get("certification", {})
+    schema_cfg = cert_cfg.get("schema_validation", {})
+    rules = schema_cfg.get("rules", {}) if isinstance(schema_cfg, dict) else {}
+    has_effective_rules = _has_effective_certification_rules(rules)
+
     validation_results = run_validation_suite(df_certified, cert_cfg)
     violations_found = [
         name
@@ -128,7 +146,6 @@ async def _toolkit_final_audit(
     checks_run = sum(
         1 for check in validation_results.values() if isinstance(check, dict) and "passed" in check
     )
-    rules = cert_cfg.get("schema_validation", {}).get("rules", {})
     disallowed_null_cols = rules.get("disallowed_null_columns", [])
     null_violation_columns = [
         col
@@ -136,9 +153,34 @@ async def _toolkit_final_audit(
         if col in df_certified.columns and df_certified[col].isnull().any()
     ]
     passed = not violations_found and not null_violation_columns
+    if not has_effective_rules and not ALLOW_EMPTY_CERT_RULES:
+        passed = False
+        violations_found.append("rule_contract_missing")
+        violations_detail["rule_contract_missing"] = {
+            "reason": "Certification rules are empty or ineffective.",
+            "remediation": (
+                "Provide expected_columns/expected_types/categorical_values/numeric_ranges "
+                "or disallowed_null_columns, or set ANALYST_MCP_ALLOW_EMPTY_CERT_RULES=1."
+            ),
+        }
+        warnings.append("Certification rule contract is empty; failing closed for final_audit.")
+
+    artifact_contract = build_artifact_contract(
+        export_url,
+        artifact_url=artifact_url,
+        xlsx_url=xlsx_url,
+        expect_html=True,
+        expect_xlsx=True,
+        required_html=True,
+    )
+    warnings.extend(artifact_contract["artifact_warnings"])
+    base_status = "fail" if not passed else ("warn" if warnings else "pass")
+    status = fold_status_with_artifacts(
+        base_status, artifact_contract["missing_required_artifacts"]
+    )
 
     res = {
-        "status": "fail" if not passed else ("warn" if warnings else "pass"),
+        "status": status,
         "module": "final_audit",
         "run_id": run_id,
         "session_id": session_id,
@@ -165,6 +207,11 @@ async def _toolkit_final_audit(
         "xlsx_url": xlsx_url,
         "export_url": export_url,
         "warnings": warnings,
+        "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
+        "artifact_matrix": artifact_contract["artifact_matrix"],
+        "expected_artifacts": artifact_contract["expected_artifacts"],
+        "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
+        "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
     res = with_next_actions(
         res,

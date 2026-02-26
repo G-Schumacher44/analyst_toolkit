@@ -5,10 +5,12 @@ io.py — Data loading and artifact upload for the analyst_toolkit MCP server.
 import json
 import logging
 import os
+import re
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 import pandas as pd
@@ -17,6 +19,24 @@ import yaml
 from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+RUN_ID_OVERRIDE_ALLOWED = _env_bool("ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE", False)
+DEDUP_RUN_ID_WARNINGS = _env_bool("ANALYST_MCP_DEDUP_RUN_ID_WARNINGS", True)
+_HISTORY_LOCKS_GUARD = threading.Lock()
+_HISTORY_LOCKS: dict[str, threading.Lock] = {}
+_LIFECYCLE_WARNINGS_GUARD = threading.Lock()
+_SEEN_LIFECYCLE_WARNING_KEYS: set[tuple[str, str]] = set()
+ALLOW_EMPTY_CERT_RULES = _env_bool("ANALYST_MCP_ALLOW_EMPTY_CERT_RULES", False)
+
+_BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$")
 
 
 def coerce_config(config: Optional[dict], module: str) -> dict:
@@ -78,6 +98,63 @@ def default_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
+def resolve_run_context(
+    run_id: Optional[str], session_id: Optional[str]
+) -> tuple[str, dict[str, Any]]:
+    """
+    Resolve run/session identity with guardrails.
+
+    Default behavior protects session consistency:
+    - If session has a bound run_id and caller provides a different run_id,
+      the run_id is coerced back to the session run_id unless override is enabled.
+    - Enable override with ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1.
+    """
+    requested_run_id = run_id
+    session_run_id = get_session_run_id(session_id) if session_id else None
+    effective_run_id = run_id
+    source = "requested" if run_id else "generated"
+    warnings: list[str] = []
+    coerced = False
+
+    if session_run_id:
+        if not run_id:
+            effective_run_id = session_run_id
+            source = "session"
+        elif run_id != session_run_id:
+            if RUN_ID_OVERRIDE_ALLOWED:
+                warning_text = (
+                    f"run_id '{run_id}' does not match session run_id '{session_run_id}'. "
+                    "Proceeding because ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1."
+                )
+                if _should_emit_lifecycle_warning(session_id or "", run_id):
+                    warnings.append(warning_text)
+            else:
+                effective_run_id = session_run_id
+                source = "session"
+                coerced = True
+                warning_text = (
+                    f"run_id '{run_id}' does not match session run_id '{session_run_id}'. "
+                    "Coerced to session run_id to keep run lifecycle consistent."
+                )
+                if _should_emit_lifecycle_warning(session_id or "", run_id):
+                    warnings.append(warning_text)
+
+    if not effective_run_id:
+        effective_run_id = default_run_id()
+        source = "generated"
+
+    lifecycle = {
+        "requested_run_id": requested_run_id,
+        "session_run_id": session_run_id,
+        "effective_run_id": effective_run_id,
+        "source": source,
+        "coerced": coerced,
+        "override_allowed": RUN_ID_OVERRIDE_ALLOWED,
+        "warnings": warnings,
+    }
+    return effective_run_id, lifecycle
+
+
 def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> pd.DataFrame:
     """Load data from GCS, local file, or in-memory session."""
     if session_id:
@@ -91,12 +168,50 @@ def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> 
     if not path:
         raise ValueError("Either 'path' (gcs_path) or 'session_id' must be provided.")
 
+    path, path_warning = _normalize_input_path(path)
+    if path_warning:
+        logger.warning(path_warning)
+
     if path.startswith("gs://"):
         return load_from_gcs(path)
-    elif path.endswith(".parquet"):
+    if path.endswith(".parquet"):
         return pd.read_parquet(path)
-    else:
+    if Path(path).exists():
         return pd.read_csv(path, low_memory=False)
+
+    if _looks_like_bucket_path(path):
+        raise FileNotFoundError(f"Input path not found: '{path}'. Did you mean 'gs://{path}'?")
+
+    raise FileNotFoundError(f"Input path not found: '{path}'")
+
+
+def _normalize_input_path(path: str) -> tuple[str, str]:
+    stripped = path.strip()
+    if stripped.startswith("gs://"):
+        return stripped, ""
+
+    if _looks_like_bucket_path(stripped) and not Path(stripped).exists():
+        return f"gs://{stripped}", f"Auto-normalized bucket-like input path to gs://{stripped}"
+    return stripped, ""
+
+
+def _looks_like_bucket_path(path: str) -> bool:
+    if not path or "://" in path:
+        return False
+    if path.startswith(("/", ".", "~")):
+        return False
+    if "\\" in path:
+        return False
+    parts = path.split("/", 1)
+    if len(parts) != 2:
+        return False
+    bucket = parts[0].strip()
+    prefix = parts[1].strip()
+    if not bucket or not prefix:
+        return False
+    if "-" not in bucket and "." not in bucket:
+        return False
+    return bool(_BUCKET_RE.match(bucket))
 
 
 def save_to_session(
@@ -226,7 +341,16 @@ def save_output(df: pd.DataFrame, path: str) -> str:
                 client = storage.Client()
                 bucket = client.bucket(bucket_name)
                 blob = bucket.blob(blob_path)
-                blob.upload_from_filename(tmp_path, content_type=content_type)
+                try:
+                    blob.upload_from_filename(tmp_path, content_type=content_type)
+                except Exception as first_exc:
+                    alt_blob_path = _versioned_blob_path(blob_path)
+                    alt_blob = bucket.blob(alt_blob_path)
+                    try:
+                        alt_blob.upload_from_filename(tmp_path, content_type=content_type)
+                    except Exception:
+                        raise first_exc
+                    return f"gs://{bucket_name}/{alt_blob_path}"
             except ImportError:
                 # Backward-compatible fallback for environments using gcsfs-style paths.
                 if suffix == ".parquet":
@@ -330,19 +454,21 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     history_dir.mkdir(parents=True, exist_ok=True)
 
     history_file = history_dir / f"{run_id}_history.json"
-    history = []
-    if history_file.exists():
-        try:
-            with open(history_file, "r") as f:
-                history = json.load(f)
-        except Exception:
-            history = []
+    lock = _history_lock_for(history_file)
+    with lock:
+        history = []
+        if history_file.exists():
+            try:
+                with open(history_file, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                history = []
 
-    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-    history.append(entry)
+        entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+        history.append(entry)
 
-    with open(history_file, "w") as f:
-        json.dump(history, f, indent=2)
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
 
     upload_artifact(str(history_file), run_id, "history", session_id=session_id)
 
@@ -356,8 +482,10 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
         path_root = _resolve_path_root(run_id, session_id)
         history_file = history_root / path_root / f"{run_id}_history.json"
         if history_file.exists():
-            with open(history_file, "r") as f:
-                return json.load(f)
+            lock = _history_lock_for(history_file)
+            with lock:
+                with open(history_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
         return []
 
     candidates = sorted(
@@ -366,6 +494,133 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
         reverse=True,
     )
     if candidates:
-        with open(candidates[0], "r") as f:
-            return json.load(f)
+        lock = _history_lock_for(candidates[0])
+        with lock:
+            with open(candidates[0], "r", encoding="utf-8") as f:
+                return json.load(f)
     return []
+
+
+def _history_lock_for(path: Path) -> threading.Lock:
+    key = str(path.resolve())
+    with _HISTORY_LOCKS_GUARD:
+        lock = _HISTORY_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _HISTORY_LOCKS[key] = lock
+        return lock
+
+
+def _versioned_blob_path(blob_path: str) -> str:
+    p = Path(blob_path)
+    return str(p.with_name(f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"))
+
+
+def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bool:
+    if not DEDUP_RUN_ID_WARNINGS:
+        return True
+    key = (session_id, requested_run_id)
+    with _LIFECYCLE_WARNINGS_GUARD:
+        if key in _SEEN_LIFECYCLE_WARNING_KEYS:
+            return False
+        _SEEN_LIFECYCLE_WARNING_KEYS.add(key)
+        return True
+
+
+def build_artifact_contract(
+    export_url: str,
+    *,
+    artifact_url: str = "",
+    xlsx_url: str = "",
+    plot_urls: Optional[dict[str, str]] = None,
+    expect_html: bool = False,
+    expect_xlsx: bool = False,
+    expect_plots: bool = False,
+    required_html: bool = False,
+    required_xlsx: bool = False,
+    required_data_export: bool = True,
+) -> dict[str, Any]:
+    plots = plot_urls or {}
+    matrix: dict[str, dict[str, Any]] = {
+        "data_export": {
+            "expected": True,
+            "required": required_data_export,
+            "status": "available" if bool(export_url) else "missing",
+            "url": export_url,
+            "reason": "" if export_url else "upload_failed",
+        },
+        "html_report": {
+            "expected": expect_html,
+            "required": required_html and expect_html,
+            "status": (
+                "disabled"
+                if not expect_html
+                else ("available" if bool(artifact_url) else "missing")
+            ),
+            "url": artifact_url if expect_html else "",
+            "reason": (
+                "disabled"
+                if not expect_html
+                else ("" if artifact_url else "upload_failed_or_not_generated")
+            ),
+        },
+        "xlsx_report": {
+            "expected": expect_xlsx,
+            "required": required_xlsx and expect_xlsx,
+            "status": (
+                "disabled" if not expect_xlsx else ("available" if bool(xlsx_url) else "missing")
+            ),
+            "url": xlsx_url if expect_xlsx else "",
+            "reason": (
+                "disabled"
+                if not expect_xlsx
+                else ("" if xlsx_url else "upload_failed_or_not_generated")
+            ),
+        },
+        "plots": {
+            "expected": expect_plots,
+            "required": False,
+            "status": (
+                "disabled" if not expect_plots else ("available" if len(plots) > 0 else "missing")
+            ),
+            "count": len(plots) if expect_plots else 0,
+            "urls": plots if expect_plots else {},
+            "reason": (
+                "disabled"
+                if not expect_plots
+                else ("" if len(plots) > 0 else "not_generated_or_upload_failed")
+            ),
+        },
+    }
+
+    expected = [name for name, item in matrix.items() if bool(item.get("expected"))]
+    uploaded = [
+        name
+        for name, item in matrix.items()
+        if item.get("status") == "available"
+        and (bool(item.get("url")) or (name == "plots" and int(item.get("count", 0)) > 0))
+    ]
+    missing_required = [
+        name
+        for name, item in matrix.items()
+        if bool(item.get("required")) and item.get("status") != "available"
+    ]
+    warnings = [
+        f"Missing required artifact: {name} ({matrix[name].get('reason', 'missing')})"
+        for name in missing_required
+    ]
+    return {
+        "artifact_matrix": matrix,
+        "expected_artifacts": expected,
+        "uploaded_artifacts": uploaded,
+        "missing_required_artifacts": missing_required,
+        "artifact_warnings": warnings,
+    }
+
+
+def fold_status_with_artifacts(status: str, missing_required_artifacts: list[str]) -> str:
+    if status in {"error", "fail"}:
+        return status
+    if missing_required_artifacts:
+        return "warn"
+    return status
