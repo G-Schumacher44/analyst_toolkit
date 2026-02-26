@@ -52,6 +52,7 @@ def test_rpc_tools_list():
     assert "get_agent_playbook" in tool_names
     assert "get_user_quickstart" in tool_names
     assert "get_capability_catalog" in tool_names
+    assert "preflight_config" in tool_names
     assert "get_cockpit_help" not in tool_names
     assert "get_agent_instructions" not in tool_names
 
@@ -250,6 +251,71 @@ def test_rpc_get_config_schema_outliers_matches_runtime_contract_paths():
     defs = result["schema"]["$defs"]
     detection_props = defs["OutlierDetectionConfig"]["properties"]
     assert "detection_specs" in detection_props
+
+
+def test_rpc_preflight_config_normalizes_validation_shape():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 36,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "validation",
+                "config": {
+                    "rules": {
+                        "schema_validation": {
+                            "rules": {
+                                "expected_columns": ["tag_id", "species"],
+                            }
+                        },
+                        "expected_types": {"tag_id": "str"},
+                    }
+                },
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["module"] == "validation"
+    assert result["summary"]["effective_rules_path"] == "validation.schema_validation.rules.*"
+    assert isinstance(result["warnings"], list)
+    assert result["warnings"]
+    assert "schema_validation" in result["warnings"][0]
+    assert "schema_validation" in result["effective_config"]
+    assert "expected_types" in result["effective_config"]["schema_validation"]["rules"]
+
+
+def test_rpc_preflight_config_normalizes_outliers_shorthand():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 37,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "outliers",
+                "config": {
+                    "method": "iqr",
+                    "iqr_multiplier": 1.1,
+                    "columns": ["transaction_amount", "frequency_24h"],
+                },
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["module"] == "outliers"
+    assert (
+        result["summary"]["effective_rules_path"] == "outlier_detection.detection_specs.<column>.*"
+    )
+    specs = result["effective_config"]["detection_specs"]
+    assert specs["transaction_amount"]["method"] == "iqr"
+    assert specs["frequency_24h"]["method"] == "iqr"
 
 
 def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure():

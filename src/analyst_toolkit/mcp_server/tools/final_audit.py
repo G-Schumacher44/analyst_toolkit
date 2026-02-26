@@ -2,12 +2,12 @@
 
 import os
 import tempfile
-from copy import deepcopy
 
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
     run_final_audit_pipeline,
 )
+from analyst_toolkit.mcp_server.config_normalizers import normalize_final_audit_config
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     check_upload,
@@ -23,64 +23,6 @@ from analyst_toolkit.mcp_server.io import (
 )
 from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.schemas import base_input_schema
-
-
-def _normalize_final_audit_config(config: dict) -> dict:
-    """
-    Accept both full module config and MCP shorthand config.
-
-    MCP callers often pass top-level `rules`, while M10 expects:
-      final_audit.certification.schema_validation.rules
-    """
-    if "final_audit" in config and isinstance(config.get("final_audit"), dict):
-        base_cfg = deepcopy(config["final_audit"])
-    else:
-        base_cfg = deepcopy(config)
-
-    if not isinstance(base_cfg, dict):
-        base_cfg = {}
-
-    cert_cfg = base_cfg.get("certification", {})
-    if not isinstance(cert_cfg, dict):
-        cert_cfg = {}
-    else:
-        cert_cfg = deepcopy(cert_cfg)
-
-    schema_cfg = cert_cfg.get("schema_validation", {})
-    if not isinstance(schema_cfg, dict):
-        schema_cfg = {}
-    else:
-        schema_cfg = deepcopy(schema_cfg)
-
-    nested_rules = schema_cfg.get("rules", {})
-    if not isinstance(nested_rules, dict):
-        nested_rules = {}
-
-    shorthand_rules = base_cfg.get("rules", {})
-    if isinstance(shorthand_rules, dict) and shorthand_rules:
-        nested_rules = {**nested_rules, **shorthand_rules}
-
-    if "disallowed_null_columns" in base_cfg and isinstance(
-        base_cfg.get("disallowed_null_columns"), list
-    ):
-        nested_rules["disallowed_null_columns"] = base_cfg["disallowed_null_columns"]
-
-    schema_cfg["rules"] = nested_rules
-    schema_cfg.setdefault("run", True)
-    if "fail_on_error" in base_cfg and "fail_on_error" not in schema_cfg:
-        schema_cfg["fail_on_error"] = bool(base_cfg["fail_on_error"])
-    schema_cfg.setdefault("fail_on_error", True)
-
-    cert_cfg.setdefault("run", True)
-    cert_cfg["schema_validation"] = schema_cfg
-
-    base_cfg["certification"] = cert_cfg
-    base_cfg.pop("rules", None)
-    base_cfg.pop("schema_validation", None)
-    base_cfg.pop("disallowed_null_columns", None)
-    base_cfg.pop("fail_on_error", None)
-
-    return base_cfg
 
 
 async def _toolkit_final_audit(
@@ -99,7 +41,7 @@ async def _toolkit_final_audit(
     run_id = run_id or default_run_id()
 
     config = coerce_config(config, "final_audit")
-    base_cfg = _normalize_final_audit_config(config)
+    base_cfg = normalize_final_audit_config(config)
     df = load_input(gcs_path, session_id=session_id)
 
     # The M10 pipeline requires a raw_data_path to compute before/after row counts.
@@ -178,6 +120,11 @@ async def _toolkit_final_audit(
         for name, check in validation_results.items()
         if isinstance(check, dict) and "passed" in check and not check["passed"]
     ]
+    violations_detail = {
+        name: check.get("details", {})
+        for name, check in validation_results.items()
+        if isinstance(check, dict) and "passed" in check and not check["passed"]
+    }
     checks_run = sum(
         1 for check in validation_results.values() if isinstance(check, dict) and "passed" in check
     )
@@ -195,6 +142,7 @@ async def _toolkit_final_audit(
         "module": "final_audit",
         "run_id": run_id,
         "session_id": session_id,
+        "effective_config": base_cfg,
         "summary": {
             "message": (
                 "Final Audit Complete. Data is certified."
@@ -205,10 +153,12 @@ async def _toolkit_final_audit(
             "passed": passed,
             "checks_run": checks_run,
             "violations_found": violations_found,
+            "violations_detail": violations_detail,
             "null_violation_columns": null_violation_columns,
         },
         "passed": passed,
         "violations_found": violations_found,
+        "violations_detail": violations_detail,
         "null_violation_columns": null_violation_columns,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,

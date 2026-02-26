@@ -18,6 +18,7 @@ from analyst_toolkit.mcp_server.io import (
     coerce_config,
     get_run_history,
     save_output,
+    upload_artifact,
 )
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -271,6 +272,59 @@ def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
     assert len(uploads) == 2
     assert uploads[0][1] == "runs/shared_run/imputation_output.csv"
     assert uploads[1][1] == "runs/shared_run/imputation_output.csv"
+
+
+def test_upload_artifact_falls_back_to_versioned_key_on_primary_failure(monkeypatch, tmp_path):
+    local = tmp_path / "report.html"
+    local.write_text("<html>ok</html>", encoding="utf-8")
+
+    upload_calls: list[str] = []
+
+    class FakeBlob:
+        def __init__(self, name: str):
+            self.name = name
+
+        def upload_from_filename(self, filename: str, content_type: str | None = None):
+            upload_calls.append(self.name)
+            # Simulate a primary-path overwrite/permission failure.
+            if len(upload_calls) == 1:
+                raise PermissionError("storage.objects.delete access denied")
+
+    class FakeBucket:
+        def __init__(self, name: str):
+            self.name = name
+
+        def blob(self, blob_name: str):
+            return FakeBlob(blob_name)
+
+    class FakeClient:
+        def bucket(self, bucket_name: str):
+            return FakeBucket(bucket_name)
+
+    storage_mod = types.ModuleType("google.cloud.storage")
+    setattr(storage_mod, "Client", FakeClient)
+    cloud_mod = types.ModuleType("google.cloud")
+    setattr(cloud_mod, "storage", storage_mod)
+    google_mod = types.ModuleType("google")
+    setattr(google_mod, "cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google", google_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_mod)
+    monkeypatch.setenv("ANALYST_REPORT_BUCKET", "gs://example-bucket")
+    monkeypatch.setenv("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports")
+
+    out = upload_artifact(
+        local_path=str(local),
+        run_id="run_retry",
+        module="imputation",
+        session_id="sess_retry",
+    )
+
+    assert out.startswith("https://storage.googleapis.com/example-bucket/")
+    assert len(upload_calls) == 2
+    assert upload_calls[0].endswith("/imputation/report.html")
+    assert upload_calls[1].endswith(".html")
+    assert upload_calls[1] != upload_calls[0]
 
 
 # ---------------------------------------------------------------------------

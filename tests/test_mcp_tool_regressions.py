@@ -33,6 +33,10 @@ async def test_toolkit_validation_applies_shorthand_rules(mocker):
     assert result["passed"] is False
     assert result["summary"]["checks_run"] == 4
     assert "schema_conformity" in result["violations_found"]
+    assert "violations_detail" in result
+    assert "schema_conformity" in result["violations_detail"]
+    assert "effective_config" in result
+    assert "schema_validation" in result["effective_config"]
     assert "next_actions" in result
     assert any(a["tool"] == "infer_configs" for a in result["next_actions"])
 
@@ -60,7 +64,11 @@ async def test_toolkit_final_audit_applies_shorthand_rules(mocker):
     assert result["status"] == "fail"
     assert result["passed"] is False
     assert "schema_conformity" in result["violations_found"]
+    assert "violations_detail" in result
+    assert "schema_conformity" in result["violations_detail"]
     assert result["summary"]["checks_run"] == 4
+    assert "effective_config" in result
+    assert "certification" in result["effective_config"]
     assert "next_actions" in result
     assert any(a["tool"] == "get_run_history" for a in result["next_actions"])
     assert any(a["tool"] == "get_data_health_report" for a in result["next_actions"])

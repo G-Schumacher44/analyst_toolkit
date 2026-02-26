@@ -74,7 +74,7 @@ curl http://localhost:8001/health | python3 -m json.tool
   "tools": [
     "diagnostics", "validation", "outliers", "normalization",
     "duplicates", "imputation", "infer_configs", "auto_heal",
-    "drift_detection", "get_config_schema", "get_golden_templates",
+    "drift_detection", "get_config_schema", "preflight_config", "get_golden_templates",
     "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
     "get_run_history", "get_data_health_report"
   ]
@@ -107,6 +107,7 @@ curl http://localhost:8001/health | python3 -m json.tool
 | `auto_heal` | One-click: runs `infer_configs` → `normalization` → `imputation` |
 | `drift_detection` | Compares two datasets for schema and statistical drift |
 | `get_config_schema` | Returns the JSON Schema for any module's config |
+| `preflight_config` | Normalizes a candidate config and returns effective runtime shape before execution |
 
 ### Cockpit Tools
 
