@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Usage and setup guide
+    url: https://github.com/G-Schumacher44/analyst_toolkit/blob/main/resource_hub/mcp_server_guide.md
+    about: Check MCP setup, tool usage, and integration docs before filing an issue.

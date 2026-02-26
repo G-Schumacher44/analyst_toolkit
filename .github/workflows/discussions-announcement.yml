@@ -1,0 +1,209 @@
+name: Release Discussions Announcement
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (for example: v0.4.3)"
+        required: false
+        type: string
+      title:
+        description: "Override discussion title"
+        required: false
+        type: string
+      body:
+        description: "Override discussion body"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  discussions: write
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.repository_owner }}
+      REPO: ${{ github.event.repository.name }}
+      CATEGORY_NAME: ${{ vars.DISCUSSIONS_ANNOUNCEMENTS_CATEGORY || 'Announcements' }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag || '' }}
+      RELEASE_NAME: ${{ github.event.release.name || '' }}
+      RELEASE_URL: ${{ github.event.release.html_url || '' }}
+      RELEASE_BODY: ${{ github.event.release.body || github.event.inputs.body || '' }}
+      TITLE_OVERRIDE: ${{ github.event.inputs.title || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build announcement payload
+        id: payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${RELEASE_TAG}"
+          if [ -z "$TAG" ]; then
+            echo "No release tag provided by event or input." >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          TITLE="${TITLE_OVERRIDE}"
+          if [ -z "$TITLE" ]; then
+            TITLE="Release ${TAG} is live"
+          fi
+
+          CHANGELOG_SNIPPET=""
+          if [ -f CHANGELOG.md ]; then
+            CHANGELOG_SNIPPET="$(awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" {in_section=1; next}
+              in_section && $0 ~ "^## \\[" {exit}
+              in_section {print}
+            ' CHANGELOG.md)"
+          fi
+
+          if [ -z "${CHANGELOG_SNIPPET// }" ]; then
+            CHANGELOG_SNIPPET="_No version-specific changelog section found for ${VERSION}._"
+          fi
+
+          if [ -n "$RELEASE_BODY" ]; then
+            RELEASE_NOTES="$RELEASE_BODY"
+          else
+            RELEASE_NOTES="_No release notes were provided in the GitHub Release._"
+          fi
+
+          BODY_FILE="$(mktemp)"
+          {
+            echo "A new release has been published: **${TAG}**."
+            if [ -n "$RELEASE_URL" ]; then
+              echo ""
+              echo "Release page: ${RELEASE_URL}"
+            fi
+            echo ""
+            echo "## Release Notes"
+            echo ""
+            echo "$RELEASE_NOTES"
+            echo ""
+            echo "## Changelog (${VERSION})"
+            echo ""
+            echo "$CHANGELOG_SNIPPET"
+            echo ""
+            echo "---"
+            echo "_Posted automatically by workflow \`discussions-announcement.yml\`._"
+          } > "$BODY_FILE"
+
+          {
+            echo "title<<EOF"
+            echo "$TITLE"
+            echo "EOF"
+            echo "body_path=$BODY_FILE"
+            echo "tag=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve repository and discussion category
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DATA="$(gh api graphql \
+            -f query='
+              query($owner:String!, $name:String!) {
+                repository(owner:$owner, name:$name) {
+                  id
+                  discussionCategories(first: 50) {
+                    nodes { id name }
+                  }
+                }
+              }' \
+            -f owner="$OWNER" \
+            -f name="$REPO")"
+
+          REPO_ID="$(echo "$DATA" | jq -r '.data.repository.id')"
+          CATEGORY_ID="$(echo "$DATA" | jq -r --arg n "$CATEGORY_NAME" '.data.repository.discussionCategories.nodes[] | select(.name == $n) | .id' | head -n1)"
+
+          if [ -z "$CATEGORY_ID" ]; then
+            echo "Announcements category '$CATEGORY_NAME' not found." >&2
+            echo "Available categories:" >&2
+            echo "$DATA" | jq -r '.data.repository.discussionCategories.nodes[].name' >&2
+            exit 1
+          fi
+
+          {
+            echo "repo_id=$REPO_ID"
+            echo "category_id=$CATEGORY_ID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing announcement
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TITLE="${{ steps.payload.outputs.title }}"
+          CATEGORY_ID="${{ steps.resolve.outputs.category_id }}"
+
+          DATA="$(gh api graphql \
+            -f query='
+              query($owner:String!, $name:String!, $categoryId:ID!) {
+                repository(owner:$owner, name:$name) {
+                  discussions(first: 100, categoryId: $categoryId, orderBy: {field: CREATED_AT, direction: DESC}) {
+                    nodes { id title url }
+                  }
+                }
+              }' \
+            -f owner="$OWNER" \
+            -f name="$REPO" \
+            -f categoryId="$CATEGORY_ID")"
+
+          URL="$(echo "$DATA" | jq -r --arg t "$TITLE" '.data.repository.discussions.nodes[] | select(.title == $t) | .url' | head -n1)"
+          if [ -n "$URL" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "url=$URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create announcement discussion
+        if: steps.existing.outputs.found == 'false'
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TITLE="${{ steps.payload.outputs.title }}"
+          BODY="$(cat "${{ steps.payload.outputs.body_path }}")"
+
+          DATA="$(gh api graphql \
+            -f query='
+              mutation($repositoryId:ID!, $categoryId:ID!, $title:String!, $body:String!) {
+                createDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body}) {
+                  discussion { id url title }
+                }
+              }' \
+            -f repositoryId="${{ steps.resolve.outputs.repo_id }}" \
+            -f categoryId="${{ steps.resolve.outputs.category_id }}" \
+            -f title="$TITLE" \
+            -f body="$BODY")"
+
+          URL="$(echo "$DATA" | jq -r '.data.createDiscussion.discussion.url')"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.existing.outputs.found }}" = "true" ]; then
+            echo "Announcement already exists: ${{ steps.existing.outputs.url }}"
+          else
+            echo "Announcement created: ${{ steps.create.outputs.url }}"
+          fi
