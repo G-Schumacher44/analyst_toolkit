@@ -74,6 +74,7 @@ async def _toolkit_validation(
     # Run suite directly to get structured pass/fail results for the MCP response
     schema_cfg = base_cfg.get("schema_validation", {})
     violations_found: list[str] = []
+    violations_detail: dict = {}
     checks_run = 0
     if schema_cfg.get("run", False):
         validation_results = run_validation_suite(df, config=base_cfg)
@@ -82,6 +83,7 @@ async def _toolkit_validation(
                 checks_run += 1
                 if not check["passed"]:
                     violations_found.append(check_name)
+                    violations_detail[check_name] = check.get("details", {})
 
     passed = len(violations_found) == 0
 
@@ -118,10 +120,12 @@ async def _toolkit_validation(
             "passed": passed,
             "checks_run": checks_run,
             "violations_found": violations_found,
+            "violations_detail": violations_detail,
             "row_count": row_count,
         },
         "passed": passed,
         "violations_found": violations_found,
+        "violations_detail": violations_detail,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,

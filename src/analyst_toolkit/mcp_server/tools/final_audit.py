@@ -120,6 +120,11 @@ async def _toolkit_final_audit(
         for name, check in validation_results.items()
         if isinstance(check, dict) and "passed" in check and not check["passed"]
     ]
+    violations_detail = {
+        name: check.get("details", {})
+        for name, check in validation_results.items()
+        if isinstance(check, dict) and "passed" in check and not check["passed"]
+    }
     checks_run = sum(
         1 for check in validation_results.values() if isinstance(check, dict) and "passed" in check
     )
@@ -148,10 +153,12 @@ async def _toolkit_final_audit(
             "passed": passed,
             "checks_run": checks_run,
             "violations_found": violations_found,
+            "violations_detail": violations_detail,
             "null_violation_columns": null_violation_columns,
         },
         "passed": passed,
         "violations_found": violations_found,
+        "violations_detail": violations_detail,
         "null_violation_columns": null_violation_columns,
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,

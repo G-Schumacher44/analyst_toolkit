@@ -9,6 +9,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 import pandas as pd
 import yaml
@@ -290,14 +291,29 @@ def upload_artifact(
     bucket_name = bucket_uri.removeprefix("gs://")
     blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
 
-    try:
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+
+    def _upload(path: str) -> str:
+        blob = bucket.blob(path)
         blob.upload_from_filename(str(p), content_type=content_type)
-        return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
-    except Exception:
-        return ""
+        return f"https://storage.googleapis.com/{bucket_name}/{path}"
+
+    try:
+        return _upload(blob_path)
+    except Exception as first_exc:
+        # Fallback for idempotent reruns where same-key overwrite/delete permissions vary.
+        alt_name = f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"
+        alt_path = f"{prefix}/{path_root}/{module}/{alt_name}"
+        try:
+            return _upload(alt_path)
+        except Exception:
+            logger.warning(
+                "Artifact upload failed for primary and fallback paths: %s ; %s",
+                first_exc,
+                alt_path,
+            )
+            return ""
 
 
 def check_upload(url: str, label: str, warnings: list) -> str:
