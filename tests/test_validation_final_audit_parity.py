@@ -27,8 +27,9 @@ def test_normalizers_align_on_shared_rule_contract():
     validation_cfg = normalize_validation_config(shorthand)
     final_audit_cfg = normalize_final_audit_config(shorthand)
 
-    assert validation_cfg["schema_validation"]["rules"] == (
-        final_audit_cfg["certification"]["schema_validation"]["rules"]
+    assert (
+        validation_cfg["schema_validation"]["rules"]
+        == (final_audit_cfg["certification"]["schema_validation"]["rules"])
     )
 
 

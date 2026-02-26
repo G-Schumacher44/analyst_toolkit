@@ -124,6 +124,10 @@ async def _toolkit_preflight_config(
 
     warnings = _shape_warnings(module_name, raw_config)
     unknown_keys = _unknown_keys(module_name, raw_config)
+    if unknown_keys:
+        warnings.append(
+            "Unknown top-level keys detected and ignored by runtime: " + ", ".join(unknown_keys)
+        )
     changed = coerced != raw_config or normalized != coerced
 
     if strict and (warnings or unknown_keys):
@@ -135,6 +139,7 @@ async def _toolkit_preflight_config(
                 "input_changed": changed,
                 "effective_rules_path": _rules_path_hint(module_name),
                 "strict": True,
+                "unknown_key_count": len(unknown_keys),
             },
             "warnings": warnings,
             "unknown_keys": unknown_keys,
@@ -151,6 +156,7 @@ async def _toolkit_preflight_config(
             "input_changed": changed,
             "effective_rules_path": _rules_path_hint(module_name),
             "strict": bool(strict),
+            "unknown_key_count": len(unknown_keys),
         },
         "warnings": warnings,
         "unknown_keys": unknown_keys,

@@ -206,6 +206,8 @@ def test_rpc_get_run_history_supports_summary_modes(mocker):
     result = response.json()["result"]
     assert result["status"] == "pass"
     assert result["filters"]["failures_only"] is True
+    assert result["filters"]["summary_only"] is True
+    assert result["filters"]["limit"] == 50
     assert result["history_count"] == 1
     assert result["ledger"][0]["module"] == "validation"
     assert len(result["latest_errors"]) == 1
@@ -374,6 +376,27 @@ def test_rpc_preflight_config_strict_fails_on_unknown_keys():
     result = response.json()["result"]
     assert result["status"] == "error"
     assert result["unknown_keys"] == ["unexpected_flag"]
+    assert result["summary"]["unknown_key_count"] == 1
+    assert any("Unknown top-level keys" in w for w in result["warnings"])
+
+
+def test_rpc_preflight_config_non_strict_warns_on_unknown_keys():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {"module_name": "normalization", "config": {"foo": 1}},
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["unknown_keys"] == ["foo"]
+    assert result["summary"]["unknown_key_count"] == 1
+    assert any("Unknown top-level keys" in w for w in result["warnings"])
 
 
 def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure():
@@ -583,6 +606,31 @@ def test_rpc_get_run_history_limit_and_summary_only(mocker):
     assert result["total_history_count"] == 3
     assert result["history_count"] == 2
     assert [entry["module"] for entry in result["ledger"]] == ["normalization", "validation"]
+    assert all(
+        set(entry.keys()) == {"module", "status", "timestamp", "summary"}
+        for entry in result["ledger"]
+    )
+
+
+def test_rpc_get_run_history_defaults_to_compact_mode(mocker):
+    history = [
+        {"module": "diagnostics", "status": "pass", "summary": {"row_count": 1}, "timestamp": "t1"},
+        {"module": "validation", "status": "pass", "summary": {"passed": True}, "timestamp": "t2"},
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "tools/call",
+        "params": {"name": "get_run_history", "arguments": {"run_id": "run_defaults"}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["filters"]["summary_only"] is True
+    assert result["filters"]["limit"] == 50
+    assert result["history_count"] == 2
     assert all(
         set(entry.keys()) == {"module", "status", "timestamp", "summary"}
         for entry in result["ledger"]

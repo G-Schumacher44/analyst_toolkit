@@ -26,14 +26,11 @@ async def _toolkit_infer_configs(
     if not session_id:
         session_id = save_to_session(df)
 
-    input_path = gcs_path
-    temp_file = None
-
-    if session_id and not gcs_path:
-        # We need a physical file for the inference engine
-        temp_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
-        df.to_csv(temp_file.name, index=False)
-        input_path = temp_file.name
+    # Always materialize an input snapshot locally for inference.
+    # This avoids path-construction drift between modules and ensures deterministic reads.
+    temp_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+    df.to_csv(temp_file.name, index=False)
+    input_path = temp_file.name
 
     try:
         try:

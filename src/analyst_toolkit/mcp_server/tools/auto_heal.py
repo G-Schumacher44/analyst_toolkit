@@ -15,6 +15,10 @@ from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_config
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
 
 
+def _is_terminal_failure(status: str | None) -> bool:
+    return status in {"error", "fail"}
+
+
 async def _run_auto_heal_pipeline(
     gcs_path: str | None = None,
     session_id: str | None = None,
@@ -55,6 +59,8 @@ async def _run_auto_heal_pipeline(
             )
             current_session_id = norm_res.get("session_id")
             summary["normalization"] = norm_res.get("summary")
+            if _is_terminal_failure(norm_res.get("status")):
+                failed_steps.append("normalization")
         except Exception as e:
             summary["normalization"] = {"error": str(e)}
             failed_steps.append("normalization")
@@ -79,6 +85,8 @@ async def _run_auto_heal_pipeline(
                 )
                 current_session_id = imp_res.get("session_id")
                 summary["imputation"] = imp_res.get("summary")
+                if _is_terminal_failure(imp_res.get("status")):
+                    failed_steps.append("imputation")
 
         except Exception as e:
             summary["imputation"] = {"error": str(e)}
@@ -100,6 +108,12 @@ async def _run_auto_heal_pipeline(
     else:
         status = "pass"
 
+    message = "Auto-healing completed successfully."
+    if status == "warn":
+        message = "Auto-healing completed with warnings."
+    elif status in {"fail", "error"}:
+        message = "Auto-healing completed with failures. Review failed_steps and summaries."
+
     res = {
         "status": status,
         "module": "auto_heal",
@@ -113,7 +127,7 @@ async def _run_auto_heal_pipeline(
         "failed_steps": failed_steps,
         "warnings": list(lifecycle["warnings"]),
         "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
-        "message": "Auto-healing completed. Normalization and Imputation applied based on inference.",
+        "message": message,
     }
     append_to_run_history(run_id, res, session_id=current_session_id)
     return res
@@ -132,7 +146,18 @@ async def _auto_heal_worker(
             session_id=session_id,
             run_id=run_id,
         )
-        JobStore.mark_succeeded(job_id, result=result)
+        if _is_terminal_failure(result.get("status")):
+            JobStore.mark_failed(
+                job_id,
+                {
+                    "error_type": "ToolResultError",
+                    "message": "auto_heal completed with failure status.",
+                    "terminal_result_status": result.get("status"),
+                    "result": result,
+                },
+            )
+        else:
+            JobStore.mark_succeeded(job_id, result=result)
     except Exception as exc:
         JobStore.mark_failed(
             job_id,

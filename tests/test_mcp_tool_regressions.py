@@ -1,5 +1,6 @@
 import sys
 import types
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -262,6 +263,24 @@ async def test_toolkit_auto_heal_async_mode_returns_job_id_and_queues(mocker):
 
 
 @pytest.mark.asyncio
+async def test_auto_heal_worker_marks_failed_when_result_status_is_error(mocker):
+    auto_heal_tool.JobStore.clear()
+    job_id = auto_heal_tool.JobStore.create(module="auto_heal", run_id="run_auto")
+    mocker.patch.object(
+        auto_heal_tool,
+        "_run_auto_heal_pipeline",
+        return_value={"status": "error", "module": "auto_heal"},
+    )
+
+    await auto_heal_tool._auto_heal_worker(job_id, None, "sess_test", "run_auto")
+    job = auto_heal_tool.JobStore.get(job_id)
+
+    assert job is not None
+    assert job["state"] == "failed"
+    assert job["error"]["terminal_result_status"] == "error"
+
+
+@pytest.mark.asyncio
 async def test_tool_run_id_mismatch_is_coerced_to_session_run_by_default(monkeypatch, mocker):
     import analyst_toolkit.mcp_server.io as io_module
 
@@ -287,3 +306,81 @@ async def test_tool_run_id_mismatch_is_coerced_to_session_run_by_default(monkeyp
     assert result["lifecycle"]["coerced"] is True
     assert any("Coerced to session run_id" in warning for warning in result["warnings"])
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_gcs_path_uses_local_snapshot(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    captured: dict[str, str] = {}
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+    mocker.patch.object(infer_configs_tool, "save_to_session", return_value="sess_gcs")
+
+    def fake_infer_configs(**kwargs):
+        captured["input_path"] = kwargs["input_path"]
+        assert Path(kwargs["input_path"]).exists()
+        return {"validation": "validation:\n  schema_validation:\n    run: true\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        gcs_path="gs://my-bucket/path/ingest_dt=2020-08-08"
+    )
+
+    assert result["status"] == "pass"
+    assert captured["input_path"].endswith(".csv")
+    assert not captured["input_path"].startswith("gs://")
+
+
+@pytest.mark.asyncio
+async def test_final_audit_fails_closed_when_cert_rules_empty(mocker, monkeypatch):
+    df = pd.DataFrame({"value": [1]})
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_test")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(final_audit_tool, "upload_artifact", return_value="https://example.com/a")
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_test",
+        run_id="final_audit_empty_rules",
+        config={},
+    )
+
+    assert result["status"] == "fail"
+    assert result["passed"] is False
+    assert "rule_contract_missing" in result["violations_found"]
+
+
+@pytest.mark.asyncio
+async def test_normalization_reports_artifact_contract(mocker):
+    df = pd.DataFrame({"name": ["Alice"]})
+
+    mocker.patch.object(normalization_tool, "load_input", return_value=df)
+    mocker.patch.object(normalization_tool, "apply_normalization", return_value=(df, None, {}))
+    mocker.patch.object(normalization_tool, "run_normalization_pipeline", return_value=df)
+    mocker.patch.object(normalization_tool, "save_to_session", return_value="sess_norm")
+    mocker.patch.object(normalization_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(normalization_tool, "save_output", return_value="gs://dummy/norm.csv")
+    mocker.patch.object(normalization_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(normalization_tool, "should_export_html", return_value=True)
+    mocker.patch.object(normalization_tool, "upload_artifact", return_value="")
+
+    result = await normalization_tool._toolkit_normalization(
+        session_id="sess_norm",
+        run_id="norm_artifact_contract",
+        config={},
+    )
+
+    assert result["status"] == "warn"
+    assert "artifact_matrix" in result
+    assert "html_report" in result["artifact_matrix"]
+    assert "html_report" in result["missing_required_artifacts"]

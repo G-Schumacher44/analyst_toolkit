@@ -489,6 +489,10 @@ For summary-oriented agent flows (less payload, faster triage), pass filters:
 }
 ```
 
+`get_run_history` now defaults to compact mode when omitted:
+- `summary_only=true`
+- `limit=50`
+
 </details>
 
 ---
@@ -560,6 +564,10 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
 | `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
 | `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |
+| `ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT` | No | `true` | Default compact ledger mode for `get_run_history` when caller omits `summary_only` |
+| `ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT` | No | `50` | Default max ledger entries returned in compact mode when caller omits `limit` |
+| `ANALYST_MCP_DEDUP_RUN_ID_WARNINGS` | No | `true` | Deduplicate repeated run-id coercion warnings for the same session/request pair |
+| `ANALYST_MCP_ALLOW_EMPTY_CERT_RULES` | No | `false` | If `false`, `final_audit` fails closed when certification rule contract is empty |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
 
