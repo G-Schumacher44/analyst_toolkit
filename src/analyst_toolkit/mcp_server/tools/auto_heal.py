@@ -6,8 +6,8 @@ import yaml
 
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
-    default_run_id,
     get_session_metadata,
+    resolve_run_context,
 )
 from analyst_toolkit.mcp_server.job_state import JobStore
 from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
@@ -24,7 +24,7 @@ async def _run_auto_heal_pipeline(
     Run inference, then automatically apply recommended normalization and imputation.
     Returns a cleaned session_id.
     """
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     # 1. Infer configs
     infer_res = await _toolkit_infer_configs(
@@ -111,6 +111,8 @@ async def _run_auto_heal_pipeline(
         "export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
         "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
         "failed_steps": failed_steps,
+        "warnings": list(lifecycle["warnings"]),
+        "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
         "message": "Auto-healing completed. Normalization and Imputation applied based on inference.",
     }
     append_to_run_history(run_id, res, session_id=current_session_id)
@@ -150,7 +152,7 @@ async def _toolkit_auto_heal(
     """
     Run inference + healing in sync mode (default) or queue a background async job.
     """
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     if async_mode:
         job_id = JobStore.create(
@@ -186,6 +188,8 @@ async def _toolkit_auto_heal(
             "run_id": run_id,
             "job_id": job_id,
             "summary": {"state": "queued"},
+            "warnings": list(lifecycle["warnings"]),
+            "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
             "message": "Auto-heal job accepted. Poll get_job_status(job_id).",
         }
 

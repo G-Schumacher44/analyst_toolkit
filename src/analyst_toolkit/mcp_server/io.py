@@ -6,9 +6,10 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 import pandas as pd
@@ -17,6 +18,18 @@ import yaml
 from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+RUN_ID_OVERRIDE_ALLOWED = _env_bool("ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE", False)
+_HISTORY_LOCKS_GUARD = threading.Lock()
+_HISTORY_LOCKS: dict[str, threading.Lock] = {}
 
 
 def coerce_config(config: Optional[dict], module: str) -> dict:
@@ -76,6 +89,59 @@ def coerce_config(config: Optional[dict], module: str) -> dict:
 def default_run_id() -> str:
     """Return a UTC timestamp-based run ID."""
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
+def resolve_run_context(
+    run_id: Optional[str], session_id: Optional[str]
+) -> tuple[str, dict[str, Any]]:
+    """
+    Resolve run/session identity with guardrails.
+
+    Default behavior protects session consistency:
+    - If session has a bound run_id and caller provides a different run_id,
+      the run_id is coerced back to the session run_id unless override is enabled.
+    - Enable override with ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1.
+    """
+    requested_run_id = run_id
+    session_run_id = get_session_run_id(session_id) if session_id else None
+    effective_run_id = run_id
+    source = "requested" if run_id else "generated"
+    warnings: list[str] = []
+    coerced = False
+
+    if session_run_id:
+        if not run_id:
+            effective_run_id = session_run_id
+            source = "session"
+        elif run_id != session_run_id:
+            if RUN_ID_OVERRIDE_ALLOWED:
+                warnings.append(
+                    f"run_id '{run_id}' does not match session run_id '{session_run_id}'. "
+                    "Proceeding because ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1."
+                )
+            else:
+                effective_run_id = session_run_id
+                source = "session"
+                coerced = True
+                warnings.append(
+                    f"run_id '{run_id}' does not match session run_id '{session_run_id}'. "
+                    "Coerced to session run_id to keep run lifecycle consistent."
+                )
+
+    if not effective_run_id:
+        effective_run_id = default_run_id()
+        source = "generated"
+
+    lifecycle = {
+        "requested_run_id": requested_run_id,
+        "session_run_id": session_run_id,
+        "effective_run_id": effective_run_id,
+        "source": source,
+        "coerced": coerced,
+        "override_allowed": RUN_ID_OVERRIDE_ALLOWED,
+        "warnings": warnings,
+    }
+    return effective_run_id, lifecycle
 
 
 def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> pd.DataFrame:
@@ -330,19 +396,21 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     history_dir.mkdir(parents=True, exist_ok=True)
 
     history_file = history_dir / f"{run_id}_history.json"
-    history = []
-    if history_file.exists():
-        try:
-            with open(history_file, "r") as f:
-                history = json.load(f)
-        except Exception:
-            history = []
+    lock = _history_lock_for(history_file)
+    with lock:
+        history = []
+        if history_file.exists():
+            try:
+                with open(history_file, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                history = []
 
-    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-    history.append(entry)
+        entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+        history.append(entry)
 
-    with open(history_file, "w") as f:
-        json.dump(history, f, indent=2)
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
 
     upload_artifact(str(history_file), run_id, "history", session_id=session_id)
 
@@ -356,8 +424,10 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
         path_root = _resolve_path_root(run_id, session_id)
         history_file = history_root / path_root / f"{run_id}_history.json"
         if history_file.exists():
-            with open(history_file, "r") as f:
-                return json.load(f)
+            lock = _history_lock_for(history_file)
+            with lock:
+                with open(history_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
         return []
 
     candidates = sorted(
@@ -366,6 +436,18 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
         reverse=True,
     )
     if candidates:
-        with open(candidates[0], "r") as f:
-            return json.load(f)
+        lock = _history_lock_for(candidates[0])
+        with lock:
+            with open(candidates[0], "r", encoding="utf-8") as f:
+                return json.load(f)
     return []
+
+
+def _history_lock_for(path: Path) -> threading.Lock:
+    key = str(path.resolve())
+    with _HISTORY_LOCKS_GUARD:
+        lock = _HISTORY_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _HISTORY_LOCKS[key] = lock
+        return lock

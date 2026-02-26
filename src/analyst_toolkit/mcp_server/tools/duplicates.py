@@ -7,11 +7,10 @@ from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     check_upload,
     coerce_config,
-    default_run_id,
     generate_default_export_path,
     get_session_metadata,
-    get_session_run_id,
     load_input,
+    resolve_run_context,
     save_output,
     save_to_session,
     should_export_html,
@@ -36,9 +35,7 @@ async def _toolkit_duplicates(
     **kwargs,
 ) -> dict:
     """Run duplicate detection on the dataset at gcs_path or session_id."""
-    if not run_id and session_id:
-        run_id = get_session_run_id(session_id)
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "duplicates")
     df = load_input(gcs_path, session_id=session_id)
@@ -91,6 +88,7 @@ async def _toolkit_duplicates(
     xlsx_url = ""
     plot_urls = {}
     warnings: list = []
+    warnings.extend(lifecycle["warnings"])
 
     if should_export_html(config):
         artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
@@ -142,6 +140,7 @@ async def _toolkit_duplicates(
         "plot_urls": plot_urls,
         "export_url": export_url,
         "warnings": warnings,
+        "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
     }
     append_to_run_history(run_id, res, session_id=session_id)
     return res

@@ -12,11 +12,10 @@ from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     check_upload,
     coerce_config,
-    default_run_id,
     generate_default_export_path,
     get_session_metadata,
-    get_session_run_id,
     load_input,
+    resolve_run_context,
     save_output,
     save_to_session,
     upload_artifact,
@@ -36,9 +35,7 @@ async def _toolkit_final_audit(
     Run the final certification audit.
     Applies final edits and generates the 'Big HTML Report' (Healing Certificate).
     """
-    if not run_id and session_id:
-        run_id = get_session_run_id(session_id)
-    run_id = run_id or default_run_id()
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "final_audit")
     base_cfg = normalize_final_audit_config(config)
@@ -97,6 +94,7 @@ async def _toolkit_final_audit(
     export_url = save_output(df_certified, export_path)
 
     warnings: list = []
+    warnings.extend(lifecycle["warnings"])
 
     # M10 exports to these locations (matches final_audit_pipeline.py defaults)
     artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
@@ -165,6 +163,7 @@ async def _toolkit_final_audit(
         "xlsx_url": xlsx_url,
         "export_url": export_url,
         "warnings": warnings,
+        "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
     }
     res = with_next_actions(
         res,

@@ -11,6 +11,7 @@ import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
+from analyst_toolkit.mcp_server.state import StateStore
 
 
 @pytest.mark.asyncio
@@ -258,3 +259,31 @@ async def test_toolkit_auto_heal_async_mode_returns_job_id_and_queues(mocker):
     coro = captured.get("coro")
     if coro is not None:
         coro.close()
+
+
+@pytest.mark.asyncio
+async def test_tool_run_id_mismatch_is_coerced_to_session_run_by_default(monkeypatch, mocker):
+    import analyst_toolkit.mcp_server.io as io_module
+
+    StateStore.clear()
+    df = pd.DataFrame({"id": [1], "name": ["a"]})
+    session_id = StateStore.save(df, run_id="run_bound")
+
+    mocker.patch.object(diagnostics_tool, "load_input", return_value=df)
+    mocker.patch.object(diagnostics_tool, "save_to_session", return_value=session_id)
+    mocker.patch.object(diagnostics_tool, "run_diag_pipeline", return_value=None)
+    mocker.patch.object(diagnostics_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(diagnostics_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(diagnostics_tool, "should_export_html", return_value=False)
+    monkeypatch.setattr(io_module, "RUN_ID_OVERRIDE_ALLOWED", False)
+
+    result = await diagnostics_tool._toolkit_diagnostics(
+        session_id=session_id,
+        run_id="run_conflict",
+        config={},
+    )
+
+    assert result["run_id"] == "run_bound"
+    assert result["lifecycle"]["coerced"] is True
+    assert any("Coerced to session run_id" in warning for warning in result["warnings"])
+    StateStore.clear()

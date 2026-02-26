@@ -360,6 +360,42 @@ def test_get_run_history_isolation_by_session(sample_df, tmp_path, monkeypatch):
     assert hist_b[0]["module"] == "imputation"
 
 
+def test_append_to_run_history_is_thread_safe(sample_df, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    run_id = "run_threadsafe_history"
+    session_id = StateStore.save(sample_df, run_id=run_id)
+    errors: list[Exception] = []
+    error_lock = threading.Lock()
+    total = 30
+
+    def worker(i: int):
+        try:
+            append_to_run_history(
+                run_id,
+                {
+                    "module": f"m{i}",
+                    "status": "pass",
+                    "summary": {"index": i},
+                },
+                session_id=session_id,
+            )
+        except Exception as exc:
+            with error_lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(total)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    history = get_run_history(run_id, session_id=session_id)
+    assert len(history) == total
+    assert {entry["module"] for entry in history} == {f"m{i}" for i in range(total)}
+
+
 # ---------------------------------------------------------------------------
 # StateStore — TTL eviction
 # ---------------------------------------------------------------------------
