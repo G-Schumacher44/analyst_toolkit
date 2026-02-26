@@ -4,13 +4,15 @@ io.py — Data loading and artifact upload for the analyst_toolkit MCP server.
 
 import json
 import logging
+import math
 import os
 import re
 import tempfile
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
+from json import JSONDecodeError
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import uuid4
 
 import pandas as pd
@@ -35,6 +37,8 @@ _HISTORY_LOCKS: dict[str, threading.Lock] = {}
 _LIFECYCLE_WARNINGS_GUARD = threading.Lock()
 _SEEN_LIFECYCLE_WARNING_KEYS: set[tuple[str, str]] = set()
 ALLOW_EMPTY_CERT_RULES = _env_bool("ANALYST_MCP_ALLOW_EMPTY_CERT_RULES", False)
+_HISTORY_READ_META_GUARD = threading.Lock()
+_LAST_HISTORY_READ_META: dict[tuple[str, Optional[str]], dict[str, Any]] = {}
 
 _BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$")
 
@@ -370,6 +374,8 @@ def save_output(df: pd.DataFrame, path: str) -> str:
         df.to_parquet(path, index=False)
     else:
         df.to_csv(path, index=False)
+    if not p.exists():
+        raise FileNotFoundError(f"Local export write failed: '{p}'")
     return str(p.absolute())
 
 
@@ -456,27 +462,43 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     history_file = history_dir / f"{run_id}_history.json"
     lock = _history_lock_for(history_file)
     with lock:
-        history = []
-        if history_file.exists():
-            try:
-                with open(history_file, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-            except Exception:
-                history = []
+        history, parse_meta = _read_history_file_safe(history_file)
+        if parse_meta["parse_errors"]:
+            logger.warning(
+                "Recovered run history with parse errors for %s: %s",
+                history_file,
+                parse_meta["parse_errors"],
+            )
 
-        entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-        history.append(entry)
-
-        with open(history_file, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2)
+        safe_entry = make_json_safe(entry)
+        if not isinstance(safe_entry, dict):
+            safe_entry = {"entry": safe_entry}
+        safe_entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+        history.append(safe_entry)
+        _write_json_atomic(history_file, history)
 
     upload_artifact(str(history_file), run_id, "history", session_id=session_id)
 
 
 def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
+    history, meta = _get_run_history_with_meta(run_id, session_id=session_id)
+    _set_last_history_meta(run_id, session_id, meta)
+    return history
+
+
+def get_last_history_read_meta(run_id: str, session_id: Optional[str] = None) -> dict[str, Any]:
+    key = (run_id, session_id)
+    with _HISTORY_READ_META_GUARD:
+        return dict(_LAST_HISTORY_READ_META.get(key, {"parse_errors": [], "skipped_records": 0}))
+
+
+def _get_run_history_with_meta(
+    run_id: str, session_id: Optional[str] = None
+) -> tuple[list, dict[str, Any]]:
+    meta = {"parse_errors": [], "skipped_records": 0}
     history_root = Path("exports/reports/history")
     if not history_root.exists():
-        return []
+        return [], meta
 
     if session_id:
         path_root = _resolve_path_root(run_id, session_id)
@@ -484,9 +506,8 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
         if history_file.exists():
             lock = _history_lock_for(history_file)
             with lock:
-                with open(history_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        return []
+                return _read_history_file_safe(history_file)
+        return [], meta
 
     candidates = sorted(
         history_root.glob(f"**/{run_id}_history.json"),
@@ -496,9 +517,8 @@ def get_run_history(run_id: str, session_id: Optional[str] = None) -> list:
     if candidates:
         lock = _history_lock_for(candidates[0])
         with lock:
-            with open(candidates[0], "r", encoding="utf-8") as f:
-                return json.load(f)
-    return []
+            return _read_history_file_safe(candidates[0])
+    return [], meta
 
 
 def _history_lock_for(path: Path) -> threading.Lock:
@@ -541,13 +561,14 @@ def build_artifact_contract(
     required_data_export: bool = True,
 ) -> dict[str, Any]:
     plots = plot_urls or {}
+    data_export_status, data_export_reason = _resolve_data_export_status(export_url)
     matrix: dict[str, dict[str, Any]] = {
         "data_export": {
             "expected": True,
             "required": required_data_export,
-            "status": "available" if bool(export_url) else "missing",
+            "status": data_export_status,
             "url": export_url,
-            "reason": "" if export_url else "upload_failed",
+            "reason": data_export_reason,
         },
         "html_report": {
             "expected": expect_html,
@@ -609,6 +630,11 @@ def build_artifact_contract(
         f"Missing required artifact: {name} ({matrix[name].get('reason', 'missing')})"
         for name in missing_required
     ]
+    if data_export_reason == "server_local_path":
+        warnings.append(
+            "Data export path is local to MCP server runtime filesystem and may not be "
+            "directly accessible from the client host."
+        )
     return {
         "artifact_matrix": matrix,
         "expected_artifacts": expected,
@@ -624,3 +650,156 @@ def fold_status_with_artifacts(status: str, missing_required_artifacts: list[str
     if missing_required_artifacts:
         return "warn"
     return status
+
+
+def make_json_safe(value: Any) -> Any:
+    """Recursively convert values into JSON-serializable primitives."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return value
+
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+
+    if isinstance(value, Path):
+        return str(value)
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    if isinstance(value, pd.Timedelta):
+        return str(value)
+
+    if isinstance(value, pd.DataFrame):
+        return {
+            "_type": "dataframe",
+            "row_count": int(value.shape[0]),
+            "column_count": int(value.shape[1]),
+            "columns": [str(c) for c in value.columns.tolist()],
+        }
+
+    if isinstance(value, pd.Series):
+        return {
+            "_type": "series",
+            "name": str(value.name) if value.name is not None else "",
+            "length": int(len(value)),
+            "dtype": str(value.dtype),
+        }
+
+    if isinstance(value, dict):
+        return {str(k): make_json_safe(v) for k, v in value.items()}
+
+    if isinstance(value, (list, tuple, set)):
+        return [make_json_safe(v) for v in value]
+
+    if hasattr(value, "item") and callable(value.item):
+        try:
+            return make_json_safe(value.item())
+        except Exception:
+            pass
+
+    try:
+        json.dumps(value, allow_nan=False)
+        return value
+    except Exception:
+        return str(value)
+
+
+def _resolve_data_export_status(export_url: str) -> tuple[str, str]:
+    if not export_url:
+        return "missing", "upload_failed"
+
+    if export_url.startswith("gs://"):
+        return "available", ""
+
+    local_path = Path(export_url)
+    if local_path.exists():
+        return "available", "server_local_path"
+    return "missing", "local_path_not_found"
+
+
+def _set_last_history_meta(run_id: str, session_id: Optional[str], meta: dict[str, Any]) -> None:
+    key = (run_id, session_id)
+    with _HISTORY_READ_META_GUARD:
+        _LAST_HISTORY_READ_META[key] = {
+            "parse_errors": list(meta.get("parse_errors", [])),
+            "skipped_records": int(meta.get("skipped_records", 0)),
+        }
+
+
+def _write_json_atomic(path: Path, payload: Any) -> None:
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, allow_nan=False)
+    os.replace(tmp_path, path)
+
+
+def _read_history_file_safe(path: Path) -> tuple[list, dict[str, Any]]:
+    meta: dict[str, Any] = {"parse_errors": [], "skipped_records": 0}
+    parse_errors = cast(list[str], meta["parse_errors"])
+
+    if not path.exists():
+        return [], meta
+
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return [], meta
+
+    try:
+        parsed = json.loads(raw)
+    except JSONDecodeError as exc:
+        parse_errors.append(f"{type(exc).__name__}: {exc}")
+        recovered = _recover_history_entries(raw, meta)
+        return recovered, meta
+
+    return _coerce_history_entries(parsed, meta), meta
+
+
+def _recover_history_entries(raw: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
+    decoder = json.JSONDecoder()
+    recovered: list[dict[str, Any]] = []
+    parse_errors = cast(list[str], meta["parse_errors"])
+    idx = 0
+
+    while idx < len(raw):
+        while idx < len(raw) and raw[idx] in " \t\r\n[],":
+            idx += 1
+        if idx >= len(raw):
+            break
+        try:
+            item, next_idx = decoder.raw_decode(raw, idx)
+        except JSONDecodeError:
+            meta["skipped_records"] += 1
+            idx += 1
+            continue
+        if isinstance(item, dict):
+            recovered.append(item)
+        else:
+            meta["skipped_records"] += 1
+        idx = next_idx
+
+    if not recovered:
+        parse_errors.append("Unable to recover any valid history entries.")
+    return [make_json_safe(entry) for entry in recovered if isinstance(entry, dict)]
+
+
+def _coerce_history_entries(parsed: Any, meta: dict[str, Any]) -> list[dict[str, Any]]:
+    if isinstance(parsed, list):
+        entries: list[dict[str, Any]] = []
+        for item in parsed:
+            if isinstance(item, dict):
+                entries.append(make_json_safe(item))
+            else:
+                meta["skipped_records"] += 1
+        return entries
+
+    if isinstance(parsed, dict):
+        return [make_json_safe(parsed)]
+
+    meta["parse_errors"].append("History root is not a list/object.")
+    meta["skipped_records"] += 1
+    return []

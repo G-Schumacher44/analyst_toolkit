@@ -67,10 +67,133 @@ def _allowed_keys(module_name: str) -> set[str]:
 
 def _unknown_keys(module_name: str, config: dict[str, Any]) -> list[str]:
     allowed = _allowed_keys(module_name)
-    if not allowed:
-        return []
-    unknown = [k for k in config.keys() if k not in allowed]
-    return sorted(set(unknown))
+    unknown: set[str] = set()
+    if allowed:
+        unknown.update(k for k in config.keys() if k not in allowed)
+    return sorted(unknown)
+
+
+def _unknown_effective_keys(module_name: str, config: dict[str, Any]) -> list[str]:
+    unknown: set[str] = set()
+
+    def _add_unknown(prefix: str, values: dict[str, Any], allowed: set[str]) -> None:
+        for key in values.keys():
+            if key not in allowed:
+                unknown.add(f"{prefix}.{key}" if prefix else key)
+
+    if module_name == "normalization":
+        top_allowed = {"run", "logging", "input_path", "settings", "rules", "export_html"}
+        _add_unknown("", config, top_allowed)
+        rules = config.get("rules")
+        if isinstance(rules, dict):
+            rules_allowed = {
+                "rename_columns",
+                "standardize_text_columns",
+                "value_mappings",
+                "fuzzy_matching",
+                "parse_datetimes",
+                "coerce_dtypes",
+            }
+            _add_unknown("rules", rules, rules_allowed)
+        return sorted(unknown)
+
+    if module_name == "validation":
+        top_allowed = {
+            "run",
+            "logging",
+            "input_path",
+            "settings",
+            "schema_validation",
+            "rules",
+            "fail_on_error",
+            "export_html",
+        }
+        _add_unknown("", config, top_allowed)
+        schema_cfg = config.get("schema_validation")
+        if isinstance(schema_cfg, dict):
+            _add_unknown("schema_validation", schema_cfg, {"run", "fail_on_error", "rules"})
+        return sorted(unknown)
+
+    if module_name == "final_audit":
+        top_allowed = {
+            "run",
+            "logging",
+            "input_path",
+            "settings",
+            "raw_data_path",
+            "final_edits",
+            "certification",
+            "rules",
+            "disallowed_null_columns",
+            "fail_on_error",
+            "export_html",
+        }
+        _add_unknown("", config, top_allowed)
+        cert_cfg = config.get("certification")
+        if isinstance(cert_cfg, dict):
+            _add_unknown("certification", cert_cfg, {"run", "schema_validation"})
+            schema_cfg = cert_cfg.get("schema_validation")
+            if isinstance(schema_cfg, dict):
+                _add_unknown(
+                    "certification.schema_validation", schema_cfg, {"run", "fail_on_error", "rules"}
+                )
+        return sorted(unknown)
+
+    if module_name == "imputation":
+        top_allowed = {"run", "logging", "input_path", "settings", "rules", "export_html"}
+        _add_unknown("", config, top_allowed)
+        return sorted(unknown)
+
+    if module_name == "duplicates":
+        top_allowed = {
+            "run",
+            "logging",
+            "input_path",
+            "settings",
+            "subset_columns",
+            "mode",
+            "keep",
+            "export_html",
+        }
+        _add_unknown("", config, top_allowed)
+        return sorted(unknown)
+
+    if module_name == "outliers":
+        top_allowed = {
+            "run",
+            "logging",
+            "input_path",
+            "settings",
+            "detection_specs",
+            "exclude_columns",
+            "append_flags",
+            "plotting",
+            "export",
+            "checkpoint",
+            "method",
+            "columns",
+            "iqr_multiplier",
+            "zscore_threshold",
+            "export_html",
+        }
+        _add_unknown("", config, top_allowed)
+        return sorted(unknown)
+
+    if module_name == "diagnostics":
+        top_allowed = {
+            "run",
+            "logging",
+            "input_path",
+            "settings",
+            "profile",
+            "plotting",
+            "max_plots",
+            "export_html",
+        }
+        _add_unknown("", config, top_allowed)
+        return sorted(unknown)
+
+    return []
 
 
 def _shape_warnings(module_name: str, config: dict[str, Any]) -> list[str]:
@@ -123,7 +246,9 @@ async def _toolkit_preflight_config(
     root_key = "outlier_detection" if module_name == "outliers" else module_name
 
     warnings = _shape_warnings(module_name, raw_config)
-    unknown_keys = _unknown_keys(module_name, raw_config)
+    raw_unknown_keys = _unknown_keys(module_name, raw_config)
+    effective_unknown_keys = _unknown_effective_keys(module_name, normalized)
+    unknown_keys = sorted(set(raw_unknown_keys + effective_unknown_keys))
     if unknown_keys:
         warnings.append(
             "Unknown top-level keys detected and ignored by runtime: " + ", ".join(unknown_keys)

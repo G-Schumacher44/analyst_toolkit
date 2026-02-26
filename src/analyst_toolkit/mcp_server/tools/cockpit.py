@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 from analyst_toolkit.m00_utils.scoring import calculate_health_score
-from analyst_toolkit.mcp_server.io import get_run_history
+from analyst_toolkit.mcp_server.io import get_last_history_read_meta, get_run_history
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.templates import get_golden_configs
 
@@ -616,6 +616,7 @@ async def _toolkit_get_run_history(
 ) -> dict:
     """Returns the 'Prescription & Healing Ledger'."""
     history = get_run_history(run_id, session_id=session_id)
+    history_meta = get_last_history_read_meta(run_id, session_id=session_id)
     total_history_count = len(history)
 
     if failures_only:
@@ -658,8 +659,9 @@ async def _toolkit_get_run_history(
 
     ledger = [_history_summary(entry) for entry in history] if summary_only_effective else history
 
+    status = "warn" if history_meta.get("parse_errors") else "pass"
     return {
-        "status": "pass",
+        "status": status,
         "run_id": run_id,
         "session_id": session_id,
         "filters": {
@@ -678,6 +680,8 @@ async def _toolkit_get_run_history(
         "ledger": ledger,
         "latest_errors": latest_errors_payload,
         "latest_status_by_module": latest_status_payload,
+        "skipped_records": int(history_meta.get("skipped_records", 0)),
+        "parse_errors": list(history_meta.get("parse_errors", [])),
     }
 
 
@@ -693,6 +697,7 @@ def _history_summary(entry: dict[str, Any]) -> dict[str, Any]:
 async def _toolkit_get_data_health_report(run_id: str, session_id: str | None = None) -> dict:
     """Calculates a Red/Yellow/Green Data Health Score (0-100)."""
     history = get_run_history(run_id, session_id=session_id)
+    history_meta = get_last_history_read_meta(run_id, session_id=session_id)
     metrics = {
         "null_rate": 0.0,
         "validation_pass_rate": 1.0,
@@ -717,14 +722,17 @@ async def _toolkit_get_data_health_report(run_id: str, session_id: str | None = 
             metrics["outlier_ratio"] = count / row_count if row_count else min(0.2, count / 1000)
 
     score_res = calculate_health_score(metrics)
+    status = "warn" if history_meta.get("parse_errors") else "pass"
     return {
-        "status": "pass",
+        "status": status,
         "run_id": run_id,
         "session_id": session_id,
         "health_score": score_res["overall_score"],
         "health_status": score_res["status"],
         "breakdown": score_res["breakdown"],
         "message": f"Data Health Score is {score_res['overall_score']}/100 ({score_res['status'].upper()})",
+        "skipped_records": int(history_meta.get("skipped_records", 0)),
+        "parse_errors": list(history_meta.get("parse_errors", [])),
     }
 
 

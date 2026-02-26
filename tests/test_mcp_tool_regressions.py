@@ -9,6 +9,7 @@ import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_tool
 import analyst_toolkit.mcp_server.tools.diagnostics as diagnostics_tool
 import analyst_toolkit.mcp_server.tools.duplicates as duplicates_tool
 import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
+import analyst_toolkit.mcp_server.tools.imputation as imputation_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
@@ -306,6 +307,30 @@ async def test_tool_run_id_mismatch_is_coerced_to_session_run_by_default(monkeyp
     assert result["lifecycle"]["coerced"] is True
     assert any("Coerced to session run_id" in warning for warning in result["warnings"])
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_toolkit_imputation_handles_duplicate_column_names_in_summary(mocker):
+    df = pd.DataFrame([[1.0, None], [2.0, 3.0]], columns=["metric", "metric"])
+    df_imputed = pd.DataFrame([[1.0, 0.0], [2.0, 3.0]], columns=["metric", "metric"])
+
+    mocker.patch.object(imputation_tool, "load_input", return_value=df)
+    mocker.patch.object(imputation_tool, "run_imputation_pipeline", return_value=df_imputed)
+    mocker.patch.object(imputation_tool, "save_to_session", return_value="sess_imp")
+    mocker.patch.object(imputation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(imputation_tool, "save_output", return_value="gs://dummy/imp.csv")
+    mocker.patch.object(imputation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(imputation_tool, "should_export_html", return_value=False)
+
+    result = await imputation_tool._toolkit_imputation(
+        session_id="sess_imp",
+        run_id="imputation_duplicate_columns",
+        config={"imputation": {"rules": {"strategies": {"metric": "median"}}}},
+    )
+
+    assert result["status"] in {"pass", "warn"}
+    assert result["nulls_filled"] == 1
+    assert result["columns_imputed"] == ["metric"]
 
 
 @pytest.mark.asyncio

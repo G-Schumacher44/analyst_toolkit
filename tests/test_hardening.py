@@ -14,8 +14,10 @@ import pytest
 from analyst_toolkit.mcp_server.io import (
     _resolve_path_root,
     append_to_run_history,
+    build_artifact_contract,
     check_upload,
     coerce_config,
+    get_last_history_read_meta,
     get_run_history,
     load_input,
     resolve_run_context,
@@ -461,6 +463,64 @@ def test_append_to_run_history_is_thread_safe(sample_df, tmp_path, monkeypatch):
     history = get_run_history(run_id, session_id=session_id)
     assert len(history) == total
     assert {entry["module"] for entry in history} == {f"m{i}" for i in range(total)}
+
+
+def test_append_to_run_history_serializes_dataframe_details(sample_df, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    run_id = "run_jsonsafe_history"
+    session_id = StateStore.save(sample_df, run_id=run_id)
+    entry = {
+        "module": "validation",
+        "status": "fail",
+        "summary": {"passed": False},
+        "violations_detail": {
+            "categorical_values": {
+                "violating_rows": pd.DataFrame({"bad": ["x", "y"]}),
+            }
+        },
+    }
+    append_to_run_history(run_id, entry, session_id=session_id)
+
+    history = get_run_history(run_id, session_id=session_id)
+    assert len(history) == 1
+    details = history[0]["violations_detail"]["categorical_values"]["violating_rows"]
+    assert details["_type"] == "dataframe"
+    assert details["row_count"] == 2
+
+
+def test_get_run_history_recovers_from_corrupt_json(sample_df, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    run_id = "run_corrupt_history"
+    session_id = StateStore.save(sample_df, run_id=run_id)
+    path_root = _resolve_path_root(run_id, session_id)
+    history_dir = tmp_path / "exports/reports/history" / path_root
+    history_dir.mkdir(parents=True, exist_ok=True)
+    history_file = history_dir / f"{run_id}_history.json"
+    history_file.write_text(
+        '[{"module":"diagnostics","status":"pass"},{"module":"validation","status":"fail",]',
+        encoding="utf-8",
+    )
+
+    history = get_run_history(run_id, session_id=session_id)
+    meta = get_last_history_read_meta(run_id, session_id=session_id)
+
+    assert history
+    assert history[0]["module"] == "diagnostics"
+    assert meta["parse_errors"]
+    assert meta["skipped_records"] > 0
+
+
+def test_build_artifact_contract_warns_for_server_local_export(tmp_path):
+    local_export = tmp_path / "output.csv"
+    local_export.write_text("a\n1\n", encoding="utf-8")
+
+    contract = build_artifact_contract(str(local_export), expect_html=False, expect_xlsx=False)
+
+    assert contract["artifact_matrix"]["data_export"]["status"] == "available"
+    assert contract["artifact_matrix"]["data_export"]["reason"] == "server_local_path"
+    assert any("server runtime filesystem" in w for w in contract["artifact_warnings"])
 
 
 # ---------------------------------------------------------------------------
