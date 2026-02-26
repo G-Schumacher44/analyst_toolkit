@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pandas as pd
+
 from analyst_toolkit.m07_imputation.run_imputation_pipeline import (
     run_imputation_pipeline,
 )
@@ -21,6 +23,13 @@ from analyst_toolkit.mcp_server.io import (
     upload_artifact,
 )
 from analyst_toolkit.mcp_server.schemas import base_input_schema
+
+
+def _column_null_count(df: pd.DataFrame, column: str) -> int:
+    values = df[column]
+    if isinstance(values, pd.DataFrame):
+        return int(values.isnull().sum().sum())
+    return int(values.isnull().sum())
 
 
 async def _toolkit_imputation(
@@ -70,7 +79,10 @@ async def _toolkit_imputation(
     nulls_filled = nulls_before - nulls_after
 
     # Simple way to get columns imputed
-    columns_imputed = [c for c in df.columns if df[c].isnull().sum() > df_imputed[c].isnull().sum()]
+    unique_columns = list(dict.fromkeys(df.columns))
+    columns_imputed = [
+        c for c in unique_columns if _column_null_count(df, c) > _column_null_count(df_imputed, c)
+    ]
 
     artifact_path = ""
     artifact_url = ""

@@ -16,6 +16,7 @@ from analyst_toolkit.mcp_server.io import (
     generate_default_export_path,
     get_session_metadata,
     load_input,
+    make_json_safe,
     resolve_run_context,
     save_output,
     save_to_session,
@@ -82,7 +83,7 @@ async def _toolkit_validation(
                 checks_run += 1
                 if not check["passed"]:
                     violations_found.append(check_name)
-                    violations_detail[check_name] = check.get("details", {})
+                    violations_detail[check_name] = make_json_safe(check.get("details", {}))
 
     passed = len(violations_found) == 0
 

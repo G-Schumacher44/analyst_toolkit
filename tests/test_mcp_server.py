@@ -380,6 +380,28 @@ def test_rpc_preflight_config_strict_fails_on_unknown_keys():
     assert any("Unknown top-level keys" in w for w in result["warnings"])
 
 
+def test_rpc_preflight_config_strict_fails_on_nested_unknown_keys():
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 44,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "normalization",
+                "strict": True,
+                "config": {"normalization": {"run": True, "bogus_key_for_test": 123}},
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["summary"]["unknown_key_count"] >= 1
+    assert any("bogus_key_for_test" in k for k in result["unknown_keys"])
+
+
 def test_rpc_preflight_config_non_strict_warns_on_unknown_keys():
     payload = {
         "jsonrpc": "2.0",
