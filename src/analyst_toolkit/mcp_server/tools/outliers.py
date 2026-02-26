@@ -5,6 +5,7 @@ from pathlib import Path
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
     run_outlier_detection_pipeline,
 )
+from analyst_toolkit.mcp_server.config_normalizers import normalize_outliers_config
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     check_upload,
@@ -20,52 +21,6 @@ from analyst_toolkit.mcp_server.io import (
     upload_artifact,
 )
 from analyst_toolkit.mcp_server.schemas import base_input_schema
-
-
-def _normalize_outliers_config(base_cfg: dict) -> dict:
-    """
-    Accept canonical M05 config plus shorthand used by golden templates.
-
-    Shorthand example:
-      {"method": "iqr", "iqr_multiplier": 1.1, "columns": ["a", "b"]}
-    """
-    if not isinstance(base_cfg, dict):
-        return {}
-
-    normalized = dict(base_cfg)
-    detection_specs = normalized.get("detection_specs", {})
-    if not isinstance(detection_specs, dict):
-        detection_specs = {}
-    else:
-        detection_specs = dict(detection_specs)
-
-    method = normalized.get("method")
-    columns = normalized.get("columns")
-
-    if isinstance(method, str) and method in {"iqr", "zscore"}:
-        spec: dict[str, object] = {"method": method}
-        if method == "iqr" and isinstance(normalized.get("iqr_multiplier"), (int, float)):
-            spec["iqr_multiplier"] = float(normalized["iqr_multiplier"])
-        if method == "zscore" and isinstance(normalized.get("zscore_threshold"), (int, float)):
-            spec["zscore_threshold"] = float(normalized["zscore_threshold"])
-
-        if isinstance(columns, list) and columns:
-            for col in columns:
-                if isinstance(col, str) and col.strip():
-                    col_name = col.strip()
-                    current = detection_specs.get(col_name, {})
-                    if not isinstance(current, dict):
-                        current = {}
-                    detection_specs[col_name] = {**spec, **current}
-        elif "__default__" not in detection_specs:
-            detection_specs["__default__"] = spec
-
-    normalized["detection_specs"] = detection_specs
-    normalized.pop("method", None)
-    normalized.pop("columns", None)
-    normalized.pop("iqr_multiplier", None)
-    normalized.pop("zscore_threshold", None)
-    return normalized
 
 
 async def _toolkit_outliers(

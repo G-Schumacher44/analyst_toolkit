@@ -1,13 +1,12 @@
 """MCP tool: toolkit_validation — schema/dtype/range validation via M02."""
 
-from copy import deepcopy
-
 import pandas as pd
 
 from analyst_toolkit.m02_validation.run_validation_pipeline import (
     run_validation_pipeline,
 )
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+from analyst_toolkit.mcp_server.config_normalizers import normalize_validation_config
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     check_upload,
@@ -26,47 +25,6 @@ from analyst_toolkit.mcp_server.response_utils import next_action, with_next_act
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
-def _normalize_validation_config(config: dict) -> dict:
-    """
-    Accept both full module config and MCP shorthand config.
-
-    MCP config schema exposes top-level `rules`, while M02 expects:
-      validation.schema_validation.rules
-    """
-    if "validation" in config and isinstance(config.get("validation"), dict):
-        base_cfg = deepcopy(config["validation"])
-    else:
-        base_cfg = deepcopy(config)
-
-    if not isinstance(base_cfg, dict):
-        base_cfg = {}
-
-    schema_cfg = base_cfg.get("schema_validation", {})
-    if not isinstance(schema_cfg, dict):
-        schema_cfg = {}
-    else:
-        schema_cfg = deepcopy(schema_cfg)
-
-    nested_rules = schema_cfg.get("rules", {})
-    if not isinstance(nested_rules, dict):
-        nested_rules = {}
-
-    shorthand_rules = base_cfg.get("rules", {})
-    if isinstance(shorthand_rules, dict) and shorthand_rules:
-        nested_rules = {**nested_rules, **shorthand_rules}
-
-    schema_cfg["rules"] = nested_rules
-    schema_cfg.setdefault("run", True)
-    if "fail_on_error" in base_cfg and "fail_on_error" not in schema_cfg:
-        schema_cfg["fail_on_error"] = bool(base_cfg["fail_on_error"])
-    schema_cfg.setdefault("fail_on_error", False)
-
-    base_cfg["schema_validation"] = schema_cfg
-    base_cfg.pop("rules", None)
-
-    return base_cfg
-
-
 async def _toolkit_validation(
     gcs_path: str | None = None,
     session_id: str | None = None,
@@ -80,7 +38,7 @@ async def _toolkit_validation(
     run_id = run_id or default_run_id()
 
     config = coerce_config(config, "validation")
-    base_cfg = _normalize_validation_config(config)
+    base_cfg = normalize_validation_config(config)
     df = load_input(gcs_path, session_id=session_id)
 
     # Ensure it's in a session for the pipeline
@@ -155,6 +113,7 @@ async def _toolkit_validation(
         "module": "validation",
         "run_id": run_id,
         "session_id": session_id,
+        "effective_config": base_cfg,
         "summary": {
             "passed": passed,
             "checks_run": checks_run,
