@@ -310,7 +310,9 @@ def test_rpc_preflight_config_normalizes_outliers_shorthand():
     result = response.json()["result"]
     assert result["status"] == "pass"
     assert result["module"] == "outliers"
-    assert result["summary"]["effective_rules_path"] == "outlier_detection.detection_specs.<column>.*"
+    assert (
+        result["summary"]["effective_rules_path"] == "outlier_detection.detection_specs.<column>.*"
+    )
     specs = result["effective_config"]["detection_specs"]
     assert specs["transaction_amount"]["method"] == "iqr"
     assert specs["frequency_24h"]["method"] == "iqr"
