@@ -38,7 +38,7 @@ async def _toolkit_outliers(
     config = coerce_config(config, "outlier_detection")
     df = load_input(gcs_path, session_id=session_id)
 
-    base_cfg = _normalize_outliers_config(config.get("outlier_detection", config))
+    base_cfg = normalize_outliers_config(config.get("outlier_detection", config))
 
     # Build a module config that ensures plotting and export are on
     module_cfg = {
