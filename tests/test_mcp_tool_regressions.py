@@ -4,12 +4,12 @@ import types
 import pandas as pd
 import pytest
 
+import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_tool
 import analyst_toolkit.mcp_server.tools.diagnostics as diagnostics_tool
 import analyst_toolkit.mcp_server.tools.duplicates as duplicates_tool
 import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
-import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
 
 
