@@ -17,13 +17,10 @@ Start Stdio:
 
 import argparse
 import asyncio
-import collections
 import json
 import logging
 import os
-import secrets
 import sys
-import threading
 import time
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
@@ -36,6 +33,8 @@ from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
+from analyst_toolkit.mcp_server.auth import is_authorized
+from analyst_toolkit.mcp_server.observability import RuntimeMetrics, log_rpc_event
 from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
 from analyst_toolkit.mcp_server.response_utils import (
     attach_trace_id,
@@ -94,76 +93,21 @@ SERVER_INFO = {
     "capabilities": {"tools": {}, "resources": {"subscribe": False, "listChanged": False}},
 }
 
-
-class RuntimeMetrics:
-    """Thread-safe request metrics for basic operability endpoints."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._rpc_requests_total = 0
-        self._rpc_errors_total = 0
-        self._rpc_total_latency_ms = 0.0
-        self._rpc_by_method: dict[str, int] = collections.defaultdict(int)
-        self._rpc_by_tool: dict[str, int] = collections.defaultdict(int)
-
-    def record_rpc(
-        self,
-        *,
-        method: str,
-        duration_ms: float,
-        ok: bool,
-        tool_name: str | None = None,
-    ) -> None:
-        with self._lock:
-            self._rpc_requests_total += 1
-            self._rpc_total_latency_ms += max(duration_ms, 0.0)
-            self._rpc_by_method[method or "unknown"] += 1
-            if tool_name:
-                self._rpc_by_tool[tool_name] += 1
-            if not ok:
-                self._rpc_errors_total += 1
-
-    def snapshot(self) -> dict[str, Any]:
-        with self._lock:
-            requests = self._rpc_requests_total
-            avg_latency_ms = round(self._rpc_total_latency_ms / requests, 2) if requests else 0.0
-            return {
-                "rpc": {
-                    "requests_total": requests,
-                    "errors_total": self._rpc_errors_total,
-                    "avg_latency_ms": avg_latency_ms,
-                    "by_method": dict(self._rpc_by_method),
-                    "by_tool": dict(self._rpc_by_tool),
-                },
-                "uptime_sec": int(max(0, time.time() - SERVER_STARTED_AT)),
-            }
-
-
-METRICS = RuntimeMetrics()
+METRICS = RuntimeMetrics(started_at=SERVER_STARTED_AT)
 
 
 def _log_rpc_event(level: int, event: str, **fields: Any) -> None:
-    payload = {"event": event, **fields}
-    if STRUCTURED_LOGS:
-        logger.log(level, json.dumps(payload, default=str, sort_keys=True))
-        return
-    compact = " ".join(
-        f"{k}={v}" for k, v in payload.items() if v is not None and not isinstance(v, (dict, list))
+    log_rpc_event(
+        logger=logger,
+        structured_logs=STRUCTURED_LOGS,
+        level=level,
+        event=event,
+        **fields,
     )
-    logger.log(level, compact)
 
 
 def _is_authorized(request: Request) -> bool:
-    """Check request authorization when token auth mode is enabled."""
-    if not AUTH_TOKEN:
-        return True
-    auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return False
-    provided = auth_header.removeprefix("Bearer ").strip()
-    if not provided:
-        return False
-    return secrets.compare_digest(provided, AUTH_TOKEN)
+    return is_authorized(request, AUTH_TOKEN)
 
 
 @mcp_server.list_tools()
