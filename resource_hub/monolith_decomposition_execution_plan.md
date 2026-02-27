@@ -82,6 +82,10 @@ Current largest test files:
 - `tools/cockpit_health.py`
 - `tools/cockpit_history.py`
 - `tools/cockpit_templates.py`
+- `tools/cockpit_capabilities.py`
+- `tools/cockpit_content.py`
+- `tools/cockpit_runtime.py`
+- `tools/cockpit_schemas.py`
 
 ### Definition of Done
 - Tool IDs, schemas, and outputs unchanged.
@@ -135,6 +139,6 @@ PR scope:
 - [x] Plan created and tracked in repo.
 - [x] Phase 1 complete.
 - [x] Phase 2 complete.
-- [ ] Phase 3 complete.
+- [x] Phase 3 complete.
 - [ ] Phase 4 complete.
 - [ ] Phase 5 complete.
