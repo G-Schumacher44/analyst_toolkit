@@ -95,8 +95,8 @@ Current largest test files:
 
 ### Planned extractions
 - `m00_utils/report_html.py`
-- `m00_utils/report_export.py`
-- `m00_utils/report_manifest.py`
+- `m00_utils/report_tables.py`
+- `m00_utils/report_generator.py` kept as compatibility facade
 
 ### Definition of Done
 - Report artifacts and names unchanged.
@@ -140,5 +140,5 @@ PR scope:
 - [x] Phase 1 complete.
 - [x] Phase 2 complete.
 - [x] Phase 3 complete.
-- [ ] Phase 4 complete.
+- [x] Phase 4 complete.
 - [ ] Phase 5 complete.
