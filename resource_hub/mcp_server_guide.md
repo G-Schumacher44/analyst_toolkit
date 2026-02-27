@@ -28,6 +28,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Operability Endpoints](#operability-endpoints)
 - [Tool Reference](#tool-reference) ▾
 - [Pipeline Mode](#pipeline-mode-state-management)
 - [Template Resources](#template-resources)
@@ -71,6 +72,8 @@ curl http://localhost:8001/health | python3 -m json.tool
 ```json
 {
   "status": "ok",
+  "version": "0.4.2",
+  "uptime_sec": 42,
   "tools": [
     "diagnostics", "validation", "outliers", "normalization",
     "duplicates", "imputation", "infer_configs", "auto_heal",
@@ -81,6 +84,53 @@ curl http://localhost:8001/health | python3 -m json.tool
   ]
 }
 ```
+
+## Operability Endpoints
+
+Use these endpoints for runtime checks and automation diagnostics:
+
+```bash
+# Liveness + server metadata + registered tools
+curl http://localhost:8001/health | python3 -m json.tool
+
+# Readiness probe
+curl http://localhost:8001/ready | python3 -m json.tool
+
+# Runtime counters and latency summary
+curl http://localhost:8001/metrics | python3 -m json.tool
+```
+
+If `ANALYST_MCP_AUTH_TOKEN` is configured, include:
+
+```bash
+-H "Authorization: Bearer <token>"
+```
+
+`/metrics` response shape (JSON):
+
+```json
+{
+  "rpc": {
+    "requests_total": 120,
+    "errors_total": 3,
+    "avg_latency_ms": 42.7,
+    "by_method": {"tools/call": 98, "tools/list": 12, "initialize": 10},
+    "by_tool": {"diagnostics": 24, "validation": 18}
+  },
+  "uptime_sec": 3600
+}
+```
+
+## Operational Triage (Quick Runbook)
+
+When diagnosing failures, use `trace_id` from the JSON-RPC error payload and correlate with server logs.
+
+| Signal | Likely Cause | Operator Action |
+|---|---|---|
+| JSON-RPC `-32700 Parse error` | malformed request body | validate client payload and retry |
+| JSON-RPC `-32601 Tool not found` | tool name mismatch/client prefix issue | verify `tools/list`, then correct tool name |
+| `resources_*_timeout` envelope code | template/resource I/O timeout | increase `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` or `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`; verify storage latency |
+| JSON-RPC `-32603 Internal error` | tool/runtime exception | inspect logs by `trace_id`, rerun once, then escalate with run evidence |
 
 > **Note:** Most MCP clients (Claude Desktop, FridAI) will prefix these with `toolkit_`, e.g. `toolkit_diagnostics`. The server registers them without the prefix to avoid double-prefixing.
 
@@ -559,9 +609,12 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_REPORT_BUCKET` | No | _(unset — local mode)_ | GCS bucket for HTML/XLSX/plot upload, e.g. `gs://my-bucket` |
 | `ANALYST_REPORT_PREFIX` | No | `analyst_toolkit/reports` | Blob path prefix within the bucket |
 | `ANALYST_MCP_PORT` | No | `8001` | Override the server port |
+| `ANALYST_MCP_VERSION_FALLBACK` | No | `0.0.0+local` | Version string used when package metadata is unavailable in local/source execution |
+| `ANALYST_MCP_AUTH_TOKEN` | No | _(unset)_ | If set, require `Authorization: Bearer <token>` for `/rpc`, `/health`, `/ready`, and `/metrics` |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | No | `8.0` | Timeout for MCP `resources/list` and `resources/read` filesystem work |
 | `ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES` | No | `false` | If `true`, `resources/templates/list` returns URI templates (otherwise empty to avoid duplicate UI listings) |
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
+| `ANALYST_MCP_STRUCTURED_LOGS` | No | `false` | Emit JSON-structured request lifecycle logs (`trace_id`, method, tool, duration) |
 | `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
 | `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |
 | `ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT` | No | `true` | Default compact ledger mode for `get_run_history` when caller omits `summary_only` |
