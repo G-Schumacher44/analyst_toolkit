@@ -17,10 +17,14 @@ Start Stdio:
 
 import argparse
 import asyncio
+import collections
 import json
 import logging
 import os
+import secrets
 import sys
+import threading
+import time
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
@@ -44,7 +48,7 @@ from analyst_toolkit.mcp_server.templates import list_template_resources, read_t
 try:
     __version__ = version("analyst_toolkit")
 except PackageNotFoundError:
-    __version__ = "0.4.0"  # Fallback if not installed as package
+    __version__ = os.environ.get("ANALYST_MCP_VERSION_FALLBACK", "0.0.0+local")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,6 +78,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 RESOURCE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_RESOURCE_TIMEOUT_SEC", 8.0)
 ADVERTISE_RESOURCE_TEMPLATES = _env_bool("ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES", False)
+STRUCTURED_LOGS = _env_bool("ANALYST_MCP_STRUCTURED_LOGS", False)
+AUTH_TOKEN = os.environ.get("ANALYST_MCP_AUTH_TOKEN", "").strip()
+SERVER_STARTED_AT = time.time()
 
 # Official MCP SDK server instance
 mcp_server = Server("analyst-toolkit")
@@ -86,6 +93,77 @@ SERVER_INFO = {
     "serverInfo": {"name": "analyst-toolkit", "version": __version__},
     "capabilities": {"tools": {}, "resources": {"subscribe": False, "listChanged": False}},
 }
+
+
+class RuntimeMetrics:
+    """Thread-safe request metrics for basic operability endpoints."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._rpc_requests_total = 0
+        self._rpc_errors_total = 0
+        self._rpc_total_latency_ms = 0.0
+        self._rpc_by_method: dict[str, int] = collections.defaultdict(int)
+        self._rpc_by_tool: dict[str, int] = collections.defaultdict(int)
+
+    def record_rpc(
+        self,
+        *,
+        method: str,
+        duration_ms: float,
+        ok: bool,
+        tool_name: str | None = None,
+    ) -> None:
+        with self._lock:
+            self._rpc_requests_total += 1
+            self._rpc_total_latency_ms += max(duration_ms, 0.0)
+            self._rpc_by_method[method or "unknown"] += 1
+            if tool_name:
+                self._rpc_by_tool[tool_name] += 1
+            if not ok:
+                self._rpc_errors_total += 1
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            requests = self._rpc_requests_total
+            avg_latency_ms = round(self._rpc_total_latency_ms / requests, 2) if requests else 0.0
+            return {
+                "rpc": {
+                    "requests_total": requests,
+                    "errors_total": self._rpc_errors_total,
+                    "avg_latency_ms": avg_latency_ms,
+                    "by_method": dict(self._rpc_by_method),
+                    "by_tool": dict(self._rpc_by_tool),
+                },
+                "uptime_sec": int(max(0, time.time() - SERVER_STARTED_AT)),
+            }
+
+
+METRICS = RuntimeMetrics()
+
+
+def _log_rpc_event(level: int, event: str, **fields: Any) -> None:
+    payload = {"event": event, **fields}
+    if STRUCTURED_LOGS:
+        logger.log(level, json.dumps(payload, default=str, sort_keys=True))
+        return
+    compact = " ".join(
+        f"{k}={v}" for k, v in payload.items() if v is not None and not isinstance(v, (dict, list))
+    )
+    logger.log(level, compact)
+
+
+def _is_authorized(request: Request) -> bool:
+    """Check request authorization when token auth mode is enabled."""
+    if not AUTH_TOKEN:
+        return True
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    provided = auth_header.removeprefix("Bearer ").strip()
+    if not provided:
+        return False
+    return secrets.compare_digest(provided, AUTH_TOKEN)
 
 
 @mcp_server.list_tools()
@@ -198,19 +276,81 @@ def _rpc_ok(req_id: Any, result: Any) -> dict:
 @app.post("/rpc")
 async def rpc_handler(request: Request) -> JSONResponse:
     """HTTP JSON-RPC 2.0 dispatcher for FridAI."""
+    start = time.perf_counter()
+    trace_id = new_trace_id()
+    req_id: Any = None
+    method = "unknown"
+    tool_name: str | None = None
+
+    def _respond(
+        payload: dict[str, Any],
+        *,
+        ok: bool,
+        level: int = logging.INFO,
+        error_code: int | None = None,
+        run_id: str | None = None,
+        session_id: str | None = None,
+    ) -> JSONResponse:
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        METRICS.record_rpc(method=method, duration_ms=duration_ms, ok=ok, tool_name=tool_name)
+        _log_rpc_event(
+            level,
+            "rpc_request_completed",
+            trace_id=trace_id,
+            req_id=req_id,
+            method=method,
+            tool=tool_name,
+            ok=ok,
+            error_code=error_code,
+            duration_ms=duration_ms,
+            run_id=run_id,
+            session_id=session_id,
+        )
+        return JSONResponse(payload, status_code=200)
+
+    if not _is_authorized(request):
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        METRICS.record_rpc(
+            method="tools/call_auth_rejected",
+            duration_ms=duration_ms,
+            ok=False,
+            tool_name=None,
+        )
+        _log_rpc_event(
+            logging.WARNING,
+            "rpc_request_rejected_auth",
+            trace_id=trace_id,
+            req_id=req_id,
+            method=method,
+            duration_ms=duration_ms,
+        )
+        return JSONResponse(
+            {"error": "Unauthorized", "trace_id": trace_id},
+            status_code=401,
+        )
+
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse(_rpc_error(None, -32700, "Parse error"), status_code=200)
+        return _respond(_rpc_error(None, -32700, "Parse error"), ok=False, level=logging.WARNING)
 
     req_id = body.get("id")
     method = body.get("method", "")
     params = body.get("params", {})
+    if method == "tools/call":
+        tool_name = params.get("name")
 
-    logger.info(f"RPC request: method={method} id={req_id}")
+    _log_rpc_event(
+        logging.INFO,
+        "rpc_request_received",
+        trace_id=trace_id,
+        req_id=req_id,
+        method=method,
+        tool=tool_name,
+    )
 
     if method == "initialize":
-        return JSONResponse(_rpc_ok(req_id, SERVER_INFO))
+        return _respond(_rpc_ok(req_id, SERVER_INFO), ok=True)
 
     if method == "tools/list":
         tools = [
@@ -221,23 +361,39 @@ async def rpc_handler(request: Request) -> JSONResponse:
             }
             for name, meta in TOOL_REGISTRY.items()
         ]
-        return JSONResponse(_rpc_ok(req_id, {"tools": tools}))
+        return _respond(_rpc_ok(req_id, {"tools": tools}), ok=True)
 
     if method == "tools/call":
-        tool_name = params.get("name")
         arguments = params.get("arguments", {})
 
         if not tool_name:
-            return JSONResponse(_rpc_error(req_id, -32602, "Missing 'name' in params"))
+            return _respond(
+                _rpc_error(req_id, -32602, "Missing 'name' in params"),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32602,
+            )
 
         if tool_name not in TOOL_REGISTRY:
-            return JSONResponse(_rpc_error(req_id, -32601, f"Tool not found: {tool_name}"))
+            return _respond(
+                _rpc_error(req_id, -32601, f"Tool not found: {tool_name}"),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32601,
+            )
 
         try:
             result = await TOOL_REGISTRY[tool_name]["fn"](**arguments)
-            return JSONResponse(_rpc_ok(req_id, attach_trace_id(result)))
+            result = attach_trace_id(result, trace_id=trace_id)
+            run_id = result.get("run_id") if isinstance(result, dict) else None
+            session_id = result.get("session_id") if isinstance(result, dict) else None
+            return _respond(
+                _rpc_ok(req_id, result),
+                ok=True,
+                run_id=run_id,
+                session_id=session_id,
+            )
         except Exception as exc:
-            trace_id = new_trace_id()
             envelope = build_error_envelope(
                 category="internal",
                 code="rpc_tools_call_internal_error",
@@ -250,22 +406,23 @@ async def rpc_handler(request: Request) -> JSONResponse:
                 trace_id=trace_id,
             )
             logger.exception(f"Tool {tool_name} raised an error")
-            # Return proper JSON-RPC 2.0 error
-            return JSONResponse(
+            return _respond(
                 _rpc_error(
                     req_id,
                     -32603,
                     f"Internal error: {str(exc)} (trace_id={trace_id})",
                     data={"error": envelope},
-                )
+                ),
+                ok=False,
+                level=logging.ERROR,
+                error_code=-32603,
             )
 
     if method == "resources/list":
         try:
             model_list = await _resource_models_with_timeout()
         except asyncio.TimeoutError:
-            trace_id = new_trace_id()
-            return JSONResponse(
+            return _respond(
                 _rpc_error(
                     req_id,
                     -32000,
@@ -286,27 +443,29 @@ async def rpc_handler(request: Request) -> JSONResponse:
                             trace_id=trace_id,
                         )
                     },
-                )
+                ),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32000,
             )
         resources = [
             r.model_dump(mode="json", by_alias=True, exclude_none=True) for r in model_list
         ]
-        return JSONResponse(_rpc_ok(req_id, {"resources": resources}))
+        return _respond(_rpc_ok(req_id, {"resources": resources}), ok=True)
 
     if method == "resources/templates/list":
         if not ADVERTISE_RESOURCE_TEMPLATES:
-            return JSONResponse(_rpc_ok(req_id, {"resourceTemplates": []}))
+            return _respond(_rpc_ok(req_id, {"resourceTemplates": []}), ok=True)
         templates = [
             t.model_dump(mode="json", by_alias=True, exclude_none=True)
             for t in _resource_template_models()
         ]
-        return JSONResponse(_rpc_ok(req_id, {"resourceTemplates": templates}))
+        return _respond(_rpc_ok(req_id, {"resourceTemplates": templates}), ok=True)
 
     if method == "resources/read":
         uri = params.get("uri")
         if not isinstance(uri, str) or not uri:
-            trace_id = new_trace_id()
-            return JSONResponse(
+            return _respond(
                 _rpc_error(
                     req_id,
                     -32602,
@@ -321,13 +480,15 @@ async def rpc_handler(request: Request) -> JSONResponse:
                             trace_id=trace_id,
                         )
                     },
-                )
+                ),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32602,
             )
         try:
             text = await _read_template_with_timeout(uri)
         except FileNotFoundError as exc:
-            trace_id = new_trace_id()
-            return JSONResponse(
+            return _respond(
                 _rpc_error(
                     req_id,
                     -32602,
@@ -342,11 +503,13 @@ async def rpc_handler(request: Request) -> JSONResponse:
                             trace_id=trace_id,
                         )
                     },
-                )
+                ),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32602,
             )
         except asyncio.TimeoutError:
-            trace_id = new_trace_id()
-            return JSONResponse(
+            return _respond(
                 _rpc_error(
                     req_id,
                     -32000,
@@ -367,12 +530,14 @@ async def rpc_handler(request: Request) -> JSONResponse:
                             trace_id=trace_id,
                         )
                     },
-                )
+                ),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32000,
             )
         except Exception as exc:
-            trace_id = new_trace_id()
             logger.exception("Resource read failed")
-            return JSONResponse(
+            return _respond(
                 _rpc_error(
                     req_id,
                     -32603,
@@ -389,10 +554,13 @@ async def rpc_handler(request: Request) -> JSONResponse:
                             trace_id=trace_id,
                         )
                     },
-                )
+                ),
+                ok=False,
+                level=logging.ERROR,
+                error_code=-32603,
             )
 
-        return JSONResponse(
+        return _respond(
             _rpc_ok(
                 req_id,
                 {
@@ -404,15 +572,43 @@ async def rpc_handler(request: Request) -> JSONResponse:
                         }
                     ]
                 },
-            )
+            ),
+            ok=True,
         )
 
-    return JSONResponse(_rpc_error(req_id, -32601, f"Unknown method: {method}"))
+    return _respond(
+        _rpc_error(req_id, -32601, f"Unknown method: {method}"),
+        ok=False,
+        level=logging.WARNING,
+        error_code=-32601,
+    )
 
 
 @app.get("/health")
-async def health() -> dict:
-    return {"status": "ok", "tools": list(TOOL_REGISTRY.keys())}
+async def health(request: Request) -> Any:
+    if not _is_authorized(request):
+        return JSONResponse({"status": "unauthorized"}, status_code=401)
+    metrics = METRICS.snapshot()
+    return {
+        "status": "ok",
+        "version": __version__,
+        "tools": list(TOOL_REGISTRY.keys()),
+        "uptime_sec": metrics["uptime_sec"],
+    }
+
+
+@app.get("/ready")
+async def ready(request: Request) -> Any:
+    if not _is_authorized(request):
+        return JSONResponse({"status": "unauthorized"}, status_code=401)
+    return {"status": "ready"}
+
+
+@app.get("/metrics")
+async def metrics(request: Request) -> Any:
+    if not _is_authorized(request):
+        return JSONResponse({"status": "unauthorized"}, status_code=401)
+    return METRICS.snapshot()
 
 
 # --- Tool Imports (Triggers Self-Registration) ---
