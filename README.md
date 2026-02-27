@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.2-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.3-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -17,7 +17,7 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
-## 🆕 Version 0.4.2: The "Self-Healing" Audit
+## 🆕 Version 0.4.3: Operability + Hardening
 
 This major update transforms the toolkit from a collection of utilities into a cohesive, autonomous auditing engine.
 
@@ -146,6 +146,9 @@ make mcp-up        # docker-compose up --build -d
 make mcp-health    # curl /health and pretty-print response
 make mcp-logs      # tail logs
 make mcp-down      # stop
+# extra runtime checks:
+curl http://localhost:8001/ready | python3 -m json.tool
+curl http://localhost:8001/metrics | python3 -m json.tool
 ```
 
 **Call a tool:**
@@ -158,6 +161,8 @@ curl -X POST http://localhost:8001/rpc \
 
 Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure. HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set, or explicitly with `export_html: true` in the config.
 If template/resource reads are timing out under load, tune `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` and `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`.
+For structured request lifecycle logs, set `ANALYST_MCP_STRUCTURED_LOGS=true`.
+For token auth in networked deployments, set `ANALYST_MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>`.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 

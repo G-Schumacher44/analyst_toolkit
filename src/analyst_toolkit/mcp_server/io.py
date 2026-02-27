@@ -4,20 +4,40 @@ io.py — Data loading and artifact upload for the analyst_toolkit MCP server.
 
 import json
 import logging
-import math
 import os
-import re
-import tempfile
 import threading
-from datetime import date, datetime, time, timezone
-from json import JSONDecodeError
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, cast
-from uuid import uuid4
+from typing import Any, Optional
 
 import pandas as pd
 import yaml
 
+from analyst_toolkit.mcp_server.io_history_files import (
+    read_history_file_safe as _read_history_file_safe,
+)
+from analyst_toolkit.mcp_server.io_history_files import (
+    write_json_atomic as _write_json_atomic,
+)
+from analyst_toolkit.mcp_server.io_path_normalization import (
+    looks_like_bucket_path as _looks_like_bucket_path,
+)
+from analyst_toolkit.mcp_server.io_path_normalization import (
+    normalize_input_path as _normalize_input_path,
+)
+from analyst_toolkit.mcp_server.io_serialization import (
+    build_artifact_contract,
+    fold_status_with_artifacts,
+    make_json_safe,
+)
+from analyst_toolkit.mcp_server.io_storage import (
+    load_from_gcs,
+    save_output,
+    should_export_html,
+)
+from analyst_toolkit.mcp_server.io_storage import (
+    upload_artifact as _upload_artifact,
+)
 from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -39,8 +59,6 @@ _SEEN_LIFECYCLE_WARNING_KEYS: set[tuple[str, str]] = set()
 ALLOW_EMPTY_CERT_RULES = _env_bool("ANALYST_MCP_ALLOW_EMPTY_CERT_RULES", False)
 _HISTORY_READ_META_GUARD = threading.Lock()
 _LAST_HISTORY_READ_META: dict[tuple[str, Optional[str]], dict[str, Any]] = {}
-
-_BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$")
 
 
 def coerce_config(config: Optional[dict], module: str) -> dict:
@@ -189,35 +207,6 @@ def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> 
     raise FileNotFoundError(f"Input path not found: '{path}'")
 
 
-def _normalize_input_path(path: str) -> tuple[str, str]:
-    stripped = path.strip()
-    if stripped.startswith("gs://"):
-        return stripped, ""
-
-    if _looks_like_bucket_path(stripped) and not Path(stripped).exists():
-        return f"gs://{stripped}", f"Auto-normalized bucket-like input path to gs://{stripped}"
-    return stripped, ""
-
-
-def _looks_like_bucket_path(path: str) -> bool:
-    if not path or "://" in path:
-        return False
-    if path.startswith(("/", ".", "~")):
-        return False
-    if "\\" in path:
-        return False
-    parts = path.split("/", 1)
-    if len(parts) != 2:
-        return False
-    bucket = parts[0].strip()
-    prefix = parts[1].strip()
-    if not bucket or not prefix:
-        return False
-    if "-" not in bucket and "." not in bucket:
-        return False
-    return bool(_BUCKET_RE.match(bucket))
-
-
 def save_to_session(
     df: pd.DataFrame, session_id: Optional[str] = None, run_id: Optional[str] = None
 ) -> str:
@@ -275,119 +264,6 @@ def generate_default_export_path(
     return str((base_dir / f"{module}_output.{extension}").absolute())
 
 
-def load_from_gcs(gcs_path: str) -> pd.DataFrame:
-    stripped = gcs_path.removeprefix("gs://")
-    bucket_name, _, prefix = stripped.partition("/")
-    from google.cloud import storage
-
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-
-    # Direct file path — download and read without listing
-    if prefix.endswith(".parquet") or prefix.endswith(".csv"):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            local_path = Path(tmpdir) / Path(prefix).name
-            bucket.blob(prefix).download_to_filename(str(local_path))
-            if local_path.suffix == ".parquet":
-                return pd.read_parquet(local_path)
-            else:
-                return pd.read_csv(local_path, low_memory=False)
-
-    # Directory path — list and concat all matching files
-    blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"))
-    blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
-
-    if not blobs:
-        raise FileNotFoundError(f"No .parquet or .csv files found at gs://{bucket_name}/{prefix}")
-
-    frames = []
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for blob in blobs:
-            local_path = Path(tmpdir) / blob.name.replace("/", "_")
-            blob.download_to_filename(str(local_path))
-            if local_path.suffix == ".parquet":
-                frames.append(pd.read_parquet(local_path))
-            else:
-                frames.append(pd.read_csv(local_path, low_memory=False))
-    return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
-
-
-def should_export_html(config: dict) -> bool:
-    if "export_html" in config:
-        return bool(config["export_html"])
-    return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
-
-
-def save_output(df: pd.DataFrame, path: str) -> str:
-    if path.startswith("gs://"):
-        # Write to a local temp file first, then upload via google-cloud-storage.
-        # This avoids filesystem-layer overwrite flows that may require delete perms.
-        suffix = ".parquet" if path.endswith(".parquet") else ".csv"
-        content_type = "application/octet-stream" if suffix == ".parquet" else "text/csv"
-
-        tmp_path = ""
-        try:
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-                tmp_path = tmp.name
-            if suffix == ".parquet":
-                df.to_parquet(tmp_path, index=False)
-            else:
-                df.to_csv(tmp_path, index=False)
-
-            try:
-                from google.cloud import storage
-
-                stripped = path.removeprefix("gs://")
-                bucket_name, _, blob_path = stripped.partition("/")
-                if not bucket_name or not blob_path:
-                    raise ValueError(f"Invalid GCS path: {path}")
-
-                client = storage.Client()
-                bucket = client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
-                try:
-                    blob.upload_from_filename(tmp_path, content_type=content_type)
-                except Exception as first_exc:
-                    alt_blob_path = _versioned_blob_path(blob_path)
-                    alt_blob = bucket.blob(alt_blob_path)
-                    try:
-                        alt_blob.upload_from_filename(tmp_path, content_type=content_type)
-                    except Exception:
-                        raise first_exc
-                    return f"gs://{bucket_name}/{alt_blob_path}"
-            except ImportError:
-                # Backward-compatible fallback for environments using gcsfs-style paths.
-                if suffix == ".parquet":
-                    df.to_parquet(path, index=False)
-                else:
-                    df.to_csv(path, index=False)
-        finally:
-            if tmp_path:
-                try:
-                    Path(tmp_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-        return path
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    if path.endswith(".parquet"):
-        df.to_parquet(path, index=False)
-    else:
-        df.to_csv(path, index=False)
-    if not p.exists():
-        raise FileNotFoundError(f"Local export write failed: '{p}'")
-    return str(p.absolute())
-
-
-_CONTENT_TYPES = {
-    ".html": "text/html",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".csv": "text/csv",
-    ".json": "application/json",
-    ".png": "image/png",
-}
-
-
 def upload_artifact(
     local_path: str,
     run_id: str,
@@ -395,55 +271,15 @@ def upload_artifact(
     config: Optional[dict] = None,
     session_id: Optional[str] = None,
 ) -> str:
-    """Uploads artifact to: prefix/path_root/module/filename"""
-    config = config or {}
-    bucket_uri = config.get("output_bucket") or os.environ.get(
-        "ANALYST_REPORT_BUCKET", ""
-    ).strip().rstrip("/")
-    if not bucket_uri:
-        return ""
-
-    p = Path(local_path)
-    if not p.exists():
-        return ""
-
-    try:
-        from google.cloud import storage
-    except ImportError:
-        return ""
-
-    prefix = config.get("output_prefix") or os.environ.get(
-        "ANALYST_REPORT_PREFIX", "analyst_toolkit/reports"
-    ).strip().strip("/")
-    content_type = _CONTENT_TYPES.get(p.suffix.lower(), "application/octet-stream")
-
-    path_root = _resolve_path_root(run_id, session_id)
-    bucket_name = bucket_uri.removeprefix("gs://")
-    blob_path = f"{prefix}/{path_root}/{module}/{p.name}"
-
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-
-    def _upload(path: str) -> str:
-        blob = bucket.blob(path)
-        blob.upload_from_filename(str(p), content_type=content_type)
-        return f"https://storage.googleapis.com/{bucket_name}/{path}"
-
-    try:
-        return _upload(blob_path)
-    except Exception as first_exc:
-        # Fallback for idempotent reruns where same-key overwrite/delete permissions vary.
-        alt_name = f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"
-        alt_path = f"{prefix}/{path_root}/{module}/{alt_name}"
-        try:
-            return _upload(alt_path)
-        except Exception:
-            logger.warning(
-                "Artifact upload failed for primary and fallback paths: %s ; %s",
-                first_exc,
-                alt_path,
-            )
-            return ""
+    return _upload_artifact(
+        local_path=local_path,
+        run_id=run_id,
+        module=module,
+        config=config or {},
+        session_id=session_id,
+        resolve_path_root=_resolve_path_root,
+        logger=logger,
+    )
 
 
 def check_upload(url: str, label: str, warnings: list) -> str:
@@ -531,11 +367,6 @@ def _history_lock_for(path: Path) -> threading.Lock:
         return lock
 
 
-def _versioned_blob_path(blob_path: str) -> str:
-    p = Path(blob_path)
-    return str(p.with_name(f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"))
-
-
 def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bool:
     if not DEDUP_RUN_ID_WARNINGS:
         return True
@@ -547,181 +378,6 @@ def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bo
         return True
 
 
-def build_artifact_contract(
-    export_url: str,
-    *,
-    artifact_url: str = "",
-    xlsx_url: str = "",
-    plot_urls: Optional[dict[str, str]] = None,
-    expect_html: bool = False,
-    expect_xlsx: bool = False,
-    expect_plots: bool = False,
-    required_html: bool = False,
-    required_xlsx: bool = False,
-    required_data_export: bool = True,
-) -> dict[str, Any]:
-    plots = plot_urls or {}
-    data_export_status, data_export_reason = _resolve_data_export_status(export_url)
-    matrix: dict[str, dict[str, Any]] = {
-        "data_export": {
-            "expected": True,
-            "required": required_data_export,
-            "status": data_export_status,
-            "url": export_url,
-            "reason": data_export_reason,
-        },
-        "html_report": {
-            "expected": expect_html,
-            "required": required_html and expect_html,
-            "status": (
-                "disabled"
-                if not expect_html
-                else ("available" if bool(artifact_url) else "missing")
-            ),
-            "url": artifact_url if expect_html else "",
-            "reason": (
-                "disabled"
-                if not expect_html
-                else ("" if artifact_url else "upload_failed_or_not_generated")
-            ),
-        },
-        "xlsx_report": {
-            "expected": expect_xlsx,
-            "required": required_xlsx and expect_xlsx,
-            "status": (
-                "disabled" if not expect_xlsx else ("available" if bool(xlsx_url) else "missing")
-            ),
-            "url": xlsx_url if expect_xlsx else "",
-            "reason": (
-                "disabled"
-                if not expect_xlsx
-                else ("" if xlsx_url else "upload_failed_or_not_generated")
-            ),
-        },
-        "plots": {
-            "expected": expect_plots,
-            "required": False,
-            "status": (
-                "disabled" if not expect_plots else ("available" if len(plots) > 0 else "missing")
-            ),
-            "count": len(plots) if expect_plots else 0,
-            "urls": plots if expect_plots else {},
-            "reason": (
-                "disabled"
-                if not expect_plots
-                else ("" if len(plots) > 0 else "not_generated_or_upload_failed")
-            ),
-        },
-    }
-
-    expected = [name for name, item in matrix.items() if bool(item.get("expected"))]
-    uploaded = [
-        name
-        for name, item in matrix.items()
-        if item.get("status") == "available"
-        and (bool(item.get("url")) or (name == "plots" and int(item.get("count", 0)) > 0))
-    ]
-    missing_required = [
-        name
-        for name, item in matrix.items()
-        if bool(item.get("required")) and item.get("status") != "available"
-    ]
-    warnings = [
-        f"Missing required artifact: {name} ({matrix[name].get('reason', 'missing')})"
-        for name in missing_required
-    ]
-    if data_export_reason == "server_local_path":
-        warnings.append(
-            "Data export path is local to MCP server runtime filesystem and may not be "
-            "directly accessible from the client host."
-        )
-    return {
-        "artifact_matrix": matrix,
-        "expected_artifacts": expected,
-        "uploaded_artifacts": uploaded,
-        "missing_required_artifacts": missing_required,
-        "artifact_warnings": warnings,
-    }
-
-
-def fold_status_with_artifacts(status: str, missing_required_artifacts: list[str]) -> str:
-    if status in {"error", "fail"}:
-        return status
-    if missing_required_artifacts:
-        return "warn"
-    return status
-
-
-def make_json_safe(value: Any) -> Any:
-    """Recursively convert values into JSON-serializable primitives."""
-    if value is None or isinstance(value, (str, bool, int)):
-        return value
-
-    if isinstance(value, float):
-        if math.isnan(value) or math.isinf(value):
-            return None
-        return value
-
-    if isinstance(value, (datetime, date, time)):
-        return value.isoformat()
-
-    if isinstance(value, Path):
-        return str(value)
-
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-
-    if isinstance(value, pd.Timedelta):
-        return str(value)
-
-    if isinstance(value, pd.DataFrame):
-        return {
-            "_type": "dataframe",
-            "row_count": int(value.shape[0]),
-            "column_count": int(value.shape[1]),
-            "columns": [str(c) for c in value.columns.tolist()],
-        }
-
-    if isinstance(value, pd.Series):
-        return {
-            "_type": "series",
-            "name": str(value.name) if value.name is not None else "",
-            "length": int(len(value)),
-            "dtype": str(value.dtype),
-        }
-
-    if isinstance(value, dict):
-        return {str(k): make_json_safe(v) for k, v in value.items()}
-
-    if isinstance(value, (list, tuple, set)):
-        return [make_json_safe(v) for v in value]
-
-    if hasattr(value, "item") and callable(value.item):
-        try:
-            return make_json_safe(value.item())
-        except Exception:
-            pass
-
-    try:
-        json.dumps(value, allow_nan=False)
-        return value
-    except Exception:
-        return str(value)
-
-
-def _resolve_data_export_status(export_url: str) -> tuple[str, str]:
-    if not export_url:
-        return "missing", "upload_failed"
-
-    if export_url.startswith("gs://"):
-        return "available", ""
-
-    local_path = Path(export_url)
-    if local_path.exists():
-        return "available", "server_local_path"
-    return "missing", "local_path_not_found"
-
-
 def _set_last_history_meta(run_id: str, session_id: Optional[str], meta: dict[str, Any]) -> None:
     key = (run_id, session_id)
     with _HISTORY_READ_META_GUARD:
@@ -729,77 +385,3 @@ def _set_last_history_meta(run_id: str, session_id: Optional[str], meta: dict[st
             "parse_errors": list(meta.get("parse_errors", [])),
             "skipped_records": int(meta.get("skipped_records", 0)),
         }
-
-
-def _write_json_atomic(path: Path, payload: Any) -> None:
-    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, allow_nan=False)
-    os.replace(tmp_path, path)
-
-
-def _read_history_file_safe(path: Path) -> tuple[list, dict[str, Any]]:
-    meta: dict[str, Any] = {"parse_errors": [], "skipped_records": 0}
-    parse_errors = cast(list[str], meta["parse_errors"])
-
-    if not path.exists():
-        return [], meta
-
-    raw = path.read_text(encoding="utf-8").strip()
-    if not raw:
-        return [], meta
-
-    try:
-        parsed = json.loads(raw)
-    except JSONDecodeError as exc:
-        parse_errors.append(f"{type(exc).__name__}: {exc}")
-        recovered = _recover_history_entries(raw, meta)
-        return recovered, meta
-
-    return _coerce_history_entries(parsed, meta), meta
-
-
-def _recover_history_entries(raw: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
-    decoder = json.JSONDecoder()
-    recovered: list[dict[str, Any]] = []
-    parse_errors = cast(list[str], meta["parse_errors"])
-    idx = 0
-
-    while idx < len(raw):
-        while idx < len(raw) and raw[idx] in " \t\r\n[],":
-            idx += 1
-        if idx >= len(raw):
-            break
-        try:
-            item, next_idx = decoder.raw_decode(raw, idx)
-        except JSONDecodeError:
-            meta["skipped_records"] += 1
-            idx += 1
-            continue
-        if isinstance(item, dict):
-            recovered.append(item)
-        else:
-            meta["skipped_records"] += 1
-        idx = next_idx
-
-    if not recovered:
-        parse_errors.append("Unable to recover any valid history entries.")
-    return [make_json_safe(entry) for entry in recovered if isinstance(entry, dict)]
-
-
-def _coerce_history_entries(parsed: Any, meta: dict[str, Any]) -> list[dict[str, Any]]:
-    if isinstance(parsed, list):
-        entries: list[dict[str, Any]] = []
-        for item in parsed:
-            if isinstance(item, dict):
-                entries.append(make_json_safe(item))
-            else:
-                meta["skipped_records"] += 1
-        return entries
-
-    if isinstance(parsed, dict):
-        return [make_json_safe(parsed)]
-
-    meta["parse_errors"].append("History root is not a list/object.")
-    meta["skipped_records"] += 1
-    return []
