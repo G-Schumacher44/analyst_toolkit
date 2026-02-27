@@ -127,3 +127,4 @@ pytest_cache/
 # Local Planning Notes (untracked)
 # ===============================
 local_plans/
+resource_hub/monolith_decomposition_execution_plan.md
