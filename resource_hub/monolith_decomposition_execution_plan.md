@@ -67,6 +67,10 @@ Current largest test files:
 - `mcp_server/io_local.py` (local CSV/parquet loading)
 - `mcp_server/io_gcs.py` (GCS direct + prefix loading)
 - `mcp_server/io_limits.py` (size/row/file guardrails)
+- `mcp_server/io_storage.py` (GCS/local export + artifact upload)
+- `mcp_server/io_serialization.py` (JSON-safe conversion + artifact contract helpers)
+- `mcp_server/io_history_files.py` (history file parsing + atomic write)
+- `mcp_server/io_path_normalization.py` (bucket-like path normalization)
 
 ### Definition of Done
 - Existing data loading behavior unchanged.
@@ -130,7 +134,7 @@ PR scope:
 
 - [x] Plan created and tracked in repo.
 - [x] Phase 1 complete.
-- [ ] Phase 2 complete.
+- [x] Phase 2 complete.
 - [ ] Phase 3 complete.
 - [ ] Phase 4 complete.
 - [ ] Phase 5 complete.
