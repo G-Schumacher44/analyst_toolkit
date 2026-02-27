@@ -17,8 +17,9 @@ Current largest source files:
 - `src/analyst_toolkit/m00_utils/report_generator.py` (~527)
 
 Current largest test files:
-- `tests/test_hardening.py` (~837)
-- `tests/test_mcp_server.py` (~790)
+- `tests/test_mcp_tool_regressions.py` (~411)
+- `tests/hardening/test_config_and_upload.py` (~263)
+- `tests/mcp_server/test_rpc_tools.py` (~227)
 
 ## Constraints
 
@@ -105,8 +106,20 @@ Current largest test files:
 ## Phase 5: test suite decomposition
 
 ### Planned extractions
-- split by contract area (`tests/mcp/`, `tests/hardening/`)
+- split by contract area (`tests/mcp_server/`, `tests/hardening/`)
 - keep test intent and assertions identical first, then optional cleanup
+
+### Completed extraction layout
+- `tests/mcp_server/test_http_auth_metrics.py`
+- `tests/mcp_server/test_rpc_tools.py`
+- `tests/mcp_server/test_rpc_preflight.py`
+- `tests/mcp_server/test_rpc_resources.py`
+- `tests/mcp_server/test_rpc_run_history.py`
+- `tests/hardening/test_state_store.py`
+- `tests/hardening/test_config_and_upload.py`
+- `tests/hardening/test_history_and_contracts.py`
+- `tests/hardening/test_pipeline_integrations.py`
+- `tests/hardening/test_auto_heal_behavior.py`
 
 ### Definition of Done
 - No coverage regression.
@@ -141,4 +154,4 @@ PR scope:
 - [x] Phase 2 complete.
 - [x] Phase 3 complete.
 - [x] Phase 4 complete.
-- [ ] Phase 5 complete.
+- [x] Phase 5 complete.
