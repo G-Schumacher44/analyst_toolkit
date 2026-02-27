@@ -19,6 +19,32 @@ Format:
 
 ### Added
 
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Deprecated
+
+- None.
+
+### Removed
+
+- None.
+
+### Security
+
+- None.
+
+## [0.4.3] - 2026-02-27
+
+### Added
+
 - Added contributor workflow documentation in `CONTRIBUTING.md`.
 - Added GitHub issue templates for bug reports, feature requests, and documentation updates.
 - Added a pull request template with validation and MCP contract checks.
@@ -34,10 +60,13 @@ Format:
 - Updated `README.md` with pointers to contributing, support, and templates.
 - Updated MCP `/health` response to include `version` and `uptime_sec`.
 - Updated MCP server guide with operability endpoint usage and a quick triage runbook.
+- Updated test suite layout to split MCP server and hardening tests into focused modules.
+- Updated release docs and guides to `v0.4.3`.
 
 ### Fixed
 
 - Removed stale hardcoded server version fallback by using `ANALYST_MCP_VERSION_FALLBACK` (`0.0.0+local` default) when package metadata is unavailable.
+- Fixed stale documentation references to monolithic test files after test decomposition.
 
 ### Deprecated
 

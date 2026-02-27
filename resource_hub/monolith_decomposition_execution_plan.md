@@ -40,8 +40,8 @@ Current largest test files:
 2. `io.py`
 3. `tools/cockpit.py`
 4. `m00_utils/report_generator.py`
-5. `tests/test_mcp_server.py`
-6. `tests/test_hardening.py`
+5. `tests/mcp_server/*`
+6. `tests/hardening/*`
 
 ## Phase Plan
 

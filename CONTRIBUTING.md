@@ -53,7 +53,7 @@ CI enforces linting, type checks, tests, and Docker smoke tests.
 
 - Add or update tests for behavior changes.
 - Prefer focused unit tests near the changed module.
-- For MCP tool changes, include regression coverage in `tests/test_mcp_server.py` and/or `tests/test_mcp_tool_regressions.py`.
+- For MCP tool changes, include regression coverage in `tests/mcp_server/` and/or `tests/test_mcp_tool_regressions.py`.
 
 ## MCP and Data Pipeline Changes
 

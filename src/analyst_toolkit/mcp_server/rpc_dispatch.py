@@ -149,7 +149,9 @@ async def dispatch_rpc_method(
                 level=logging.WARNING,
                 error_code=-32000,
             )
-        resources = [r.model_dump(mode="json", by_alias=True, exclude_none=True) for r in model_list]
+        resources = [
+            r.model_dump(mode="json", by_alias=True, exclude_none=True) for r in model_list
+        ]
         return RpcDispatchResult(payload=rpc_ok(req_id, {"resources": resources}), ok=True)
 
     if method == "resources/templates/list":

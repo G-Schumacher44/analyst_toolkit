@@ -132,7 +132,9 @@ def upload_artifact(
     logger: logging.Logger,
 ) -> str:
     """Uploads artifact to: prefix/path_root/module/filename."""
-    bucket_uri = config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "").strip().rstrip("/")
+    bucket_uri = config.get("output_bucket") or os.environ.get(
+        "ANALYST_REPORT_BUCKET", ""
+    ).strip().rstrip("/")
     if not bucket_uri:
         return ""
 
