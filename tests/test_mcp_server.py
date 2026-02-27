@@ -76,9 +76,10 @@ def test_metrics_rpc_counters_delta():
     assert after["errors_total"] == before["errors_total"] + 1
     assert after["by_method"].get("initialize", 0) >= before["by_method"].get("initialize", 0) + 1
     assert after["by_method"].get("tools/call", 0) >= before["by_method"].get("tools/call", 0) + 1
-    assert after["by_tool"].get("missing_tool_for_metrics", 0) >= before["by_tool"].get(
-        "missing_tool_for_metrics", 0
-    ) + 1
+    assert (
+        after["by_tool"].get("missing_tool_for_metrics", 0)
+        >= before["by_tool"].get("missing_tool_for_metrics", 0) + 1
+    )
 
 
 def test_auth_mode_rejects_unauthorized_requests(monkeypatch):
