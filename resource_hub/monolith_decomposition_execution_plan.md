@@ -52,7 +52,7 @@ Current largest test files:
   - structured/unstructured request event logger
 - `mcp_server/auth.py`
   - bearer-token authorization helper
-- (later phase) `mcp_server/rpc_dispatch.py`
+- `mcp_server/rpc_dispatch.py`
   - JSON-RPC method routing logic
 
 ### Definition of Done
@@ -129,7 +129,7 @@ PR scope:
 ## Progress Log
 
 - [x] Plan created and tracked in repo.
-- [ ] Phase 1 complete.
+- [x] Phase 1 complete.
 - [ ] Phase 2 complete.
 - [ ] Phase 3 complete.
 - [ ] Phase 4 complete.
