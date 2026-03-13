@@ -8,6 +8,7 @@ def user_quickstart_payload() -> dict:
 ## What You Can Control
 - You can edit module YAML configs directly before runs.
 - You can keep automation (`infer_configs`) and still override any field.
+- You can use `runtime` for cross-cutting execution settings like `run_id`, `input_path`, `export_html`, plotting, and output destinations.
 - You can enable/disable plotting and HTML export per module.
 - When HTML export is enabled, module tools return standalone dashboard artifacts that should be opened or linked for review.
 
@@ -23,6 +24,17 @@ def user_quickstart_payload() -> dict:
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
+
+## Runtime Overlay
+- Use `runtime` for run-scoped execution policy.
+- Good `runtime` fields:
+  - `runtime.run.run_id`
+  - `runtime.run.input_path`
+  - `runtime.artifacts.export_html`
+  - `runtime.artifacts.plotting`
+  - `runtime.destinations.gcs.*`
+- Keep module `config` for business logic like normalization rules, validation rules, imputation strategies, and outlier detection settings.
+- Prefer `runtime` over editing every module config when the change is cross-cutting.
 
 ## Key Example: Fuzzy Matching
 In normalization config:
@@ -44,7 +56,10 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             {
                 "step": 1,
                 "tool": "diagnostics",
-                "required_inputs": ["gcs_path|session_id", "run_id"],
+                "required_inputs": [
+                    "gcs_path|session_id|runtime.run.input_path",
+                    "run_id|runtime.run.run_id",
+                ],
                 "outputs": ["session_id", "summary", "dashboard_url?"],
             },
             {
@@ -61,7 +76,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                     "imputation",
                     "validation",
                 ],
-                "required_inputs": ["session_id", "run_id", "config"],
+                "required_inputs": ["session_id", "run_id", "config", "runtime?"],
             },
             {
                 "step": 4,
@@ -72,7 +87,15 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
         "example_calls": [
             {
                 "tool": "diagnostics",
-                "arguments": {"gcs_path": "gs://bucket/data.csv", "run_id": "run_001"},
+                "arguments": {
+                    "runtime": {
+                        "run": {
+                            "input_path": "gs://bucket/data.csv",
+                            "run_id": "run_001",
+                        },
+                        "artifacts": {"export_html": True, "plotting": False},
+                    }
+                },
             },
             {
                 "tool": "infer_configs",
@@ -117,12 +140,16 @@ def agent_playbook_payload() -> dict:
             "Input data path (local csv/parquet or gs:// URI) or existing session_id",
             "Stable run_id used across calls",
             "Optional output bucket/prefix overrides",
+            "Optional runtime overlay for cross-cutting execution control",
         ],
         "ordered_steps": [
             {
                 "step": 1,
                 "tool": "diagnostics",
-                "required_inputs": ["gcs_path|session_id", "run_id"],
+                "required_inputs": [
+                    "gcs_path|session_id|runtime.run.input_path",
+                    "run_id|runtime.run.run_id",
+                ],
                 "outputs": [
                     "session_id",
                     "summary",
@@ -155,12 +182,19 @@ def agent_playbook_payload() -> dict:
             },
             {
                 "step": 5,
-                "tool": "manual config review",
-                "required_inputs": ["inferred configs", "capability catalog", "user intent"],
-                "outputs": ["confirmed config per module"],
+                "tool": "manual config + runtime review",
+                "required_inputs": [
+                    "inferred configs",
+                    "capability catalog",
+                    "user intent",
+                    "runtime?",
+                ],
+                "outputs": ["confirmed config per module", "confirmed runtime overlay"],
                 "notes": [
                     "Do not flatten nested keys.",
                     "User can override inferred config fields before execution.",
+                    "Use runtime for paths, run_id, export_html, plotting, and destination overrides.",
+                    "Use module config for business logic and per-module rules.",
                 ],
                 "next": [6],
             },
@@ -173,11 +207,12 @@ def agent_playbook_payload() -> dict:
                     "imputation",
                     "validation",
                 ],
-                "required_inputs": ["session_id", "run_id", "config per tool"],
+                "required_inputs": ["session_id", "run_id", "config per tool", "runtime?"],
                 "outputs": ["updated session_id", "module summaries", "artifacts"],
                 "notes": [
                     "When a module returns dashboard_url, surface that link to the user.",
                     "Prefer the standalone dashboard artifact as the main review surface.",
+                    "Use runtime instead of editing every module config when the override is cross-cutting.",
                 ],
                 "next": [7],
             },
@@ -196,11 +231,15 @@ def agent_playbook_payload() -> dict:
             },
             {
                 "name": "plotting_mode",
-                "rule": "Default plotting to off for large data; enable only when visual review is requested.",
+                "rule": "Default plotting to off for large data; prefer runtime.artifacts.plotting for run-scoped control.",
             },
             {
                 "name": "fuzzy_matching_mode",
                 "rule": "If fuzzy matching is enabled, require explicit master_list and cutoff review.",
+            },
+            {
+                "name": "runtime_vs_config",
+                "rule": "Use runtime for run-scoped execution settings and destinations; use module config for business logic.",
             },
         ],
     }

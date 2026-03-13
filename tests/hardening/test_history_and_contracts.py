@@ -123,11 +123,17 @@ def test_get_run_history_recovers_from_corrupt_json(sample_df, tmp_path, monkeyp
     assert meta["skipped_records"] > 0
 
 
-def test_build_artifact_contract_warns_for_server_local_export(tmp_path):
+def test_build_artifact_contract_warns_for_server_local_export(tmp_path, monkeypatch):
     local_export = tmp_path / "output.csv"
     local_export.write_text("a\n1\n", encoding="utf-8")
+    monkeypatch.setenv("ANALYST_MCP_LOCAL_OUTPUT_BASE", str(tmp_path))
 
-    contract = build_artifact_contract(str(local_export), expect_html=False, expect_xlsx=False)
+    contract = build_artifact_contract(
+        str(local_export),
+        expect_html=False,
+        expect_xlsx=False,
+        probe_local_paths=True,
+    )
 
     assert contract["artifact_matrix"]["data_export"]["status"] == "available"
     assert contract["artifact_matrix"]["data_export"]["reason"] == "server_local_path"

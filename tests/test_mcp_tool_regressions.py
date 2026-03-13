@@ -135,6 +135,54 @@ async def test_toolkit_diagnostics_includes_next_actions(mocker):
 
 
 @pytest.mark.asyncio
+async def test_toolkit_diagnostics_accepts_runtime_overrides(mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        captured["input_session_id"] = session_id
+        return df
+
+    mocker.patch.object(diagnostics_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(diagnostics_tool, "save_to_session", return_value="sess_diag")
+    mocker.patch.object(diagnostics_tool, "run_diag_pipeline", return_value=None)
+    mocker.patch.object(diagnostics_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(diagnostics_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        diagnostics_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await diagnostics_tool._toolkit_diagnostics(
+        runtime={
+            "run": {"run_id": "diag_runtime", "input_path": "gs://bucket/runtime.csv"},
+            "artifacts": {"export_html": True},
+            "destinations": {
+                "gcs": {
+                    "enabled": True,
+                    "bucket_uri": "gs://artifact-bucket",
+                    "prefix": "runtime/reports",
+                }
+            },
+        },
+        config={},
+    )
+
+    assert result["run_id"] == "diag_runtime"
+    assert result["runtime_applied"] is True
+    assert captured["input_path"] == "gs://bucket/runtime.csv"
+    assert result["artifact_path"].endswith("diag_runtime_diagnostics_report.html")
+
+
+@pytest.mark.asyncio
 async def test_toolkit_infer_configs_includes_apply_next_actions(monkeypatch, mocker):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
 
@@ -406,7 +454,17 @@ async def test_normalization_reports_artifact_contract(mocker):
     mocker.patch.object(normalization_tool, "save_output", return_value="gs://dummy/norm.csv")
     mocker.patch.object(normalization_tool, "append_to_run_history", return_value=None)
     mocker.patch.object(normalization_tool, "should_export_html", return_value=True)
-    mocker.patch.object(normalization_tool, "upload_artifact", return_value="")
+    mocker.patch.object(
+        normalization_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [f"Upload failed or file not found: {local_path}"],
+            "destinations": {},
+        },
+    )
 
     result = await normalization_tool._toolkit_normalization(
         session_id="sess_norm",
@@ -430,6 +488,101 @@ async def test_normalization_reports_artifact_contract(mocker):
     )
     assert result["dashboard_url"] == ""
     assert result["dashboard_label"] == "Normalization dashboard"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_validation_runtime_can_disable_html_artifacts(mocker):
+    df = pd.DataFrame({"value": [1, 2]})
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(validation_tool, "save_to_session", return_value="sess_val")
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=df)
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        validation_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+
+    result = await validation_tool._toolkit_validation(
+        session_id="sess_val",
+        config={},
+        runtime={"artifacts": {"export_html": False}},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["artifact_path"] == ""
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
+    df = pd.DataFrame({"id": [1, 1], "value": [10, 10]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        return df
+
+    mocker.patch.object(duplicates_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(
+        duplicates_tool,
+        "run_duplicates_pipeline",
+        return_value=df.assign(is_duplicate=[False, True]),
+    )
+    mocker.patch.object(duplicates_tool, "save_to_session", return_value="sess_dup")
+    mocker.patch.object(duplicates_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(duplicates_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(duplicates_tool, "append_to_run_history", return_value=None)
+
+    result = await duplicates_tool._toolkit_duplicates(
+        runtime={
+            "run": {"run_id": "dup_runtime", "input_path": "gs://bucket/dup.csv"},
+            "artifacts": {"export_html": False},
+        },
+        config={},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["run_id"] == "dup_runtime"
+    assert captured["input_path"] == "gs://bucket/dup.csv"
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monkeypatch):
+    df = pd.DataFrame({"value": [1]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        return df
+
+    mocker.patch.object(final_audit_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(final_audit_tool, "upload_artifact", return_value="")
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", True)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        runtime={"run": {"run_id": "final_runtime", "input_path": "gs://bucket/final.csv"}},
+        config={},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["run_id"] == "final_runtime"
+    assert captured["input_path"] == "gs://bucket/final.csv"
+    assert "final_runtime" in result["artifact_path"]
 
 
 @pytest.mark.asyncio
@@ -510,7 +663,20 @@ async def test_other_modules_report_dashboard_artifact_contract(
     mocker.patch.object(tool_module, "save_to_session", return_value="sess_dash")
     mocker.patch.object(tool_module, "save_output", return_value="gs://dummy/out.csv")
     mocker.patch.object(tool_module, "append_to_run_history", return_value=None)
-    mocker.patch.object(tool_module, "upload_artifact", return_value="")
+    if hasattr(tool_module, "deliver_artifact"):
+        mocker.patch.object(
+            tool_module,
+            "deliver_artifact",
+            side_effect=lambda local_path, *args, **kwargs: {
+                "reference": "",
+                "local_path": local_path,
+                "url": "",
+                "warnings": [],
+                "destinations": {},
+            },
+        )
+    elif hasattr(tool_module, "upload_artifact"):
+        mocker.patch.object(tool_module, "upload_artifact", return_value="")
     mocker.patch.object(tool_module, run_return_name, return_value=run_return_value)
 
     if hasattr(tool_module, "get_session_metadata"):

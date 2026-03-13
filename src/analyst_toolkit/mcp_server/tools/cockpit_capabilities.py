@@ -178,8 +178,40 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             "inference_available": True,
             "inference_tool": "infer_configs",
             "manual_override_recommended": True,
+            "runtime_overlay_available": True,
+            "runtime_template_path": "config/runtime_overlay_template.yaml",
         },
         "global_controls": [
+            {
+                "path": "runtime.run.run_id",
+                "description": "Set one run_id across the active tool chain without editing each module config.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.run.input_path",
+                "description": "Set the input path once for the active run.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.artifacts.export_html",
+                "description": "Enable or disable HTML dashboard export across runtime-aware tools.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.artifacts.plotting",
+                "description": "Use one plotting toggle for the active run instead of editing each module config.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.destinations.gcs.*",
+                "description": "Set shared GCS upload destination overrides for runtime-aware tools.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.destinations.gcs.enabled",
+                "description": "Explicitly opt in to remote GCS artifact uploads.",
+                "user_editable": True,
+            },
             {
                 "path": "<module>.run",
                 "description": "Enable/disable individual module execution.",
@@ -212,6 +244,18 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             },
         ],
         "highlight_examples": [
+            {
+                "feature": "Runtime overlay controls",
+                "paths": [
+                    "runtime.run.run_id",
+                    "runtime.run.input_path",
+                    "runtime.artifacts.export_html",
+                    "runtime.artifacts.plotting",
+                    "runtime.destinations.gcs.enabled",
+                    "runtime.destinations.gcs.bucket_uri",
+                    "runtime.destinations.gcs.prefix",
+                ],
+            },
             {
                 "feature": "Normalization fuzzy matching",
                 "paths": [

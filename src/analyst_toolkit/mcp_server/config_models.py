@@ -3,7 +3,7 @@ config_models.py — Pydantic models for module configurations.
 Used to generate JSON Schemas for the MCP server.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -199,6 +199,117 @@ class DuplicatesConfig(BaseModel):
     )
     mode: str = Field("flag", description="Action: 'flag' or 'remove'. Alias: 'drop'.")
     export_html: bool = Field(True, description="Whether to export an HTML report.")
+
+
+class RuntimeRunConfig(BaseModel):
+    run_id: Optional[str] = Field(None, description="Optional run identifier override.")
+    session_id: Optional[str] = Field(
+        None, description="Optional existing session_id for runtime-scoped execution."
+    )
+    input_path: Optional[str] = Field(None, description="Optional runtime input path override.")
+
+
+class RuntimeArtifactsConfig(BaseModel):
+    export_html: Optional[bool] = Field(None, description="Override HTML artifact export.")
+    export_xlsx: Optional[bool] = Field(None, description="Override XLSX artifact export.")
+    export_data: Optional[bool] = Field(None, description="Override cleaned data export.")
+    plotting: Optional[bool] = Field(None, description="Override plotting for the run.")
+    artifact_mode: Optional[Literal["single_html", "html_bundle", "zip_bundle"]] = Field(
+        None,
+        description="Artifact packaging mode.",
+    )
+    collision_policy: Optional[Literal["overwrite", "version"]] = Field(
+        None,
+        description="Artifact collision policy.",
+    )
+
+
+class RuntimeLocalDestinationConfig(BaseModel):
+    enabled: Optional[bool] = Field(None, description="Enable local artifact output.")
+    root: Optional[str] = Field(
+        None,
+        description=(
+            "Local root for exported artifacts. This path is validated again at routing time "
+            "and must stay within the configured local output base."
+        ),
+    )
+
+
+class RuntimeGCSDestinationConfig(BaseModel):
+    enabled: Optional[bool] = Field(None, description="Enable GCS artifact output.")
+    bucket_uri: Optional[str] = Field(None, description="Destination bucket URI.")
+    prefix: Optional[str] = Field(None, description="Destination prefix inside the bucket.")
+
+
+class RuntimeDriveDestinationConfig(BaseModel):
+    enabled: Optional[bool] = Field(None, description="Enable Google Drive artifact output.")
+    folder_id: Optional[str] = Field(None, description="Drive folder ID for uploaded artifacts.")
+
+
+class RuntimeDestinationsConfig(BaseModel):
+    local: RuntimeLocalDestinationConfig = Field(
+        default_factory=lambda: RuntimeLocalDestinationConfig.model_construct()
+    )
+    gcs: RuntimeGCSDestinationConfig = Field(
+        default_factory=lambda: RuntimeGCSDestinationConfig.model_construct()
+    )
+    drive: RuntimeDriveDestinationConfig = Field(
+        default_factory=lambda: RuntimeDriveDestinationConfig.model_construct()
+    )
+
+
+class RuntimePathsConfig(BaseModel):
+    report_root: Optional[str] = Field(None, description="Root path for HTML/XLSX reports.")
+    plot_root: Optional[str] = Field(None, description="Root path for plots.")
+    checkpoint_root: Optional[str] = Field(None, description="Root path for checkpoints.")
+    data_root: Optional[str] = Field(None, description="Root path for exported data.")
+
+
+class RuntimeExecutionConfig(BaseModel):
+    allow_plot_generation: Optional[bool] = Field(
+        None, description="Allow plot generation during the run."
+    )
+    upload_artifacts: Optional[bool] = Field(
+        None, description="Whether artifacts should be uploaded to remote destinations."
+    )
+    persist_history: Optional[bool] = Field(
+        None, description="Whether run history should be persisted."
+    )
+    strict_config: Optional[bool] = Field(
+        None, description="Fail on unknown runtime config keys when true."
+    )
+
+
+def _default_runtime_run() -> RuntimeRunConfig:
+    return RuntimeRunConfig.model_construct()
+
+
+def _default_runtime_artifacts() -> RuntimeArtifactsConfig:
+    return RuntimeArtifactsConfig.model_construct()
+
+
+def _default_runtime_paths() -> RuntimePathsConfig:
+    return RuntimePathsConfig.model_construct()
+
+
+def _default_runtime_execution() -> RuntimeExecutionConfig:
+    return RuntimeExecutionConfig.model_construct()
+
+
+def _default_runtime_destinations() -> RuntimeDestinationsConfig:
+    return RuntimeDestinationsConfig.model_construct(
+        local=RuntimeLocalDestinationConfig.model_construct(),
+        gcs=RuntimeGCSDestinationConfig.model_construct(),
+        drive=RuntimeDriveDestinationConfig.model_construct(),
+    )
+
+
+class RuntimeOverlayConfig(BaseModel):
+    run: RuntimeRunConfig = Field(default_factory=_default_runtime_run)
+    artifacts: RuntimeArtifactsConfig = Field(default_factory=_default_runtime_artifacts)
+    destinations: RuntimeDestinationsConfig = Field(default_factory=_default_runtime_destinations)
+    paths: RuntimePathsConfig = Field(default_factory=_default_runtime_paths)
+    execution: RuntimeExecutionConfig = Field(default_factory=_default_runtime_execution)
 
 
 CONFIG_MODELS = {

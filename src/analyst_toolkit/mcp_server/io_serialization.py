@@ -2,9 +2,11 @@
 
 import json
 import math
+import os
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -12,8 +14,12 @@ import pandas as pd
 def build_artifact_contract(
     export_url: str,
     *,
+    export_path: str = "",
+    artifact_path: str = "",
     artifact_url: str = "",
+    xlsx_path: str = "",
     xlsx_url: str = "",
+    plot_paths: dict[str, str] | None = None,
     plot_urls: dict[str, str] | None = None,
     expect_html: bool = False,
     expect_xlsx: bool = False,
@@ -21,58 +27,70 @@ def build_artifact_contract(
     required_html: bool = False,
     required_xlsx: bool = False,
     required_data_export: bool = True,
+    probe_local_paths: bool = False,
 ) -> dict[str, Any]:
     plots = plot_urls or {}
-    data_export_status, data_export_reason = _resolve_data_export_status(export_url)
+    plot_refs = plot_paths or {}
+    data_export_status, data_export_reason = _resolve_reference_status(
+        export_url,
+        export_path,
+        probe_local_paths=probe_local_paths,
+    )
+    html_status, html_reason = _resolve_reference_status(
+        artifact_url,
+        artifact_path,
+        probe_local_paths=probe_local_paths,
+    )
+    xlsx_status, xlsx_reason = _resolve_reference_status(
+        xlsx_url,
+        xlsx_path,
+        probe_local_paths=probe_local_paths,
+    )
+    plot_keys = set(plots) | set(plot_refs)
+    plot_entries = {
+        key: _resolve_reference_status(
+            plots.get(key, ""),
+            plot_refs.get(key, ""),
+            probe_local_paths=probe_local_paths,
+        )
+        for key in plot_keys
+    }
+    plots_available = any(status == "available" for status, _reason in plot_entries.values())
+    plot_reason = "" if plots_available else "not_generated_or_upload_failed"
+    plot_status = "available" if plots_available else "missing"
     matrix: dict[str, dict[str, Any]] = {
         "data_export": {
             "expected": True,
             "required": required_data_export,
             "status": data_export_status,
             "url": export_url,
+            "path": export_path,
             "reason": data_export_reason,
         },
         "html_report": {
             "expected": expect_html,
             "required": required_html and expect_html,
-            "status": (
-                "disabled"
-                if not expect_html
-                else ("available" if bool(artifact_url) else "missing")
-            ),
+            "status": "disabled" if not expect_html else html_status,
             "url": artifact_url if expect_html else "",
-            "reason": (
-                "disabled"
-                if not expect_html
-                else ("" if artifact_url else "upload_failed_or_not_generated")
-            ),
+            "path": artifact_path if expect_html else "",
+            "reason": "disabled" if not expect_html else html_reason,
         },
         "xlsx_report": {
             "expected": expect_xlsx,
             "required": required_xlsx and expect_xlsx,
-            "status": (
-                "disabled" if not expect_xlsx else ("available" if bool(xlsx_url) else "missing")
-            ),
+            "status": "disabled" if not expect_xlsx else xlsx_status,
             "url": xlsx_url if expect_xlsx else "",
-            "reason": (
-                "disabled"
-                if not expect_xlsx
-                else ("" if xlsx_url else "upload_failed_or_not_generated")
-            ),
+            "path": xlsx_path if expect_xlsx else "",
+            "reason": "disabled" if not expect_xlsx else xlsx_reason,
         },
         "plots": {
             "expected": expect_plots,
             "required": False,
-            "status": (
-                "disabled" if not expect_plots else ("available" if len(plots) > 0 else "missing")
-            ),
-            "count": len(plots) if expect_plots else 0,
+            "status": "disabled" if not expect_plots else plot_status,
+            "count": len(plot_keys) if expect_plots else 0,
             "urls": plots if expect_plots else {},
-            "reason": (
-                "disabled"
-                if not expect_plots
-                else ("" if len(plots) > 0 else "not_generated_or_upload_failed")
-            ),
+            "paths": plot_refs if expect_plots else {},
+            "reason": "disabled" if not expect_plots else plot_reason,
         },
     }
 
@@ -97,6 +115,12 @@ def build_artifact_contract(
             "Data export path is local to MCP server runtime filesystem and may not be "
             "directly accessible from the client host."
         )
+    for artifact_name in ("html_report", "xlsx_report"):
+        if matrix[artifact_name].get("reason") == "server_local_path":
+            warnings.append(
+                f"{artifact_name} path is local to MCP server runtime filesystem and may not be "
+                "directly accessible from the client host."
+            )
     return {
         "artifact_matrix": matrix,
         "expected_artifacts": expected,
@@ -171,14 +195,64 @@ def make_json_safe(value: Any) -> Any:
         return str(value)
 
 
-def _resolve_data_export_status(export_url: str) -> tuple[str, str]:
-    if not export_url:
+def _is_allowed_local_probe(candidate: str) -> bool:
+    candidate_path = Path(candidate).expanduser()
+    if any(part == ".." for part in candidate_path.parts):
+        return False
+
+    allowed_roots: list[Path] = []
+    exports_root = Path.cwd() / "exports"
+    if exports_root.exists():
+        allowed_roots.append(exports_root)
+
+    extra_root = os.environ.get("ANALYST_MCP_LOCAL_OUTPUT_BASE", "").strip()
+    if extra_root:
+        allowed_roots.append(Path(extra_root).expanduser())
+    if not allowed_roots:
+        return False
+
+    resolved_candidate = candidate_path.resolve(strict=False)
+    for root in allowed_roots:
+        resolved_root = root.expanduser().resolve(strict=False)
+        try:
+            resolved_candidate.relative_to(resolved_root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _resolve_reference_status(
+    url: str,
+    path: str = "",
+    *,
+    probe_local_paths: bool = False,
+) -> tuple[str, str]:
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme in {"gs", "http", "https"}:
+            return "available", ""
+        if parsed.scheme and parsed.scheme != "file":
+            return "missing", "unsupported_url_scheme"
+        candidate = parsed.path if parsed.scheme == "file" else url
+        if not probe_local_paths:
+            return "missing", "local_probe_disabled"
+        if not _is_allowed_local_probe(candidate):
+            return "missing", "local_probe_not_allowed"
+
+        local_url_path = Path(candidate)
+        if local_url_path.exists():
+            return "available", "server_local_path"
+        return "missing", "local_path_not_found"
+
+    if not path:
         return "missing", "upload_failed"
+    if not probe_local_paths:
+        return "missing", "local_probe_disabled"
+    if not _is_allowed_local_probe(path):
+        return "missing", "local_probe_not_allowed"
 
-    if export_url.startswith("gs://"):
-        return "available", ""
-
-    local_path = Path(export_url)
+    local_path = Path(path)
     if local_path.exists():
         return "available", "server_local_path"
     return "missing", "local_path_not_found"
