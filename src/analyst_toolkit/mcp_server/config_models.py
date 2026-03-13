@@ -247,9 +247,15 @@ class RuntimeDriveDestinationConfig(BaseModel):
 
 
 class RuntimeDestinationsConfig(BaseModel):
-    local: RuntimeLocalDestinationConfig = Field(default_factory=RuntimeLocalDestinationConfig)
-    gcs: RuntimeGCSDestinationConfig = Field(default_factory=RuntimeGCSDestinationConfig)
-    drive: RuntimeDriveDestinationConfig = Field(default_factory=RuntimeDriveDestinationConfig)
+    local: RuntimeLocalDestinationConfig = Field(
+        default_factory=lambda: RuntimeLocalDestinationConfig.model_construct()
+    )
+    gcs: RuntimeGCSDestinationConfig = Field(
+        default_factory=lambda: RuntimeGCSDestinationConfig.model_construct()
+    )
+    drive: RuntimeDriveDestinationConfig = Field(
+        default_factory=lambda: RuntimeDriveDestinationConfig.model_construct()
+    )
 
 
 class RuntimePathsConfig(BaseModel):
@@ -274,12 +280,36 @@ class RuntimeExecutionConfig(BaseModel):
     )
 
 
+def _default_runtime_run() -> RuntimeRunConfig:
+    return RuntimeRunConfig.model_construct()
+
+
+def _default_runtime_artifacts() -> RuntimeArtifactsConfig:
+    return RuntimeArtifactsConfig.model_construct()
+
+
+def _default_runtime_paths() -> RuntimePathsConfig:
+    return RuntimePathsConfig.model_construct()
+
+
+def _default_runtime_execution() -> RuntimeExecutionConfig:
+    return RuntimeExecutionConfig.model_construct()
+
+
+def _default_runtime_destinations() -> RuntimeDestinationsConfig:
+    return RuntimeDestinationsConfig.model_construct(
+        local=RuntimeLocalDestinationConfig.model_construct(),
+        gcs=RuntimeGCSDestinationConfig.model_construct(),
+        drive=RuntimeDriveDestinationConfig.model_construct(),
+    )
+
+
 class RuntimeOverlayConfig(BaseModel):
-    run: RuntimeRunConfig = Field(default_factory=RuntimeRunConfig)
-    artifacts: RuntimeArtifactsConfig = Field(default_factory=RuntimeArtifactsConfig)
-    destinations: RuntimeDestinationsConfig = Field(default_factory=RuntimeDestinationsConfig)
-    paths: RuntimePathsConfig = Field(default_factory=RuntimePathsConfig)
-    execution: RuntimeExecutionConfig = Field(default_factory=RuntimeExecutionConfig)
+    run: RuntimeRunConfig = Field(default_factory=_default_runtime_run)
+    artifacts: RuntimeArtifactsConfig = Field(default_factory=_default_runtime_artifacts)
+    destinations: RuntimeDestinationsConfig = Field(default_factory=_default_runtime_destinations)
+    paths: RuntimePathsConfig = Field(default_factory=_default_runtime_paths)
+    execution: RuntimeExecutionConfig = Field(default_factory=_default_runtime_execution)
 
 
 CONFIG_MODELS = {
