@@ -12,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 from joblib import dump
 
+_HTML_SIZE_WARNING_THRESHOLD_MB = 25
+
 
 def export_dataframes(
     data_dict: dict[str, pd.DataFrame],
@@ -106,6 +108,12 @@ def export_html_report(
         run_id=run_id,
         plot_paths=plot_paths,
     )
+    html_size_bytes = len(html.encode("utf-8"))
+    if html_size_bytes > _HTML_SIZE_WARNING_THRESHOLD_MB * 1024 * 1024:
+        logging.warning(
+            "Serialized HTML artifact exceeds %s MB. Consider reducing plot count or resolution.",
+            _HTML_SIZE_WARNING_THRESHOLD_MB,
+        )
 
     path.write_text(html, encoding="utf-8")
     logging.info(f"📄 HTML report written to {path.resolve()}")

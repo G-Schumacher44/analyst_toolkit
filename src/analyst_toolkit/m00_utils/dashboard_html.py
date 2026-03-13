@@ -494,9 +494,12 @@ _DASHBOARD_SCRIPT = """
       const image = document.getElementById("plot-modal-image");
       const title = document.getElementById("plot-modal-title");
       if (!modal || !image || !title) return;
-      image.src = button.dataset.plotSrc || "";
-      image.alt = button.dataset.plotTitle || "Expanded plot";
-      title.textContent = button.dataset.plotTitle || "Plot";
+      const thumbnail = button.querySelector("img");
+      const plotSrc = button.dataset.plotSrc || thumbnail?.src || "";
+      const plotTitle = button.dataset.plotTitle || "Plot";
+      image.src = plotSrc;
+      image.alt = plotTitle;
+      title.textContent = plotTitle;
       if (typeof modal.showModal === "function") {
         modal.showModal();
       }
@@ -559,15 +562,23 @@ def _render_df(
     if not isinstance(df, pd.DataFrame) or df.empty:
         return "<p class='empty'>No data available.</p>"
 
-    working = _normalize_df_for_display(df)
-    if isinstance(working.columns, pd.MultiIndex):
-        working.columns = [
-            "__".join(str(part) for part in column if str(part)).strip("_")
-            for column in working.columns
-        ]
-
-    preview = working if full_preview else working.head(max_rows)
-    preview = preview.copy()
+    total_rows = len(df)
+    if full_preview:
+        working = _normalize_df_for_display(df)
+        if isinstance(working.columns, pd.MultiIndex):
+            working.columns = [
+                "__".join(str(part) for part in column if str(part)).strip("_")
+                for column in working.columns
+            ]
+        preview = working.copy()
+    else:
+        preview = _normalize_df_for_display(df.head(max_rows))
+        if isinstance(preview.columns, pd.MultiIndex):
+            preview.columns = [
+                "__".join(str(part) for part in column if str(part)).strip("_")
+                for column in preview.columns
+            ]
+        preview = preview.copy()
     safe_html_cols = allow_html_cols or set()
     for column in preview.columns:
         if str(column) in safe_html_cols:
@@ -577,11 +588,9 @@ def _render_df(
         )
     table_html = preview.to_html(index=False, escape=False, border=0)
     wrapped_table = f"<div class='table-wrap'>{table_html}</div>"
-    if full_preview or len(working) <= max_rows:
+    if full_preview or total_rows <= max_rows:
         return wrapped_table
-    return (
-        f"{wrapped_table}<p class='subtle'>Showing {len(preview):,} of {len(working):,} rows.</p>"
-    )
+    return f"{wrapped_table}<p class='subtle'>Showing {len(preview):,} of {total_rows:,} rows.</p>"
 
 
 def _flatten_plot_paths(plot_paths: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -616,7 +625,7 @@ def _render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
         cards.append(
             "<div class='card plot-card'>"
             f"<h3>{escaped_title}</h3>"
-            f"<button class='plot-trigger' type='button' onclick='window.atkDashboard.openPlot(this)' data-plot-src='{image_src}' data-plot-title='{escaped_title}'>"
+            f"<button class='plot-trigger' type='button' onclick='window.atkDashboard.openPlot(this)' data-plot-title='{escaped_title}'>"
             f"<img src='{image_src}' alt='{escaped_name}'>"
             "</button>"
             "<p class='plot-caption'>Click to expand</p>"
@@ -668,7 +677,8 @@ def _assemble_page(
 
     body = "".join(sections) or "<p class='empty'>No report data was produced for this run.</p>"
     return (
-        "<html><head>"
+        "<!DOCTYPE html><html><head>"
+        "<meta charset='utf-8'>"
         f"<title>{html.escape(module_name)} Dashboard - {html.escape(run_id)}</title>"
         f"{_DASHBOARD_CSS}{_DASHBOARD_SCRIPT}</head><body><div class='page'>"
         "<div class='hero'>"
@@ -1102,7 +1112,7 @@ def _render_final_audit_dashboard(report: dict[str, Any], run_id: str) -> str:
     ]
     initial_rows = _safe_metric_value(lifecycle_df, "Initial Rows")
     final_rows = _safe_metric_value(lifecycle_df, "Final Rows")
-    row_delta = initial_rows - final_rows if initial_rows and final_rows else 0
+    row_delta = initial_rows - final_rows
     banner = (
         f"<div class='cert-hero {cert_class}'>"
         "<div class='cert-kicker'>M10 Final Audit & Certification</div>"
