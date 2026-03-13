@@ -12,6 +12,7 @@ from analyst_toolkit.mcp_server.io import (
     coerce_config,
     compact_destination_metadata,
     deliver_artifact,
+    empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
     get_session_metadata,
@@ -125,18 +126,8 @@ async def _toolkit_normalization(
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
-    artifact_delivery: dict[str, Any] = {
-        "local_path": "",
-        "url": "",
-        "warnings": [],
-        "destinations": {},
-    }
-    xlsx_delivery: dict[str, Any] = {
-        "local_path": "",
-        "url": "",
-        "warnings": [],
-        "destinations": {},
-    }
+    artifact_delivery: dict[str, Any] = empty_delivery_state()
+    xlsx_delivery: dict[str, Any] = empty_delivery_state()
 
     warnings: list = []
     warnings.extend(lifecycle["warnings"])

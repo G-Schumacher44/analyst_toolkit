@@ -16,6 +16,7 @@ from analyst_toolkit.mcp_server.io import (
     coerce_config,
     compact_destination_metadata,
     deliver_artifact,
+    empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
     get_session_metadata,
@@ -164,18 +165,8 @@ async def _toolkit_final_audit(
     warnings.extend(runtime_warnings)
     warnings.extend(runtime_meta["runtime_warnings"])
     warnings.extend(export_delivery["warnings"])
-    artifact_delivery: dict[str, Any] = {
-        "local_path": "",
-        "url": "",
-        "warnings": [],
-        "destinations": {},
-    }
-    xlsx_delivery: dict[str, Any] = {
-        "local_path": "",
-        "url": "",
-        "warnings": [],
-        "destinations": {},
-    }
+    artifact_delivery: dict[str, Any] = empty_delivery_state()
+    xlsx_delivery: dict[str, Any] = empty_delivery_state()
 
     # M10 exports to these locations (matches final_audit_pipeline.py defaults)
     artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
