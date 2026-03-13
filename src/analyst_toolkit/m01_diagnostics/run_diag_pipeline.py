@@ -80,7 +80,7 @@ def run_diag_pipeline(
 
         plot_paths = {}
         plotting_cfg = module_cfg.get("plotting", {})
-        if plotting_cfg.get("run", True):
+        if plotting_cfg.get("run", False):
             logging.info("Generating diagnostic plots...")
             save_dir = Path(plotting_cfg.get("save_dir", "exports/plots/diagnostics/")) / run_id
 
@@ -127,7 +127,7 @@ def run_diag_pipeline(
         if settings.get("export", False):
             export_path = settings.get(
                 "export_path", f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
-            )
+            ).format(run_id=run_id)
             export_dataframes(
                 data_dict=full_profile["for_export"], export_path=export_path, run_id=run_id
             )

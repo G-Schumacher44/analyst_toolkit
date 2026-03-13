@@ -1068,6 +1068,14 @@ def _safe_summary_flag(summary_df: pd.DataFrame, metric_name: str) -> str:
     return str(value)
 
 
+def _safe_metric_value(summary_df: pd.DataFrame, metric_name: str) -> int:
+    try:
+        series = summary_df.loc[summary_df["Metric"] == metric_name, "Value"]
+        return int(series.iloc[0]) if not series.empty else 0
+    except Exception:
+        return 0
+
+
 def _render_final_audit_dashboard(report: dict[str, Any], run_id: str) -> str:
     summary_df = report.get("Pipeline_Summary", pd.DataFrame())
     status_row = (
@@ -1213,14 +1221,6 @@ def _render_final_audit_dashboard(report: dict[str, Any], run_id: str) -> str:
         toc_items=toc,
         sections=sections,
     )
-
-
-def _safe_metric_value(summary_df: pd.DataFrame, metric_name: str) -> int:
-    try:
-        series = summary_df.loc[summary_df["Metric"] == metric_name, "Value"]
-        return int(series.iloc[0]) if not series.empty else 0
-    except Exception:
-        return 0
 
 
 def _render_duplicates_key_clusters(
