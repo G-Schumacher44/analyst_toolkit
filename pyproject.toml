@@ -67,6 +67,7 @@ dev = [
   "pytest-mock",
   "ruff",
   "pre-commit",
+  "yamllint",
   "httpx",
   "mypy",
   "pandas-stubs",

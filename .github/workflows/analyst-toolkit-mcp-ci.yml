@@ -2,10 +2,10 @@ name: Analyst Toolkit MCP CI
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches: [main, master]
+    tags: ["v*"]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   secret-scan:
@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -35,15 +35,18 @@ jobs:
       - name: Run Gitleaks
         run: gitleaks detect --source . --no-banner --redact
 
-  lint-and-test:
-    name: Lint, Test, and Docker Build
+  quality:
+    name: Quality (py${{ matrix.python-version }})
     needs: [secret-scan]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      packages: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -51,38 +54,108 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
-          cache: 'pip'
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install build
+          pip install yamllint
           pip install -r requirements-mcp.txt
           pip install -e ".[dev]"
 
-      - name: Lint with ruff
-        run: ruff check src/
+      - name: Lint with Ruff
+        run: ruff check src/ tests/
 
-      - name: Type check with mypy
-        run: mypy src tests
+      - name: Check formatting with Ruff
+        run: ruff format --check src/ tests/
 
-      - name: Run All Tests
+      - name: Lint YAML
+        run: |
+          yamlint \
+            .github/workflows \
+            .coderabbit.yaml
+
+      - name: Type check MCP server with mypy
+        run: mypy src/analyst_toolkit/mcp_server
+
+      - name: Run pre-commit hooks
+        run: pre-commit run --all-files
+
+      - name: Run tests
         run: pytest tests/
 
-      - name: Build Wheel
+  dependency-audit:
+    name: Dependency Audit (pip-audit)
+    needs: [secret-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          pip install -r requirements-mcp.txt
+          pip install -e ".[dev]"
+
+      - name: Audit installed dependencies
+        run: pip-audit
+
+  build-package:
+    name: Build Wheel
+    needs: [quality, dependency-audit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build wheel
         run: python -m build
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  docker-smoke:
+    name: Docker Build and Smoke Test
+    needs: [quality, dependency-audit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract version from pyproject.toml
-        id: version
-        run: |
-          VERSION=$(python -c "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); print(d['project']['version'])")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build Docker image (local)
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -93,24 +166,49 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Docker smoke-test — /health returns ok
+      - name: Smoke test /health
         run: |
+          set -euo pipefail
           docker run -d --name mcp-smoke -p 8001:8001 analyst-toolkit-mcp:ci
-          # Wait up to 30s for the server to become ready
+          trap 'docker logs mcp-smoke || true; docker stop mcp-smoke || true; docker rm mcp-smoke || true' EXIT
           for i in $(seq 1 15); do
             STATUS=$(curl -sf http://localhost:8001/health | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
             if [ "$STATUS" = "ok" ]; then
               echo "Server healthy after ${i} attempts"
-              break
+              exit 0
             fi
             echo "Attempt $i: not ready yet, waiting 2s..."
             sleep 2
           done
-          [ "$STATUS" = "ok" ] || (docker logs mcp-smoke && exit 1)
-          docker stop mcp-smoke && docker rm mcp-smoke
+          exit 1
+
+  publish-ghcr:
+    name: Publish Docker Image to GHCR
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [build-package, docker-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(python -c "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); print(d['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -118,7 +216,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push to GHCR
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -130,8 +227,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+  github-release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-package, publish-ghcr]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.whl

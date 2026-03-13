@@ -15,7 +15,10 @@ repos:
     rev: v1.15.0
     hooks:
     -   id: mypy
+        args: [src/analyst_toolkit/mcp_server]
         additional_dependencies: [pandas-stubs, types-PyYAML]
+        files: ^src/analyst_toolkit/mcp_server/
+        pass_filenames: false
 
 -   repo: local
     hooks:
