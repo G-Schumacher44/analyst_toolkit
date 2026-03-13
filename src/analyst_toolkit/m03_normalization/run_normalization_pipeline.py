@@ -93,8 +93,8 @@ def run_normalization_pipeline(
 
     if settings.get("export", True):
         export_path = settings.get(
-            "export_path", f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
-        )
+            "export_path", "exports/reports/normalization/{run_id}_normalization_report.xlsx"
+        ).format(run_id=run_id)
         export_dataframes(report_tables, export_path)
         if settings.get("export_html", False):
             html_path = settings.get(

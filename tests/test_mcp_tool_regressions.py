@@ -410,6 +410,12 @@ async def test_normalization_reports_artifact_contract(mocker):
     assert "artifact_matrix" in result
     assert "html_report" in result["artifact_matrix"]
     assert "html_report" in result["missing_required_artifacts"]
+    assert "xlsx_report" in result["artifact_matrix"]
+    assert result["artifact_matrix"]["xlsx_report"]["status"] == "missing"
+    assert any(
+        "exports/reports/normalization/norm_artifact_contract_normalization_report.xlsx" in warning
+        for warning in result["warnings"]
+    )
     assert (
         result["dashboard_path"]
         == "exports/reports/normalization/norm_artifact_contract_normalization_report.html"

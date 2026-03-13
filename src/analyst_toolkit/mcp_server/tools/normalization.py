@@ -104,7 +104,7 @@ async def _toolkit_normalization(
             warnings,
         )
 
-        xlsx_path = f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
+        xlsx_path = f"exports/reports/normalization/{run_id}_normalization_report.xlsx"
         xlsx_url = check_upload(
             upload_artifact(
                 xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id
