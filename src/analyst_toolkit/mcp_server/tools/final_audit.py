@@ -24,7 +24,11 @@ from analyst_toolkit.mcp_server.io import (
     save_to_session,
     upload_artifact,
 )
-from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
+from analyst_toolkit.mcp_server.response_utils import (
+    next_action,
+    with_dashboard_artifact,
+    with_next_actions,
+)
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -214,6 +218,12 @@ async def _toolkit_final_audit(
         "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
         "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Final audit dashboard",
+    )
     res = with_next_actions(
         res,
         [
@@ -238,6 +248,6 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="final_audit",
     fn=_toolkit_final_audit,
-    description="Run the final certification audit and generate the comprehensive Healing Certificate (HTML).",
+    description="Run the final certification audit and return the Healing Certificate as a standalone dashboard artifact.",
     input_schema=base_input_schema(),
 )

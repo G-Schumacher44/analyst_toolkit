@@ -409,3 +409,9 @@ async def test_normalization_reports_artifact_contract(mocker):
     assert "artifact_matrix" in result
     assert "html_report" in result["artifact_matrix"]
     assert "html_report" in result["missing_required_artifacts"]
+    assert (
+        result["dashboard_path"]
+        == "exports/reports/normalization/norm_artifact_contract_normalization_report.html"
+    )
+    assert result["dashboard_url"] == ""
+    assert result["dashboard_label"] == "Normalization dashboard"

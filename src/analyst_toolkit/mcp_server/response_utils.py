@@ -66,3 +66,18 @@ def with_next_actions(result: dict[str, Any], actions: list[dict[str, Any]]) -> 
     out = dict(result)
     out["next_actions"] = actions
     return out
+
+
+def with_dashboard_artifact(
+    result: dict[str, Any],
+    *,
+    artifact_path: str = "",
+    artifact_url: str = "",
+    label: str = "Standalone HTML dashboard",
+) -> dict[str, Any]:
+    """Attach explicit dashboard metadata to a tool response."""
+    out = dict(result)
+    out["dashboard_path"] = artifact_path
+    out["dashboard_url"] = artifact_url
+    out["dashboard_label"] = label if artifact_path or artifact_url else ""
+    return out

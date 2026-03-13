@@ -21,6 +21,7 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.response_utils import with_dashboard_artifact
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -158,6 +159,12 @@ async def _toolkit_outliers(
         "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
         "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Outlier detection dashboard",
+    )
     append_to_run_history(run_id, res, session_id=session_id)
     return res
 
@@ -168,6 +175,6 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="outliers",
     fn=_toolkit_outliers,
-    description="Run IQR/z-score outlier detection on a dataset. Returns flagged columns and count.",
+    description="Run IQR/z-score outlier detection on a dataset and return a standalone outlier detection dashboard artifact.",
     input_schema=base_input_schema(),
 )

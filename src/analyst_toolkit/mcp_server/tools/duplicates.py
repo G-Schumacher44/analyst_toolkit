@@ -18,6 +18,7 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.response_utils import with_dashboard_artifact
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -166,6 +167,12 @@ async def _toolkit_duplicates(
         "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
         "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Duplicates dashboard",
+    )
     append_to_run_history(run_id, res, session_id=session_id)
     return res
 
@@ -175,7 +182,7 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="duplicates",
     fn=_toolkit_duplicates,
-    description="Detect duplicate rows in a dataset. Returns count and optional clusters.",
+    description="Detect duplicate rows in a dataset and return a standalone duplicates dashboard artifact.",
     input_schema=base_input_schema(
         extra_props={
             "subset_columns": {
