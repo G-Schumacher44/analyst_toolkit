@@ -188,11 +188,23 @@ def runtime_to_tool_overrides(runtime: dict[str, Any]) -> dict[str, Any]:
 
     destinations = runtime.get("destinations", {})
     if isinstance(destinations, dict):
+        local_cfg = destinations.get("local", {})
+        if isinstance(local_cfg, dict) and local_cfg.get("enabled") and local_cfg.get("root"):
+            overrides["local_output_root"] = local_cfg["root"]
+
         gcs_cfg = destinations.get("gcs", {})
         if isinstance(gcs_cfg, dict) and gcs_cfg.get("enabled"):
             if gcs_cfg.get("bucket_uri"):
                 overrides["output_bucket"] = gcs_cfg["bucket_uri"]
             if gcs_cfg.get("prefix"):
                 overrides["output_prefix"] = gcs_cfg["prefix"]
+
+        drive_cfg = destinations.get("drive", {})
+        if isinstance(drive_cfg, dict) and drive_cfg.get("enabled") and drive_cfg.get("folder_id"):
+            overrides["drive_folder_id"] = drive_cfg["folder_id"]
+
+    execution_cfg = runtime.get("execution", {})
+    if isinstance(execution_cfg, dict) and "upload_artifacts" in execution_cfg:
+        overrides["upload_artifacts"] = execution_cfg["upload_artifacts"]
 
     return overrides

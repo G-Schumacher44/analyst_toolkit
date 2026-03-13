@@ -13,6 +13,7 @@ from typing import Any, Optional
 import pandas as pd
 import yaml
 
+from analyst_toolkit.mcp_server.destination_routing import deliver_artifact as _deliver_artifact
 from analyst_toolkit.mcp_server.io_history_files import (
     read_history_file_safe as _read_history_file_safe,
 )
@@ -272,6 +273,24 @@ def upload_artifact(
     session_id: Optional[str] = None,
 ) -> str:
     return _upload_artifact(
+        local_path=local_path,
+        run_id=run_id,
+        module=module,
+        config=config or {},
+        session_id=session_id,
+        resolve_path_root=_resolve_path_root,
+        logger=logger,
+    )
+
+
+def deliver_artifact(
+    local_path: str,
+    run_id: str,
+    module: str,
+    config: Optional[dict] = None,
+    session_id: Optional[str] = None,
+) -> dict[str, Any]:
+    return _deliver_artifact(
         local_path=local_path,
         run_id=run_id,
         module=module,

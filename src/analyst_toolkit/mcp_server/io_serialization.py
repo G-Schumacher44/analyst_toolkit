@@ -12,8 +12,12 @@ import pandas as pd
 def build_artifact_contract(
     export_url: str,
     *,
+    export_path: str = "",
+    artifact_path: str = "",
     artifact_url: str = "",
+    xlsx_path: str = "",
     xlsx_url: str = "",
+    plot_paths: dict[str, str] | None = None,
     plot_urls: dict[str, str] | None = None,
     expect_html: bool = False,
     expect_xlsx: bool = False,
@@ -23,56 +27,46 @@ def build_artifact_contract(
     required_data_export: bool = True,
 ) -> dict[str, Any]:
     plots = plot_urls or {}
-    data_export_status, data_export_reason = _resolve_data_export_status(export_url)
+    plot_refs = plot_paths or {}
+    data_export_status, data_export_reason = _resolve_reference_status(export_url, export_path)
+    html_status, html_reason = _resolve_reference_status(artifact_url, artifact_path)
+    xlsx_status, xlsx_reason = _resolve_reference_status(xlsx_url, xlsx_path)
+    plots_available = bool(plots) or bool(plot_refs)
+    plot_reason = "" if plots_available else "not_generated_or_upload_failed"
+    plot_status = "available" if plots_available else "missing"
     matrix: dict[str, dict[str, Any]] = {
         "data_export": {
             "expected": True,
             "required": required_data_export,
             "status": data_export_status,
             "url": export_url,
+            "path": export_path,
             "reason": data_export_reason,
         },
         "html_report": {
             "expected": expect_html,
             "required": required_html and expect_html,
-            "status": (
-                "disabled"
-                if not expect_html
-                else ("available" if bool(artifact_url) else "missing")
-            ),
+            "status": "disabled" if not expect_html else html_status,
             "url": artifact_url if expect_html else "",
-            "reason": (
-                "disabled"
-                if not expect_html
-                else ("" if artifact_url else "upload_failed_or_not_generated")
-            ),
+            "path": artifact_path if expect_html else "",
+            "reason": "disabled" if not expect_html else html_reason,
         },
         "xlsx_report": {
             "expected": expect_xlsx,
             "required": required_xlsx and expect_xlsx,
-            "status": (
-                "disabled" if not expect_xlsx else ("available" if bool(xlsx_url) else "missing")
-            ),
+            "status": "disabled" if not expect_xlsx else xlsx_status,
             "url": xlsx_url if expect_xlsx else "",
-            "reason": (
-                "disabled"
-                if not expect_xlsx
-                else ("" if xlsx_url else "upload_failed_or_not_generated")
-            ),
+            "path": xlsx_path if expect_xlsx else "",
+            "reason": "disabled" if not expect_xlsx else xlsx_reason,
         },
         "plots": {
             "expected": expect_plots,
             "required": False,
-            "status": (
-                "disabled" if not expect_plots else ("available" if len(plots) > 0 else "missing")
-            ),
-            "count": len(plots) if expect_plots else 0,
+            "status": "disabled" if not expect_plots else plot_status,
+            "count": max(len(plots), len(plot_refs)) if expect_plots else 0,
             "urls": plots if expect_plots else {},
-            "reason": (
-                "disabled"
-                if not expect_plots
-                else ("" if len(plots) > 0 else "not_generated_or_upload_failed")
-            ),
+            "paths": plot_refs if expect_plots else {},
+            "reason": "disabled" if not expect_plots else plot_reason,
         },
     }
 
@@ -97,6 +91,12 @@ def build_artifact_contract(
             "Data export path is local to MCP server runtime filesystem and may not be "
             "directly accessible from the client host."
         )
+    for artifact_name in ("html_report", "xlsx_report"):
+        if matrix[artifact_name].get("reason") == "server_local_path":
+            warnings.append(
+                f"{artifact_name} path is local to MCP server runtime filesystem and may not be "
+                "directly accessible from the client host."
+            )
     return {
         "artifact_matrix": matrix,
         "expected_artifacts": expected,
@@ -171,14 +171,20 @@ def make_json_safe(value: Any) -> Any:
         return str(value)
 
 
-def _resolve_data_export_status(export_url: str) -> tuple[str, str]:
-    if not export_url:
+def _resolve_reference_status(url: str, path: str = "") -> tuple[str, str]:
+    if url:
+        if url.startswith("gs://") or url.startswith("http://") or url.startswith("https://"):
+            return "available", ""
+
+        local_url_path = Path(url)
+        if local_url_path.exists():
+            return "available", "server_local_path"
+        return "missing", "local_path_not_found"
+
+    if not path:
         return "missing", "upload_failed"
 
-    if export_url.startswith("gs://"):
-        return "available", ""
-
-    local_path = Path(export_url)
+    local_path = Path(path)
     if local_path.exists():
         return "available", "server_local_path"
     return "missing", "local_path_not_found"

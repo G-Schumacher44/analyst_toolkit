@@ -149,6 +149,17 @@ async def test_toolkit_diagnostics_accepts_runtime_overrides(mocker):
     mocker.patch.object(diagnostics_tool, "run_diag_pipeline", return_value=None)
     mocker.patch.object(diagnostics_tool, "save_output", return_value="gs://dummy/out.csv")
     mocker.patch.object(diagnostics_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        diagnostics_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
 
     result = await diagnostics_tool._toolkit_diagnostics(
         runtime={
@@ -443,7 +454,17 @@ async def test_normalization_reports_artifact_contract(mocker):
     mocker.patch.object(normalization_tool, "save_output", return_value="gs://dummy/norm.csv")
     mocker.patch.object(normalization_tool, "append_to_run_history", return_value=None)
     mocker.patch.object(normalization_tool, "should_export_html", return_value=True)
-    mocker.patch.object(normalization_tool, "upload_artifact", return_value="")
+    mocker.patch.object(
+        normalization_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [f"Upload failed or file not found: {local_path}"],
+            "destinations": {},
+        },
+    )
 
     result = await normalization_tool._toolkit_normalization(
         session_id="sess_norm",
@@ -641,7 +662,20 @@ async def test_other_modules_report_dashboard_artifact_contract(
     mocker.patch.object(tool_module, "save_to_session", return_value="sess_dash")
     mocker.patch.object(tool_module, "save_output", return_value="gs://dummy/out.csv")
     mocker.patch.object(tool_module, "append_to_run_history", return_value=None)
-    mocker.patch.object(tool_module, "upload_artifact", return_value="")
+    if hasattr(tool_module, "deliver_artifact"):
+        mocker.patch.object(
+            tool_module,
+            "deliver_artifact",
+            side_effect=lambda local_path, *args, **kwargs: {
+                "reference": "",
+                "local_path": local_path,
+                "url": "",
+                "warnings": [],
+                "destinations": {},
+            },
+        )
+    elif hasattr(tool_module, "upload_artifact"):
+        mocker.patch.object(tool_module, "upload_artifact", return_value="")
     mocker.patch.object(tool_module, run_return_name, return_value=run_return_value)
 
     if hasattr(tool_module, "get_session_metadata"):

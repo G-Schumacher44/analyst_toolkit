@@ -108,13 +108,20 @@ def test_runtime_to_config_overlay_maps_shared_export_html_and_plotting():
     assert overlay == {"export_html": True, "plotting": {"run": False}}
 
 
-def test_runtime_to_tool_overrides_maps_run_and_gcs_destination_fields():
+def test_runtime_to_tool_overrides_maps_run_and_destination_fields():
     overrides = runtime_to_tool_overrides(
         {
             "run": {"run_id": "run-123", "session_id": "sess-1", "input_path": "gs://bucket/a.csv"},
             "destinations": {
-                "gcs": {"enabled": True, "bucket_uri": "gs://out-bucket", "prefix": "custom/prefix"}
+                "local": {"enabled": True, "root": "/tmp/runtime-artifacts"},
+                "gcs": {
+                    "enabled": True,
+                    "bucket_uri": "gs://out-bucket",
+                    "prefix": "custom/prefix",
+                },
+                "drive": {"enabled": True, "folder_id": "drive-folder"},
             },
+            "execution": {"upload_artifacts": False},
         }
     )
 
@@ -122,6 +129,9 @@ def test_runtime_to_tool_overrides_maps_run_and_gcs_destination_fields():
         "run_id": "run-123",
         "session_id": "sess-1",
         "gcs_path": "gs://bucket/a.csv",
+        "local_output_root": "/tmp/runtime-artifacts",
         "output_bucket": "gs://out-bucket",
         "output_prefix": "custom/prefix",
+        "drive_folder_id": "drive-folder",
+        "upload_artifacts": False,
     }
