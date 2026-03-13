@@ -162,6 +162,73 @@ def test_rpc_preflight_config_non_strict_warns_on_unknown_keys(client):
     assert any("Unknown top-level keys" in w for w in result["warnings"])
 
 
+def test_rpc_preflight_config_applies_runtime_overlay(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 45,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "normalization",
+                "config": {"rules": {"rename_columns": {"a": "b"}}},
+                "runtime": {"artifacts": {"export_html": False}},
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["summary"]["runtime_applied"] is True
+    assert result["effective_config"]["export_html"] is False
+
+
+def test_rpc_preflight_config_rejects_invalid_runtime_overlay(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 46,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "normalization",
+                "strict": True,
+                "config": {"rules": {"rename_columns": {"a": "b"}}},
+                "runtime": {"artifacts": {"export_html": "definitely"}},
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "tool_execution_failed"
+    assert "RuntimeOverlayError" in result["error"]["message"]
+
+
+def test_rpc_preflight_config_warns_on_unknown_runtime_keys(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 47,
+        "method": "tools/call",
+        "params": {
+            "name": "preflight_config",
+            "arguments": {
+                "module_name": "normalization",
+                "config": {"rules": {"rename_columns": {"a": "b"}}},
+                "runtime": {"artifacts": {"export_html": False, "mystery_flag": True}},
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["summary"]["runtime_applied"] is True
+    assert any("Ignored unknown runtime key" in warning for warning in result["warnings"])
+
+
 def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure(client):
     """Verify tool runtime failures are normalized to structured status=error payloads."""
     payload = {
