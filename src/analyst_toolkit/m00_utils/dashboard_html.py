@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import html
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import pandas as pd
 
 _MAX_PREVIEW_ROWS = 50
+_SIZE_WARNING_THRESHOLD_MB = 25
 
 _DASHBOARD_CSS = """
 <style>
@@ -548,7 +550,11 @@ def _normalize_df_for_display(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _render_df(
-    df: pd.DataFrame, *, max_rows: int = _MAX_PREVIEW_ROWS, full_preview: bool = False
+    df: pd.DataFrame,
+    *,
+    max_rows: int = _MAX_PREVIEW_ROWS,
+    full_preview: bool = False,
+    allow_html_cols: set[str] | None = None,
 ) -> str:
     if not isinstance(df, pd.DataFrame) or df.empty:
         return "<p class='empty'>No data available.</p>"
@@ -561,6 +567,14 @@ def _render_df(
         ]
 
     preview = working if full_preview else working.head(max_rows)
+    preview = preview.copy()
+    safe_html_cols = allow_html_cols or set()
+    for column in preview.columns:
+        if str(column) in safe_html_cols:
+            continue
+        preview[column] = preview[column].map(
+            lambda value: html.escape(value) if isinstance(value, str) else value
+        )
     table_html = preview.to_html(index=False, escape=False, border=0)
     wrapped_table = f"<div class='table-wrap'>{table_html}</div>"
     if full_preview or len(working) <= max_rows:
@@ -588,11 +602,14 @@ def _flatten_plot_paths(plot_paths: dict[str, Any] | None) -> list[tuple[str, st
 
 def _render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
     cards = []
+    total_bytes = 0
     for name, path_str in _flatten_plot_paths(plot_paths):
         path = Path(path_str)
         if not path.exists():
             continue
-        encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+        file_bytes = path.read_bytes()
+        total_bytes += len(file_bytes)
+        encoded = base64.b64encode(file_bytes).decode("utf-8")
         image_src = f"data:image/png;base64,{encoded}"
         escaped_title = html.escape(_display_name(name))
         escaped_name = html.escape(name)
@@ -607,6 +624,11 @@ def _render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
         )
     if not cards:
         return "<p class='empty'>No plots were generated for this run.</p>"
+    if total_bytes > _SIZE_WARNING_THRESHOLD_MB * 1024 * 1024:
+        logging.warning(
+            "Embedded plot data exceeds %s MB. Consider reducing plot count or resolution.",
+            _SIZE_WARNING_THRESHOLD_MB,
+        )
     return (
         "<p class='plot-intro'>The standalone export keeps the visuals in the same file so the report travels without sidecar assets.</p>"
         "<div class='plot-grid'>" + "".join(cards) + "</div>"
@@ -986,7 +1008,7 @@ def _render_validation_dashboard(results: dict[str, Any], run_id: str) -> str:
             "Validation Rules Summary",
             (
                 "<div class='card'>"
-                f"{_render_df(summary_df, full_preview=True)}"
+                f"{_render_df(summary_df, full_preview=True, allow_html_cols={'Status'})}"
                 "<div class='key'><strong>Status Key</strong><ul>"
                 "<li><strong>Pass:</strong> The data conformed to the rule.</li>"
                 "<li><strong>Fail:</strong> One or more issues were found.</li>"

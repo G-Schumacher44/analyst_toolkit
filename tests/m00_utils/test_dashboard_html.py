@@ -35,7 +35,7 @@ def test_generate_diagnostics_dashboard_embeds_plots(tmp_path):
         "sample_head": pd.DataFrame([{"city": "Austin"}]),
     }
 
-    html = export_html_report(
+    output_path = export_html_report(
         report,
         str(tmp_path / "diagnostics.html"),
         "Diagnostics",
@@ -44,7 +44,7 @@ def test_generate_diagnostics_dashboard_embeds_plots(tmp_path):
     )
 
     contents = (tmp_path / "diagnostics.html").read_text(encoding="utf-8")
-    assert html.endswith("diagnostics.html")
+    assert output_path.endswith("diagnostics.html")
     assert "M01 Data Diagnostics" in contents
     assert "Columns with Nulls" in contents
     assert "data:image/png;base64," in contents
