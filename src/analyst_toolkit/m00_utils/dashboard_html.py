@@ -225,9 +225,85 @@ _DASHBOARD_CSS = """
     border-radius: 14px;
     border: 1px solid var(--line);
     background: #fff;
+    cursor: zoom-in;
   }
   .plot-card h3 {
     margin: 0 0 10px;
+  }
+  .plot-trigger {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    cursor: zoom-in;
+  }
+  .plot-trigger:focus-visible {
+    outline: 3px solid rgba(31, 75, 74, 0.35);
+    outline-offset: 6px;
+    border-radius: 16px;
+  }
+  .plot-caption {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+  .plot-modal {
+    border: 0;
+    padding: 0;
+    width: min(92vw, 1280px);
+    max-height: 92vh;
+    background: transparent;
+  }
+  .plot-modal::backdrop {
+    background: rgba(17, 24, 39, 0.74);
+    backdrop-filter: blur(4px);
+  }
+  .plot-modal-card {
+    background: var(--paper);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
+  }
+  .plot-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px 0;
+  }
+  .plot-modal-header h3 {
+    margin: 0;
+    font-size: 1.08rem;
+    color: #22303a;
+  }
+  .plot-modal-close {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: #22303a;
+    border-radius: 999px;
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .plot-modal-body {
+    padding: 14px 20px 20px;
+    overflow: auto;
+    max-height: calc(92vh - 72px);
+  }
+  .plot-modal-body img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fff;
   }
   .badge-ok {
     display: inline-flex;
@@ -281,6 +357,38 @@ _DASHBOARD_CSS = """
     to { opacity: 1; transform: translateY(0); }
   }
 </style>
+"""
+
+_DASHBOARD_SCRIPT = """
+<script>
+  window.atkDashboard = {
+    openPlot(button) {
+      const modal = document.getElementById("plot-modal");
+      const image = document.getElementById("plot-modal-image");
+      const title = document.getElementById("plot-modal-title");
+      if (!modal || !image || !title) return;
+      image.src = button.dataset.plotSrc || "";
+      image.alt = button.dataset.plotTitle || "Expanded plot";
+      title.textContent = button.dataset.plotTitle || "Plot";
+      if (typeof modal.showModal === "function") {
+        modal.showModal();
+      }
+    },
+    closePlot() {
+      const modal = document.getElementById("plot-modal");
+      const image = document.getElementById("plot-modal-image");
+      if (!modal) return;
+      modal.close();
+      if (image) image.src = "";
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const modal = document.getElementById("plot-modal");
+    if (!modal || event.target !== modal) return;
+    window.atkDashboard.closePlot();
+  });
+</script>
 """
 
 
@@ -360,10 +468,16 @@ def _render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
         if not path.exists():
             continue
         encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+        image_src = f"data:image/png;base64,{encoded}"
+        escaped_title = html.escape(_display_name(name))
+        escaped_name = html.escape(name)
         cards.append(
             "<div class='card plot-card'>"
-            f"<h3>{html.escape(_display_name(name))}</h3>"
-            f"<img src='data:image/png;base64,{encoded}' alt='{html.escape(name)}'>"
+            f"<h3>{escaped_title}</h3>"
+            f"<button class='plot-trigger' type='button' onclick='window.atkDashboard.openPlot(this)' data-plot-src='{image_src}' data-plot-title='{escaped_title}'>"
+            f"<img src='{image_src}' alt='{escaped_name}'>"
+            "</button>"
+            "<p class='plot-caption'>Click to expand</p>"
             "</div>"
         )
     if not cards:
@@ -403,7 +517,7 @@ def _assemble_page(
     return (
         "<html><head>"
         f"<title>{html.escape(module_name)} Dashboard - {html.escape(run_id)}</title>"
-        f"{_DASHBOARD_CSS}</head><body><div class='page'>"
+        f"{_DASHBOARD_CSS}{_DASHBOARD_SCRIPT}</head><body><div class='page'>"
         "<div class='hero'>"
         "<div class='hero-kicker'>Analyst Toolkit Export</div>"
         f"<h1>{html.escape(module_name)} Dashboard</h1>"
@@ -411,7 +525,17 @@ def _assemble_page(
         f"<span><strong>Run ID:</strong> {html.escape(run_id)}</span>"
         f"<span><strong>Generated:</strong> {generated_at}</span>"
         "</div></div>"
-        f"{banner_html}{toc_html}{body}</div></body></html>"
+        f"{banner_html}{toc_html}{body}"
+        "<dialog class='plot-modal' id='plot-modal'>"
+        "<div class='plot-modal-card'>"
+        "<div class='plot-modal-header'>"
+        "<h3 id='plot-modal-title'>Plot</h3>"
+        "<button class='plot-modal-close' type='button' onclick='window.atkDashboard.closePlot()' aria-label='Close expanded plot'>&times;</button>"
+        "</div>"
+        "<div class='plot-modal-body'>"
+        "<img id='plot-modal-image' src='' alt='Expanded plot'>"
+        "</div></div></dialog>"
+        "</div></body></html>"
     )
 
 

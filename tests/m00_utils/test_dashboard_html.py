@@ -49,6 +49,10 @@ def test_generate_diagnostics_dashboard_embeds_plots(tmp_path):
     assert "Columns with Nulls" in contents
     assert "data:image/png;base64," in contents
     assert "Full Profile &amp; Cardinality" in contents
+    assert "plot-trigger" in contents
+    assert "Click to expand" in contents
+    assert "id='plot-modal'" in contents
+    assert "window.atkDashboard.openPlot" in contents
 
 
 def test_generate_validation_dashboard_renders_failure_details():
