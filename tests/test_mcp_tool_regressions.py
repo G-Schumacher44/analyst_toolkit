@@ -497,6 +497,73 @@ async def test_toolkit_validation_runtime_can_disable_html_artifacts(mocker):
 
 
 @pytest.mark.asyncio
+async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
+    df = pd.DataFrame({"id": [1, 1], "value": [10, 10]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        return df
+
+    mocker.patch.object(duplicates_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(
+        duplicates_tool,
+        "run_duplicates_pipeline",
+        return_value=df.assign(is_duplicate=[False, True]),
+    )
+    mocker.patch.object(duplicates_tool, "save_to_session", return_value="sess_dup")
+    mocker.patch.object(duplicates_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(duplicates_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(duplicates_tool, "append_to_run_history", return_value=None)
+
+    result = await duplicates_tool._toolkit_duplicates(
+        runtime={
+            "run": {"run_id": "dup_runtime", "input_path": "gs://bucket/dup.csv"},
+            "artifacts": {"export_html": False},
+        },
+        config={},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["run_id"] == "dup_runtime"
+    assert captured["input_path"] == "gs://bucket/dup.csv"
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monkeypatch):
+    df = pd.DataFrame({"value": [1]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        return df
+
+    mocker.patch.object(final_audit_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(final_audit_tool, "upload_artifact", return_value="")
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", True)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        runtime={"run": {"run_id": "final_runtime", "input_path": "gs://bucket/final.csv"}},
+        config={},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["run_id"] == "final_runtime"
+    assert captured["input_path"] == "gs://bucket/final.csv"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     (
         "tool_module",

@@ -23,6 +23,12 @@ from analyst_toolkit.mcp_server.io import (
     upload_artifact,
 )
 from analyst_toolkit.mcp_server.response_utils import with_dashboard_artifact
+from analyst_toolkit.mcp_server.runtime_overlay import (
+    normalize_runtime_overlay,
+    resolve_layered_config,
+    runtime_to_config_overlay,
+    runtime_to_tool_overrides,
+)
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -37,13 +43,27 @@ async def _toolkit_imputation(
     gcs_path: str | None = None,
     session_id: str | None = None,
     config: dict | None = None,
+    runtime: dict | str | None = None,
     run_id: str | None = None,
     **kwargs,
 ) -> dict:
     """Run missing value imputation on the dataset at gcs_path or session_id."""
+    runtime_cfg, runtime_warnings = normalize_runtime_overlay(runtime)
+    runtime_overrides = runtime_to_tool_overrides(runtime_cfg)
+    runtime_applied = bool(runtime_cfg)
+    gcs_path = gcs_path or runtime_overrides.get("gcs_path")
+    session_id = session_id or runtime_overrides.get("session_id")
+    run_id = run_id or runtime_overrides.get("run_id")
+    for key in ("output_bucket", "output_prefix"):
+        kwargs.setdefault(key, runtime_overrides.get(key))
+
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "imputation")
+    config, runtime_meta = resolve_layered_config(
+        provided=config,
+        explicit=runtime_to_config_overlay(runtime_cfg),
+    )
     df = load_input(gcs_path, session_id=session_id)
 
     base_cfg = config.get("imputation", config)
@@ -92,6 +112,8 @@ async def _toolkit_imputation(
 
     warnings: list = []
     warnings.extend(lifecycle["warnings"])
+    warnings.extend(runtime_warnings)
+    warnings.extend(runtime_meta["runtime_warnings"])
 
     if should_export_html(config):
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
@@ -163,6 +185,7 @@ async def _toolkit_imputation(
         "export_url": export_url,
         "warnings": warnings,
         "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
+        "runtime_applied": runtime_applied,
         "artifact_matrix": artifact_contract["artifact_matrix"],
         "expected_artifacts": artifact_contract["expected_artifacts"],
         "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
