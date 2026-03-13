@@ -7,6 +7,7 @@ import pytest
 
 import analyst_toolkit.mcp_server.tools.auto_heal as auto_heal_tool
 import analyst_toolkit.mcp_server.tools.diagnostics as diagnostics_tool
+import analyst_toolkit.mcp_server.tools.drift as drift_tool
 import analyst_toolkit.mcp_server.tools.duplicates as duplicates_tool
 import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
 import analyst_toolkit.mcp_server.tools.imputation as imputation_tool
@@ -56,7 +57,15 @@ async def test_toolkit_final_audit_applies_shorthand_rules(mocker):
     mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
     mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
     mocker.patch.object(
-        final_audit_tool, "upload_artifact", return_value="https://example.com/artifact"
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/artifact",
+            "warnings": [],
+            "destinations": {},
+        },
     )
     mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
 
@@ -132,6 +141,33 @@ async def test_toolkit_diagnostics_includes_next_actions(mocker):
     tools = [a["tool"] for a in result["next_actions"]]
     assert "infer_configs" in tools
     assert "auto_heal" in tools
+
+
+@pytest.mark.asyncio
+async def test_toolkit_drift_detection_reports_artifact_contract(mocker):
+    base_df = pd.DataFrame({"value": [1.0, 2.0]})
+    target_df = pd.DataFrame({"value": [1.1, 2.2]})
+    captured = {"calls": 0}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["calls"] += 1
+        return base_df if captured["calls"] == 1 else target_df
+
+    mocker.patch.object(drift_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(drift_tool, "save_output", return_value="gs://dummy/drift.csv")
+    mocker.patch.object(drift_tool, "append_to_run_history", return_value=None)
+
+    result = await drift_tool._toolkit_drift_detection(
+        base_path="gs://bucket/base.csv",
+        target_path="gs://bucket/target.csv",
+        run_id="drift_contract",
+    )
+
+    assert result["module"] == "drift_detection"
+    assert "artifact_matrix" in result
+    assert result["artifact_matrix"]["data_export"]["status"] == "available"
+    assert result["export_url"] == "gs://dummy/drift.csv"
+    assert result["destination_delivery"]["data_export"] == {}
 
 
 @pytest.mark.asyncio
@@ -515,7 +551,17 @@ async def test_final_audit_fails_closed_when_cert_rules_empty(mocker, monkeypatc
     mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_test")
     mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
     mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
-    mocker.patch.object(final_audit_tool, "upload_artifact", return_value="https://example.com/a")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
     mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
     monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
 
@@ -662,7 +708,17 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
     mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final")
     mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
     mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
-    mocker.patch.object(final_audit_tool, "upload_artifact", return_value="")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
     mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
     mocker.patch.object(
         final_audit_tool,

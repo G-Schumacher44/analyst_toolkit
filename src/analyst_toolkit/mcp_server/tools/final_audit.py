@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from typing import Any
 
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
@@ -12,8 +13,9 @@ from analyst_toolkit.mcp_server.io import (
     ALLOW_EMPTY_CERT_RULES,
     append_to_run_history,
     build_artifact_contract,
-    check_upload,
     coerce_config,
+    compact_destination_metadata,
+    deliver_artifact,
     fold_status_with_artifacts,
     generate_default_export_path,
     get_session_metadata,
@@ -22,7 +24,7 @@ from analyst_toolkit.mcp_server.io import (
     resolve_run_context,
     save_output,
     save_to_session,
-    upload_artifact,
+    split_artifact_reference,
 )
 from analyst_toolkit.mcp_server.response_utils import (
     next_action,
@@ -139,26 +141,65 @@ async def _toolkit_final_audit(
         run_id, "final_audit", session_id=session_id
     )
     export_url = save_output(df_certified, export_path)
+    export_local_path, export_remote_url = split_artifact_reference(export_url)
+    export_delivery: dict[str, Any] = {
+        "reference": export_url,
+        "local_path": export_local_path,
+        "url": export_remote_url,
+        "warnings": [],
+        "destinations": {},
+    }
+    if export_delivery["local_path"]:
+        export_delivery = deliver_artifact(
+            export_delivery["local_path"],
+            run_id,
+            "final_audit/data",
+            config=kwargs,
+            session_id=session_id,
+        )
+        export_url = export_delivery["reference"]
 
     warnings: list = []
     warnings.extend(lifecycle["warnings"])
     warnings.extend(runtime_warnings)
     warnings.extend(runtime_meta["runtime_warnings"])
+    warnings.extend(export_delivery["warnings"])
+    artifact_delivery: dict[str, Any] = {
+        "local_path": "",
+        "url": "",
+        "warnings": [],
+        "destinations": {},
+    }
+    xlsx_delivery: dict[str, Any] = {
+        "local_path": "",
+        "url": "",
+        "warnings": [],
+        "destinations": {},
+    }
 
     # M10 exports to these locations (matches final_audit_pipeline.py defaults)
     artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
-    artifact_url = check_upload(
-        upload_artifact(artifact_path, run_id, "final_audit", config=kwargs, session_id=session_id),
+    artifact_delivery = deliver_artifact(
         artifact_path,
-        warnings,
+        run_id,
+        "final_audit",
+        config=kwargs,
+        session_id=session_id,
     )
+    artifact_path = artifact_delivery["local_path"]
+    artifact_url = artifact_delivery["url"]
+    warnings.extend(artifact_delivery["warnings"])
 
     xlsx_path = f"exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
-    xlsx_url = check_upload(
-        upload_artifact(xlsx_path, run_id, "final_audit", config=kwargs, session_id=session_id),
+    xlsx_delivery = deliver_artifact(
         xlsx_path,
-        warnings,
+        run_id,
+        "final_audit",
+        config=kwargs,
+        session_id=session_id,
     )
+    xlsx_url = xlsx_delivery["url"]
+    warnings.extend(xlsx_delivery["warnings"])
 
     cert_cfg = base_cfg.get("certification", {})
     schema_cfg = cert_cfg.get("schema_validation", {})
@@ -200,11 +241,15 @@ async def _toolkit_final_audit(
 
     artifact_contract = build_artifact_contract(
         export_url,
+        export_path=export_delivery["local_path"],
+        artifact_path=artifact_path,
         artifact_url=artifact_url,
+        xlsx_path=xlsx_delivery["local_path"],
         xlsx_url=xlsx_url,
         expect_html=True,
         expect_xlsx=True,
         required_html=True,
+        probe_local_paths=True,
     )
     warnings.extend(artifact_contract["artifact_warnings"])
     base_status = "fail" if not passed else ("warn" if warnings else "pass")
@@ -239,6 +284,11 @@ async def _toolkit_final_audit(
         "artifact_url": artifact_url,
         "xlsx_url": xlsx_url,
         "export_url": export_url,
+        "destination_delivery": {
+            "data_export": compact_destination_metadata(export_delivery["destinations"]),
+            "html_report": compact_destination_metadata(artifact_delivery["destinations"]),
+            "xlsx_report": compact_destination_metadata(xlsx_delivery["destinations"]),
+        },
         "warnings": warnings,
         "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
         "runtime_applied": runtime_applied,
