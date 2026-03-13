@@ -250,6 +250,8 @@ async def _toolkit_preflight_config(
     coerced = coerce_config(raw_config, coerce_key)
     runtime_cfg, runtime_warnings = normalize_runtime_overlay(runtime)
     runtime_applied = bool(runtime_cfg)
+    # Preflight intentionally applies the already-normalized runtime overlay as an explicit layer.
+    # This avoids re-normalizing the same runtime payload while still previewing the effective config.
     layered, runtime_meta = resolve_layered_config(
         provided=coerced,
         explicit=runtime_to_config_overlay(runtime_cfg),

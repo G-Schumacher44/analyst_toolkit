@@ -3,7 +3,7 @@
 import os
 import tempfile
 
-from analyst_toolkit.mcp_server.io import load_input, save_to_session
+from analyst_toolkit.mcp_server.io import load_input, resolve_run_context, save_to_session
 from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
@@ -31,6 +31,7 @@ async def _toolkit_infer_configs(
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
     run_id = run_id or runtime_overrides.get("run_id")
+    run_id, _lifecycle = resolve_run_context(run_id, session_id)
     options = options or {}
     df = load_input(gcs_path, session_id=session_id)
 
@@ -121,7 +122,7 @@ async def _toolkit_infer_configs(
         {
             "status": "pass",
             "module": "infer_configs",
-            "run_id": run_id or "",
+            "run_id": run_id,
             "session_id": session_id,
             "configs": configs,
             "runtime_applied": runtime_applied,
@@ -179,6 +180,7 @@ _INPUT_SCHEMA = {
     "anyOf": [
         {"required": ["gcs_path"]},
         {"required": ["session_id"]},
+        {"required": ["runtime"]},
     ],
 }
 

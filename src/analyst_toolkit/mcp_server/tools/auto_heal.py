@@ -204,6 +204,7 @@ async def _toolkit_auto_heal(
     """
     runtime_cfg, _runtime_warnings = normalize_runtime_overlay(runtime)
     runtime_overrides = runtime_to_tool_overrides(runtime_cfg)
+    normalized_runtime = runtime_cfg if runtime_cfg else runtime
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
     run_id = run_id or runtime_overrides.get("run_id")
@@ -216,12 +217,14 @@ async def _toolkit_auto_heal(
             inputs={
                 "gcs_path": gcs_path,
                 "session_id": session_id,
-                "runtime": runtime_cfg if runtime_cfg else runtime,
+                "runtime": normalized_runtime,
                 "run_id": run_id,
             },
         )
         try:
-            asyncio.create_task(_auto_heal_worker(job_id, gcs_path, session_id, runtime, run_id))
+            asyncio.create_task(
+                _auto_heal_worker(job_id, gcs_path, session_id, normalized_runtime, run_id)
+            )
         except Exception as exc:
             JobStore.mark_failed(
                 job_id,
@@ -253,7 +256,7 @@ async def _toolkit_auto_heal(
     return await _run_auto_heal_pipeline(
         gcs_path=gcs_path,
         session_id=session_id,
-        runtime=runtime,
+        runtime=normalized_runtime,
         run_id=run_id,
     )
 
