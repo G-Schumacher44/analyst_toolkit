@@ -6,6 +6,11 @@ from analyst_toolkit.mcp_server.config_models import CONFIG_MODELS
 from analyst_toolkit.mcp_server.config_normalizers import normalize_module_config
 from analyst_toolkit.mcp_server.io import coerce_config
 from analyst_toolkit.mcp_server.registry import register_tool
+from analyst_toolkit.mcp_server.runtime_overlay import (
+    normalize_runtime_overlay,
+    resolve_layered_config,
+    runtime_to_config_overlay,
+)
 
 
 def _rules_path_hint(module_name: str) -> str:
@@ -229,6 +234,7 @@ def _shape_warnings(module_name: str, config: dict[str, Any]) -> list[str]:
 async def _toolkit_preflight_config(
     module_name: str,
     config: dict | None = None,
+    runtime: dict | str | None = None,
     strict: bool = False,
 ) -> dict:
     """Normalize config input into the effective module config shape before execution."""
@@ -242,10 +248,18 @@ async def _toolkit_preflight_config(
     raw_config = config or {}
     coerce_key = "outlier_detection" if module_name == "outliers" else module_name
     coerced = coerce_config(raw_config, coerce_key)
-    normalized = normalize_module_config(module_name, coerced)
+    runtime_cfg, runtime_warnings = normalize_runtime_overlay(runtime)
+    runtime_applied = bool(runtime_cfg)
+    layered, runtime_meta = resolve_layered_config(
+        provided=coerced,
+        explicit=runtime_to_config_overlay(runtime_cfg),
+    )
+    normalized = normalize_module_config(module_name, layered)
     root_key = "outlier_detection" if module_name == "outliers" else module_name
 
     warnings = _shape_warnings(module_name, raw_config)
+    warnings.extend(runtime_warnings)
+    warnings.extend(runtime_meta["runtime_warnings"])
     raw_unknown_keys = _unknown_keys(module_name, raw_config)
     effective_unknown_keys = _unknown_effective_keys(module_name, normalized)
     unknown_keys = sorted(set(raw_unknown_keys + effective_unknown_keys))
@@ -264,6 +278,7 @@ async def _toolkit_preflight_config(
                 "input_changed": changed,
                 "effective_rules_path": _rules_path_hint(module_name),
                 "strict": True,
+                "runtime_applied": runtime_applied,
                 "unknown_key_count": len(unknown_keys),
             },
             "warnings": warnings,
@@ -281,6 +296,7 @@ async def _toolkit_preflight_config(
             "input_changed": changed,
             "effective_rules_path": _rules_path_hint(module_name),
             "strict": bool(strict),
+            "runtime_applied": runtime_applied,
             "unknown_key_count": len(unknown_keys),
         },
         "warnings": warnings,
@@ -301,6 +317,14 @@ _INPUT_SCHEMA = {
         "config": {
             "type": "object",
             "description": "Raw config candidate to normalize into the effective module shape.",
+            "default": {},
+        },
+        "runtime": {
+            "type": ["object", "string"],
+            "description": (
+                "Optional runtime overlay dict or YAML string to preview shared run-scoped "
+                "overrides such as export_html or plotting."
+            ),
             "default": {},
         },
         "strict": {

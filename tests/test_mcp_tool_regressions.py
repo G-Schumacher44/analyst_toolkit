@@ -215,6 +215,38 @@ async def test_toolkit_infer_configs_includes_apply_next_actions(monkeypatch, mo
 
 
 @pytest.mark.asyncio
+async def test_toolkit_infer_configs_accepts_runtime_overrides(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        captured["input_session_id"] = session_id
+        return df
+
+    mocker.patch.object(infer_configs_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(infer_configs_tool, "save_to_session", return_value="sess_runtime")
+
+    def fake_infer_configs(**kwargs):
+        return {"normalization": "normalization:\\n  rules: {}\\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        runtime={"run": {"run_id": "infer_runtime", "input_path": "gs://bucket/runtime.csv"}},
+        modules=["normalization"],
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["run_id"] == "infer_runtime"
+    assert captured["input_path"] == "gs://bucket/runtime.csv"
+
+
+@pytest.mark.asyncio
 async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
     """
     Contract test: infer_configs YAML output can be passed directly into module tools.
@@ -312,6 +344,71 @@ async def test_toolkit_auto_heal_async_mode_returns_job_id_and_queues(mocker):
 
 
 @pytest.mark.asyncio
+async def test_toolkit_auto_heal_accepts_runtime_overrides(monkeypatch):
+    infer_calls: list[dict] = []
+    norm_calls: list[dict] = []
+    imp_calls: list[dict] = []
+
+    async def fake_infer_configs(**kwargs):
+        infer_calls.append(kwargs)
+        return {
+            "status": "pass",
+            "module": "infer_configs",
+            "session_id": "sess_inferred",
+            "configs": {
+                "normalization": "normalization:\n  rules: {}\n",
+                "imputation": "imputation:\n  rules:\n    strategies:\n      value: mean\n",
+            },
+        }
+
+    async def fake_norm(**kwargs):
+        norm_calls.append(kwargs)
+        return {
+            "status": "pass",
+            "module": "normalization",
+            "session_id": "sess_norm",
+            "summary": {"changes_made": 1},
+            "artifact_path": "exports/reports/normalization/auto_runtime_normalization_report.html",
+            "artifact_url": "",
+            "export_url": "gs://bucket/norm.csv",
+            "plot_urls": {},
+        }
+
+    async def fake_imp(**kwargs):
+        imp_calls.append(kwargs)
+        return {
+            "status": "pass",
+            "module": "imputation",
+            "session_id": "sess_imp",
+            "summary": {"nulls_filled": 1},
+            "artifact_path": "exports/reports/imputation/auto_runtime_imputation_report.html",
+            "artifact_url": "",
+            "export_url": "gs://bucket/imp.csv",
+            "plot_urls": {},
+        }
+
+    monkeypatch.setattr(auto_heal_tool, "_toolkit_infer_configs", fake_infer_configs)
+    monkeypatch.setattr(auto_heal_tool, "_toolkit_normalization", fake_norm)
+    monkeypatch.setattr(auto_heal_tool, "_toolkit_imputation", fake_imp)
+    monkeypatch.setattr(auto_heal_tool, "append_to_run_history", lambda *args, **kwargs: None)
+    monkeypatch.setattr(auto_heal_tool, "get_session_metadata", lambda sid: {"row_count": 3})
+
+    result = await auto_heal_tool._toolkit_auto_heal(
+        runtime={
+            "run": {"run_id": "auto_runtime", "input_path": "gs://bucket/runtime.csv"},
+            "artifacts": {"export_html": False},
+        }
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["run_id"] == "auto_runtime"
+    assert infer_calls[0]["gcs_path"] == "gs://bucket/runtime.csv"
+    assert infer_calls[0]["run_id"] == "auto_runtime"
+    assert norm_calls[0]["runtime"]["artifacts"]["export_html"] is False
+    assert imp_calls[0]["runtime"]["artifacts"]["export_html"] is False
+
+
+@pytest.mark.asyncio
 async def test_auto_heal_worker_marks_failed_when_result_status_is_error(mocker):
     auto_heal_tool.JobStore.clear()
     job_id = auto_heal_tool.JobStore.create(module="auto_heal", run_id="run_auto")
@@ -321,7 +418,7 @@ async def test_auto_heal_worker_marks_failed_when_result_status_is_error(mocker)
         return_value={"status": "error", "module": "auto_heal"},
     )
 
-    await auto_heal_tool._auto_heal_worker(job_id, None, "sess_test", "run_auto")
+    await auto_heal_tool._auto_heal_worker(job_id, None, "sess_test", None, "run_auto")
     job = auto_heal_tool.JobStore.get(job_id)
 
     assert job is not None

@@ -10,6 +10,10 @@ from analyst_toolkit.mcp_server.io import (
     resolve_run_context,
 )
 from analyst_toolkit.mcp_server.job_state import JobStore
+from analyst_toolkit.mcp_server.runtime_overlay import (
+    normalize_runtime_overlay,
+    runtime_to_tool_overrides,
+)
 from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
 from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_configs
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
@@ -22,17 +26,28 @@ def _is_terminal_failure(status: str | None) -> bool:
 async def _run_auto_heal_pipeline(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    runtime: dict | str | None = None,
     run_id: str | None = None,
 ) -> dict:
     """
     Run inference, then automatically apply recommended normalization and imputation.
     Returns a cleaned session_id.
     """
+    runtime_cfg, runtime_warnings = normalize_runtime_overlay(runtime)
+    runtime_overrides = runtime_to_tool_overrides(runtime_cfg)
+    runtime_applied = bool(runtime_cfg)
+    gcs_path = gcs_path or runtime_overrides.get("gcs_path")
+    session_id = session_id or runtime_overrides.get("session_id")
+    run_id = run_id or runtime_overrides.get("run_id")
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     # 1. Infer configs
     infer_res = await _toolkit_infer_configs(
-        gcs_path=gcs_path, session_id=session_id, modules=["normalization", "imputation"]
+        gcs_path=gcs_path,
+        session_id=session_id,
+        runtime=runtime_cfg,
+        run_id=run_id,
+        modules=["normalization", "imputation"],
     )
 
     if infer_res["status"] == "error":
@@ -55,7 +70,10 @@ async def _run_auto_heal_pipeline(
             actual_cfg = norm_cfg.get("normalization", norm_cfg)
 
             norm_res = await _toolkit_normalization(
-                session_id=current_session_id, config=actual_cfg, run_id=run_id
+                session_id=current_session_id,
+                config=actual_cfg,
+                runtime=runtime_cfg,
+                run_id=run_id,
             )
             current_session_id = norm_res.get("session_id")
             summary["normalization"] = norm_res.get("summary")
@@ -81,7 +99,10 @@ async def _run_auto_heal_pipeline(
                 }
             else:
                 imp_res = await _toolkit_imputation(
-                    session_id=current_session_id, config=actual_cfg, run_id=run_id
+                    session_id=current_session_id,
+                    config=actual_cfg,
+                    runtime=runtime_cfg,
+                    run_id=run_id,
                 )
                 current_session_id = imp_res.get("session_id")
                 summary["imputation"] = imp_res.get("summary")
@@ -125,9 +146,10 @@ async def _run_auto_heal_pipeline(
         "export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
         "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
         "failed_steps": failed_steps,
-        "warnings": list(lifecycle["warnings"]),
+        "warnings": list(lifecycle["warnings"]) + list(runtime_warnings),
         "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
         "message": message,
+        "runtime_applied": runtime_applied,
     }
     append_to_run_history(run_id, res, session_id=current_session_id)
     return res
@@ -137,6 +159,7 @@ async def _auto_heal_worker(
     job_id: str,
     gcs_path: str | None,
     session_id: str | None,
+    runtime: dict | str | None,
     run_id: str,
 ):
     JobStore.mark_running(job_id)
@@ -144,6 +167,7 @@ async def _auto_heal_worker(
         result = await _run_auto_heal_pipeline(
             gcs_path=gcs_path,
             session_id=session_id,
+            runtime=runtime,
             run_id=run_id,
         )
         if _is_terminal_failure(result.get("status")):
@@ -171,12 +195,18 @@ async def _auto_heal_worker(
 async def _toolkit_auto_heal(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    runtime: dict | str | None = None,
     run_id: str | None = None,
     async_mode: bool = False,
 ) -> dict:
     """
     Run inference + healing in sync mode (default) or queue a background async job.
     """
+    runtime_cfg, _runtime_warnings = normalize_runtime_overlay(runtime)
+    runtime_overrides = runtime_to_tool_overrides(runtime_cfg)
+    gcs_path = gcs_path or runtime_overrides.get("gcs_path")
+    session_id = session_id or runtime_overrides.get("session_id")
+    run_id = run_id or runtime_overrides.get("run_id")
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     if async_mode:
@@ -186,11 +216,12 @@ async def _toolkit_auto_heal(
             inputs={
                 "gcs_path": gcs_path,
                 "session_id": session_id,
+                "runtime": runtime_cfg if runtime_cfg else runtime,
                 "run_id": run_id,
             },
         )
         try:
-            asyncio.create_task(_auto_heal_worker(job_id, gcs_path, session_id, run_id))
+            asyncio.create_task(_auto_heal_worker(job_id, gcs_path, session_id, runtime, run_id))
         except Exception as exc:
             JobStore.mark_failed(
                 job_id,
@@ -216,11 +247,13 @@ async def _toolkit_auto_heal(
             "warnings": list(lifecycle["warnings"]),
             "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
             "message": "Auto-heal job accepted. Poll get_job_status(job_id).",
+            "runtime_applied": bool(runtime_cfg),
         }
 
     return await _run_auto_heal_pipeline(
         gcs_path=gcs_path,
         session_id=session_id,
+        runtime=runtime,
         run_id=run_id,
     )
 
@@ -239,6 +272,14 @@ _INPUT_SCHEMA = {
         "run_id": {
             "type": "string",
             "description": "Optional run identifier.",
+        },
+        "runtime": {
+            "type": ["object", "string"],
+            "description": (
+                "Optional runtime overlay dict or YAML string for shared run-scoped "
+                "settings such as run_id, input_path, export_html, plotting, and destinations."
+            ),
+            "default": {},
         },
         "async_mode": {
             "type": "boolean",

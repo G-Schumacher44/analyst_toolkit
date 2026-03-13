@@ -5,20 +5,32 @@ import tempfile
 
 from analyst_toolkit.mcp_server.io import load_input, save_to_session
 from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
+from analyst_toolkit.mcp_server.runtime_overlay import (
+    normalize_runtime_overlay,
+    runtime_to_tool_overrides,
+)
 
 
 async def _toolkit_infer_configs(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    runtime: dict | str | None = None,
     options: dict | None = None,
     modules: list[str] | None = None,
     sample_rows: int | None = None,
+    run_id: str | None = None,
 ) -> dict:
     """
     Generate YAML config strings for toolkit modules by inspecting the dataset at gcs_path or session_id.
 
     Returns a dict with the generated YAML config string.
     """
+    runtime_cfg, runtime_warnings = normalize_runtime_overlay(runtime)
+    runtime_overrides = runtime_to_tool_overrides(runtime_cfg)
+    runtime_applied = bool(runtime_cfg)
+    gcs_path = gcs_path or runtime_overrides.get("gcs_path")
+    session_id = session_id or runtime_overrides.get("session_id")
+    run_id = run_id or runtime_overrides.get("run_id")
     options = options or {}
     df = load_input(gcs_path, session_id=session_id)
 
@@ -109,8 +121,11 @@ async def _toolkit_infer_configs(
         {
             "status": "pass",
             "module": "infer_configs",
+            "run_id": run_id or "",
             "session_id": session_id,
             "configs": configs,
+            "runtime_applied": runtime_applied,
+            "warnings": runtime_warnings,
         },
         next_steps,
     )
@@ -126,6 +141,18 @@ _INPUT_SCHEMA = {
         "session_id": {
             "type": "string",
             "description": "Optional: In-memory session identifier from a previous tool run.",
+        },
+        "runtime": {
+            "type": ["object", "string"],
+            "description": (
+                "Optional runtime overlay dict or YAML string for run-scoped settings "
+                "such as run_id and input_path."
+            ),
+            "default": {},
+        },
+        "run_id": {
+            "type": "string",
+            "description": "Optional run identifier propagated through runtime-aware workflows.",
         },
         "modules": {
             "type": "array",
