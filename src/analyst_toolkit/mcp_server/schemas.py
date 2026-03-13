@@ -43,6 +43,17 @@ _CONFIG_PROP = {
     }
 }
 
+_RUNTIME_PROP = {
+    "runtime": {
+        "type": ["object", "string"],
+        "description": (
+            "Optional runtime overlay dict or YAML string for run-scoped execution settings "
+            "such as run_id, input_path, export_html, plotting, and destination overrides."
+        ),
+        "default": {},
+    }
+}
+
 _RUN_ID_PROP = {
     "run_id": {
         "type": "string",
@@ -73,6 +84,7 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
         **_GCS_PATH_PROP,
         **_SESSION_ID_PROP,
         **_CONFIG_PROP,
+        **_RUNTIME_PROP,
         **_RUN_ID_PROP,
         **_OUTPUT_CONTROL_PROPS,
     }

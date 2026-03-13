@@ -157,3 +157,42 @@ def resolve_layered_config(
         },
     }
     return resolved, metadata
+
+
+def runtime_to_config_overlay(runtime: dict[str, Any]) -> dict[str, Any]:
+    """Project validated runtime settings onto shared top-level config keys."""
+    overlay: dict[str, Any] = {}
+    artifacts = runtime.get("artifacts", {})
+    if not isinstance(artifacts, dict):
+        return overlay
+
+    if "export_html" in artifacts:
+        overlay["export_html"] = artifacts["export_html"]
+    if "plotting" in artifacts:
+        overlay["plotting"] = {"run": artifacts["plotting"]}
+    return overlay
+
+
+def runtime_to_tool_overrides(runtime: dict[str, Any]) -> dict[str, Any]:
+    """Extract runtime values that map cleanly onto generic MCP tool arguments."""
+    overrides: dict[str, Any] = {}
+
+    run_cfg = runtime.get("run", {})
+    if isinstance(run_cfg, dict):
+        if run_cfg.get("run_id"):
+            overrides["run_id"] = run_cfg["run_id"]
+        if run_cfg.get("session_id"):
+            overrides["session_id"] = run_cfg["session_id"]
+        if run_cfg.get("input_path"):
+            overrides["gcs_path"] = run_cfg["input_path"]
+
+    destinations = runtime.get("destinations", {})
+    if isinstance(destinations, dict):
+        gcs_cfg = destinations.get("gcs", {})
+        if isinstance(gcs_cfg, dict) and gcs_cfg.get("enabled"):
+            if gcs_cfg.get("bucket_uri"):
+                overrides["output_bucket"] = gcs_cfg["bucket_uri"]
+            if gcs_cfg.get("prefix"):
+                overrides["output_prefix"] = gcs_cfg["prefix"]
+
+    return overrides

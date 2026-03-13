@@ -5,6 +5,8 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     deep_merge_dicts,
     normalize_runtime_overlay,
     resolve_layered_config,
+    runtime_to_config_overlay,
+    runtime_to_tool_overrides,
 )
 
 
@@ -98,3 +100,28 @@ def test_resolve_layered_config_preserves_null_override():
 
     assert "report_root" in resolved["paths"]
     assert resolved["paths"]["report_root"] is None
+
+
+def test_runtime_to_config_overlay_maps_shared_export_html_and_plotting():
+    overlay = runtime_to_config_overlay({"artifacts": {"export_html": True, "plotting": False}})
+
+    assert overlay == {"export_html": True, "plotting": {"run": False}}
+
+
+def test_runtime_to_tool_overrides_maps_run_and_gcs_destination_fields():
+    overrides = runtime_to_tool_overrides(
+        {
+            "run": {"run_id": "run-123", "session_id": "sess-1", "input_path": "gs://bucket/a.csv"},
+            "destinations": {
+                "gcs": {"enabled": True, "bucket_uri": "gs://out-bucket", "prefix": "custom/prefix"}
+            },
+        }
+    )
+
+    assert overrides == {
+        "run_id": "run-123",
+        "session_id": "sess-1",
+        "gcs_path": "gs://bucket/a.csv",
+        "output_bucket": "gs://out-bucket",
+        "output_prefix": "custom/prefix",
+    }

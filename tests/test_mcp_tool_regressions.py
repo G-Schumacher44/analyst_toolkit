@@ -135,6 +135,43 @@ async def test_toolkit_diagnostics_includes_next_actions(mocker):
 
 
 @pytest.mark.asyncio
+async def test_toolkit_diagnostics_accepts_runtime_overrides(mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    captured = {}
+
+    def fake_load_input(path=None, session_id=None):
+        captured["input_path"] = path
+        captured["input_session_id"] = session_id
+        return df
+
+    mocker.patch.object(diagnostics_tool, "load_input", side_effect=fake_load_input)
+    mocker.patch.object(diagnostics_tool, "save_to_session", return_value="sess_diag")
+    mocker.patch.object(diagnostics_tool, "run_diag_pipeline", return_value=None)
+    mocker.patch.object(diagnostics_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(diagnostics_tool, "append_to_run_history", return_value=None)
+
+    result = await diagnostics_tool._toolkit_diagnostics(
+        runtime={
+            "run": {"run_id": "diag_runtime", "input_path": "gs://bucket/runtime.csv"},
+            "artifacts": {"export_html": True},
+            "destinations": {
+                "gcs": {
+                    "enabled": True,
+                    "bucket_uri": "gs://artifact-bucket",
+                    "prefix": "runtime/reports",
+                }
+            },
+        },
+        config={},
+    )
+
+    assert result["run_id"] == "diag_runtime"
+    assert result["runtime_applied"] is True
+    assert captured["input_path"] == "gs://bucket/runtime.csv"
+    assert result["artifact_path"].endswith("diag_runtime_diagnostics_report.html")
+
+
+@pytest.mark.asyncio
 async def test_toolkit_infer_configs_includes_apply_next_actions(monkeypatch, mocker):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
 
@@ -430,6 +467,33 @@ async def test_normalization_reports_artifact_contract(mocker):
     )
     assert result["dashboard_url"] == ""
     assert result["dashboard_label"] == "Normalization dashboard"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_validation_runtime_can_disable_html_artifacts(mocker):
+    df = pd.DataFrame({"value": [1, 2]})
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(validation_tool, "save_to_session", return_value="sess_val")
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=df)
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        validation_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+
+    result = await validation_tool._toolkit_validation(
+        session_id="sess_val",
+        config={},
+        runtime={"artifacts": {"export_html": False}},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["artifact_path"] == ""
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
 
 
 @pytest.mark.asyncio
