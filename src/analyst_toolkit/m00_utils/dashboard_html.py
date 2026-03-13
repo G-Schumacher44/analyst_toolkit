@@ -18,7 +18,7 @@ _DASHBOARD_CSS = """
     --bg: #f4f1ea;
     --paper: #fffdf8;
     --ink: #1f2933;
-    --muted: #667085;
+    --muted: #52606d;
     --line: #d9d3c7;
     --accent: #1f4b4a;
     --accent-soft: #dceae7;
@@ -97,14 +97,19 @@ _DASHBOARD_CSS = """
     backdrop-filter: blur(6px);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 14px 18px;
+    padding: 16px 18px;
     margin-bottom: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
   }
+  .toc strong { color: #334155; }
   .toc a {
     color: var(--accent);
     text-decoration: none;
-    margin-right: 14px;
     font-weight: 600;
+    line-height: 1.3;
   }
   details.section {
     background: var(--paper);
@@ -122,7 +127,8 @@ _DASHBOARD_CSS = """
     list-style: none;
     padding: 18px 0 14px;
     font-weight: 700;
-    font-size: 1.04rem;
+    font-size: 1.12rem;
+    color: #22303a;
   }
   summary::-webkit-details-marker { display: none; }
   .section-grid {
@@ -143,7 +149,8 @@ _DASHBOARD_CSS = """
   }
   .card h3 {
     margin: 0 0 10px;
-    font-size: 0.98rem;
+    font-size: 1rem;
+    color: #22303a;
   }
   .key {
     margin-top: 12px;
@@ -162,7 +169,7 @@ _DASHBOARD_CSS = """
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.88rem;
+    font-size: 0.92rem;
     background: #fff;
     border-radius: 12px;
     min-width: max-content;
@@ -178,6 +185,9 @@ _DASHBOARD_CSS = """
     background: #f1ece2;
     color: #23303b;
     font-weight: 700;
+  }
+  td {
+    color: #334155;
   }
   tr:nth-child(even) td {
     background: #fdfaf3;
@@ -203,6 +213,11 @@ _DASHBOARD_CSS = """
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 16px;
   }
+  .plot-intro {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
   .plot-card img {
     width: 100%;
     height: auto;
@@ -213,6 +228,28 @@ _DASHBOARD_CSS = """
   }
   .plot-card h3 {
     margin: 0 0 10px;
+  }
+  .badge-ok {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--ok-soft);
+    color: var(--ok);
+    font-weight: 700;
+    font-size: 0.82rem;
+  }
+  .badge-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-weight: 700;
+    font-size: 0.82rem;
   }
   .drilldown {
     margin-top: 12px;
@@ -255,13 +292,35 @@ def _display_name(value: str) -> str:
     return value.replace("_", " ").replace("-", " ").title()
 
 
+def _normalize_text(value: str) -> str:
+    replacements = {
+        "âœ… OK": "OK",
+        "✅ OK": "OK",
+        "⚠️ High Skew": "High Skew",
+        "⚠️ Unexpected Type": "Unexpected Type",
+    }
+    normalized = value
+    for old, new in replacements.items():
+        normalized = normalized.replace(old, new)
+    return normalized
+
+
+def _normalize_df_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    normalized = df.copy()
+    for column in normalized.columns:
+        normalized[column] = normalized[column].map(
+            lambda value: _normalize_text(value) if isinstance(value, str) else value
+        )
+    return normalized
+
+
 def _render_df(
     df: pd.DataFrame, *, max_rows: int = _MAX_PREVIEW_ROWS, full_preview: bool = False
 ) -> str:
     if not isinstance(df, pd.DataFrame) or df.empty:
         return "<p class='empty'>No data available.</p>"
 
-    working = df.copy()
+    working = _normalize_df_for_display(df)
     if isinstance(working.columns, pd.MultiIndex):
         working.columns = [
             "__".join(str(part) for part in column if str(part)).strip("_")
@@ -309,7 +368,10 @@ def _render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
         )
     if not cards:
         return "<p class='empty'>No plots were generated for this run.</p>"
-    return "<div class='plot-grid'>" + "".join(cards) + "</div>"
+    return (
+        "<p class='plot-intro'>The standalone export keeps the diagnostics visuals in the same file so the report travels without sidecar assets.</p>"
+        "<div class='plot-grid'>" + "".join(cards) + "</div>"
+    )
 
 
 def _render_section(title: str, body: str, *, open_by_default: bool = False) -> str:
@@ -448,6 +510,7 @@ def _render_diagnostics_dashboard(
         _render_section(
             "Quantitative Summary",
             f"<div class='card'><h3>Descriptive Statistics</h3>{_render_df(describe_df, full_preview=True)}</div>",
+            open_by_default=True,
         ),
         _render_section(
             "Preview Of Duplicated Rows",
@@ -456,6 +519,7 @@ def _render_diagnostics_dashboard(
         _render_section(
             "First Rows Preview",
             f"<div class='card'><h3>Head</h3>{_render_df(sample_head_df, max_rows=5)}</div>",
+            open_by_default=True,
         ),
     ]
     toc = [
@@ -466,7 +530,9 @@ def _render_diagnostics_dashboard(
         ("First Rows Preview", "First Rows Preview"),
     ]
     if plot_paths:
-        sections.append(_render_section("Plots", _render_plot_grid(plot_paths)))
+        sections.append(
+            _render_section("Plots", _render_plot_grid(plot_paths), open_by_default=True)
+        )
         toc.append(("Plots", "Plots"))
 
     return _assemble_page(
