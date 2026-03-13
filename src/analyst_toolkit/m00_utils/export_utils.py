@@ -22,7 +22,7 @@ def _format_export_path(export_path: str, run_id: str | None) -> Path:
 
 
 def _resolve_export_file_path(export_path: Path, run_id: str | None) -> Path:
-    if not run_id or run_id in export_path.name:
+    if not run_id or export_path.name == run_id or export_path.name.startswith(f"{run_id}_"):
         return export_path
     return export_path.with_name(f"{run_id}_{export_path.name}")
 
