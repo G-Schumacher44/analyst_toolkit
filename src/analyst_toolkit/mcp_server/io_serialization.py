@@ -2,9 +2,11 @@
 
 import json
 import math
+import os
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -25,13 +27,27 @@ def build_artifact_contract(
     required_html: bool = False,
     required_xlsx: bool = False,
     required_data_export: bool = True,
+    probe_local_paths: bool = False,
 ) -> dict[str, Any]:
     plots = plot_urls or {}
     plot_refs = plot_paths or {}
-    data_export_status, data_export_reason = _resolve_reference_status(export_url, export_path)
-    html_status, html_reason = _resolve_reference_status(artifact_url, artifact_path)
-    xlsx_status, xlsx_reason = _resolve_reference_status(xlsx_url, xlsx_path)
-    plots_available = bool(plots) or bool(plot_refs)
+    data_export_status, data_export_reason = _resolve_reference_status(
+        export_url,
+        export_path,
+        probe_local_paths=probe_local_paths,
+    )
+    html_status, html_reason = _resolve_reference_status(
+        artifact_url,
+        artifact_path,
+        probe_local_paths=probe_local_paths,
+    )
+    xlsx_status, xlsx_reason = _resolve_reference_status(
+        xlsx_url,
+        xlsx_path,
+        probe_local_paths=probe_local_paths,
+    )
+    plot_keys = set(plots) | set(plot_refs)
+    plots_available = bool(plot_keys)
     plot_reason = "" if plots_available else "not_generated_or_upload_failed"
     plot_status = "available" if plots_available else "missing"
     matrix: dict[str, dict[str, Any]] = {
@@ -63,7 +79,7 @@ def build_artifact_contract(
             "expected": expect_plots,
             "required": False,
             "status": "disabled" if not expect_plots else plot_status,
-            "count": max(len(plots), len(plot_refs)) if expect_plots else 0,
+            "count": len(plot_keys) if expect_plots else 0,
             "urls": plots if expect_plots else {},
             "paths": plot_refs if expect_plots else {},
             "reason": "disabled" if not expect_plots else plot_reason,
@@ -171,18 +187,60 @@ def make_json_safe(value: Any) -> Any:
         return str(value)
 
 
-def _resolve_reference_status(url: str, path: str = "") -> tuple[str, str]:
-    if url:
-        if url.startswith("gs://") or url.startswith("http://") or url.startswith("https://"):
-            return "available", ""
+def _is_allowed_local_probe(candidate: str) -> bool:
+    candidate_path = Path(candidate).expanduser()
+    if any(part == ".." for part in candidate_path.parts):
+        return False
 
-        local_url_path = Path(url)
+    allowed_roots = [Path.cwd()]
+    exports_root = Path.cwd() / "exports"
+    if exports_root.exists():
+        allowed_roots.append(exports_root)
+
+    extra_root = os.environ.get("ANALYST_MCP_LOCAL_OUTPUT_BASE", "").strip()
+    if extra_root:
+        allowed_roots.append(Path(extra_root).expanduser())
+
+    resolved_candidate = candidate_path.resolve(strict=False)
+    for root in allowed_roots:
+        resolved_root = root.expanduser().resolve(strict=False)
+        try:
+            resolved_candidate.relative_to(resolved_root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _resolve_reference_status(
+    url: str,
+    path: str = "",
+    *,
+    probe_local_paths: bool = False,
+) -> tuple[str, str]:
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme in {"gs", "http", "https"}:
+            return "available", ""
+        if parsed.scheme and parsed.scheme != "file":
+            return "missing", "unsupported_url_scheme"
+        candidate = parsed.path if parsed.scheme == "file" else url
+        if not probe_local_paths:
+            return "missing", "local_probe_disabled"
+        if not _is_allowed_local_probe(candidate):
+            return "missing", "local_probe_not_allowed"
+
+        local_url_path = Path(candidate)
         if local_url_path.exists():
             return "available", "server_local_path"
         return "missing", "local_path_not_found"
 
     if not path:
         return "missing", "upload_failed"
+    if not probe_local_paths:
+        return "missing", "local_probe_disabled"
+    if not _is_allowed_local_probe(path):
+        return "missing", "local_probe_not_allowed"
 
     local_path = Path(path)
     if local_path.exists():

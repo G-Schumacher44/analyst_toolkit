@@ -226,7 +226,13 @@ class RuntimeArtifactsConfig(BaseModel):
 
 class RuntimeLocalDestinationConfig(BaseModel):
     enabled: Optional[bool] = Field(None, description="Enable local artifact output.")
-    root: Optional[str] = Field(None, description="Local root for exported artifacts.")
+    root: Optional[str] = Field(
+        None,
+        description=(
+            "Local root for exported artifacts. This path is validated again at routing time "
+            "and must stay within the configured local output base."
+        ),
+    )
 
 
 class RuntimeGCSDestinationConfig(BaseModel):

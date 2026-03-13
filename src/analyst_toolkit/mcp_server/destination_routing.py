@@ -7,6 +7,7 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from analyst_toolkit.mcp_server.io_storage import upload_artifact as _upload_artifact
 
@@ -15,8 +16,41 @@ def _bucket_uri_from_config(config: dict[str, Any]) -> str:
     return (config.get("output_bucket") or os.environ.get("ANALYST_REPORT_BUCKET", "")).strip()
 
 
+def _is_remote_reference(reference: str) -> bool:
+    return urlparse(reference).scheme in {"gs", "http", "https"}
+
+
+def split_artifact_reference(reference: str) -> tuple[str, str]:
+    """Split an artifact reference into local-path and URL channels without probing the filesystem."""
+    if not reference:
+        return "", ""
+    if _is_remote_reference(reference):
+        return "", reference
+    return reference, ""
+
+
+def compact_destination_metadata(destinations: dict[str, Any]) -> dict[str, Any]:
+    """Trim destination metadata down to user-facing essentials."""
+    compact: dict[str, Any] = {}
+    for name, payload in destinations.items():
+        if not isinstance(payload, dict):
+            continue
+        status = payload.get("status", "")
+        if status in {"", "disabled"}:
+            continue
+        item = {"status": status}
+        for key in ("path", "url", "folder_id"):
+            value = payload.get(key)
+            if value:
+                item[key] = value
+        compact[name] = item
+    return compact
+
+
 def _local_relative_path(local_path: str) -> Path:
     path = Path(local_path)
+    if any(part == ".." for part in path.parts):
+        raise ValueError("Local artifact path must not contain parent-directory traversal.")
     if not path.is_absolute():
         return path
 
@@ -30,10 +64,34 @@ def _local_relative_path(local_path: str) -> Path:
     return Path(path.name)
 
 
+def _resolve_local_output_root(root: str) -> Path:
+    raw_root = Path(root).expanduser()
+    if raw_root.is_absolute():
+        raise ValueError("local_output_root must be relative to the configured local output base.")
+    if any(part == ".." for part in raw_root.parts):
+        raise ValueError("local_output_root must not contain parent-directory traversal.")
+
+    base_root = Path(os.environ.get("ANALYST_MCP_LOCAL_OUTPUT_BASE", ".")).expanduser()
+    resolved_base = base_root.resolve(strict=False)
+    resolved_target = (resolved_base / raw_root).resolve(strict=False)
+    try:
+        resolved_target.relative_to(resolved_base)
+    except ValueError as exc:
+        raise ValueError("local_output_root escapes the configured local output base.") from exc
+    return resolved_target
+
+
 def _copy_to_local_root(local_path: str, root: str) -> str:
     source = Path(local_path)
     relative = _local_relative_path(local_path)
-    destination = Path(root) / relative
+    resolved_root = _resolve_local_output_root(root)
+    destination = (resolved_root / relative).resolve(strict=False)
+    try:
+        destination.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError(
+            "Resolved local artifact destination escapes the configured root."
+        ) from exc
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return str(destination)
@@ -83,8 +141,19 @@ def deliver_artifact(
 
     local_root = str(config.get("local_output_root") or "").strip()
     if local_root:
-        effective_local_path = _copy_to_local_root(str(source), local_root)
-        result["destinations"]["local"] = {"status": "available", "path": effective_local_path}
+        try:
+            effective_local_path = _copy_to_local_root(str(source), local_root)
+            result["destinations"]["local"] = {"status": "available", "path": effective_local_path}
+        except (ValueError, OSError) as exc:
+            logger.warning(
+                "Local artifact routing rejected for module=%s run_id=%s target=%s: %s",
+                module,
+                run_id,
+                local_root,
+                exc,
+            )
+            result["destinations"]["local"] = {"status": "rejected", "path": ""}
+            result["warnings"].append(str(exc))
 
     drive_folder_id = str(config.get("drive_folder_id") or "").strip()
     if drive_folder_id:

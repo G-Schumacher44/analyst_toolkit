@@ -8,6 +8,7 @@ from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     build_artifact_contract,
     coerce_config,
+    compact_destination_metadata,
     deliver_artifact,
     fold_status_with_artifacts,
     generate_default_export_path,
@@ -16,6 +17,7 @@ from analyst_toolkit.mcp_server.io import (
     save_output,
     save_to_session,
     should_export_html,
+    split_artifact_reference,
 )
 from analyst_toolkit.mcp_server.response_utils import (
     next_action,
@@ -101,10 +103,11 @@ async def _toolkit_diagnostics(
         run_id, "diagnostics", session_id=session_id
     )
     export_url = save_output(df, export_path)
+    export_local_path, export_remote_url = split_artifact_reference(export_url)
     export_delivery: dict[str, Any] = {
         "reference": export_url,
-        "local_path": export_url if Path(export_url).exists() else "",
-        "url": export_url if export_url.startswith(("gs://", "http://", "https://")) else "",
+        "local_path": export_local_path,
+        "url": export_remote_url,
         "warnings": [],
         "destinations": {},
     }
@@ -202,6 +205,7 @@ async def _toolkit_diagnostics(
         expect_plots=run_plots and should_export_html(config),
         required_html=should_export_html(config),
         required_xlsx=False,
+        probe_local_paths=True,
     )
     warnings.extend(artifact_contract["artifact_warnings"])
 
@@ -226,10 +230,13 @@ async def _toolkit_diagnostics(
         "plot_urls": plot_urls,
         "export_url": export_url,
         "destination_delivery": {
-            "data_export": export_delivery["destinations"],
-            "html_report": artifact_delivery["destinations"],
-            "xlsx_report": xlsx_delivery["destinations"],
-            "plots": {name: delivery["destinations"] for name, delivery in plot_delivery.items()},
+            "data_export": compact_destination_metadata(export_delivery["destinations"]),
+            "html_report": compact_destination_metadata(artifact_delivery["destinations"]),
+            "xlsx_report": compact_destination_metadata(xlsx_delivery["destinations"]),
+            "plots": {
+                name: compact_destination_metadata(delivery["destinations"])
+                for name, delivery in plot_delivery.items()
+            },
         },
         "warnings": warnings,
         "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},

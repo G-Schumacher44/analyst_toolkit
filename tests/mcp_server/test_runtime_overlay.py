@@ -1,6 +1,7 @@
 import pytest
 
 from analyst_toolkit.mcp_server.runtime_overlay import (
+    MAX_RUNTIME_YAML_LENGTH,
     RuntimeOverlayError,
     deep_merge_dicts,
     normalize_runtime_overlay,
@@ -74,6 +75,20 @@ def test_normalize_runtime_overlay_strict_mode_rejects_unknown_keys():
 
     with pytest.raises(RuntimeOverlayError):
         normalize_runtime_overlay(runtime, strict=True)
+
+
+def test_normalize_runtime_overlay_rejects_oversized_yaml():
+    oversized = "runtime:\n  artifacts:\n    export_html: true\n" + ("a" * MAX_RUNTIME_YAML_LENGTH)
+
+    with pytest.raises(RuntimeOverlayError, match="maximum size"):
+        normalize_runtime_overlay(oversized)
+
+
+def test_normalize_runtime_overlay_sanitizes_validation_error():
+    with pytest.raises(
+        RuntimeOverlayError, match="Invalid runtime overlay fields: artifacts.export_html"
+    ):
+        normalize_runtime_overlay({"artifacts": {"export_html": "definitely"}})
 
 
 def test_resolve_layered_config_applies_precedence():

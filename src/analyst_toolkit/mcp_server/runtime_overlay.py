@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import Any
 
@@ -9,6 +10,13 @@ import yaml
 from pydantic import ValidationError
 
 from analyst_toolkit.mcp_server.config_models import RuntimeOverlayConfig
+
+logger = logging.getLogger(__name__)
+
+MAX_RUNTIME_YAML_LENGTH = 64 * 1024
+MAX_RUNTIME_YAML_LINES = 2000
+MAX_RUNTIME_DEPTH = 12
+MAX_RUNTIME_COLLECTION_SIZE = 500
 
 
 class RuntimeOverlayError(ValueError):
@@ -60,13 +68,45 @@ def _coerce_runtime_overlay_input(runtime: Any) -> dict[str, Any]:
     if runtime is None:
         return {}
     if isinstance(runtime, str):
+        if len(runtime) > MAX_RUNTIME_YAML_LENGTH:
+            raise RuntimeOverlayError(
+                f"Runtime overlay string exceeds maximum size of {MAX_RUNTIME_YAML_LENGTH} bytes."
+            )
+        if runtime.count("\n") + 1 > MAX_RUNTIME_YAML_LINES:
+            raise RuntimeOverlayError(
+                f"Runtime overlay string exceeds maximum line count of {MAX_RUNTIME_YAML_LINES}."
+            )
         loaded = yaml.safe_load(runtime)
         runtime = loaded if isinstance(loaded, dict) else {}
     if not isinstance(runtime, dict):
         raise RuntimeOverlayError("Runtime overlay must be a dict, YAML string, or None.")
     if "runtime" in runtime and isinstance(runtime.get("runtime"), dict):
-        return deepcopy(runtime["runtime"])
-    return deepcopy(runtime)
+        runtime = runtime["runtime"]
+    payload = deepcopy(runtime)
+    _validate_runtime_complexity(payload)
+    return payload
+
+
+def _validate_runtime_complexity(value: Any, *, depth: int = 0) -> None:
+    if depth > MAX_RUNTIME_DEPTH:
+        raise RuntimeOverlayError(
+            f"Runtime overlay exceeds maximum nesting depth of {MAX_RUNTIME_DEPTH}."
+        )
+    if isinstance(value, dict):
+        if len(value) > MAX_RUNTIME_COLLECTION_SIZE:
+            raise RuntimeOverlayError(
+                "Runtime overlay exceeds maximum object size of "
+                f"{MAX_RUNTIME_COLLECTION_SIZE} keys."
+            )
+        for child in value.values():
+            _validate_runtime_complexity(child, depth=depth + 1)
+    elif isinstance(value, list):
+        if len(value) > MAX_RUNTIME_COLLECTION_SIZE:
+            raise RuntimeOverlayError(
+                f"Runtime overlay exceeds maximum list size of {MAX_RUNTIME_COLLECTION_SIZE} items."
+            )
+        for child in value:
+            _validate_runtime_complexity(child, depth=depth + 1)
 
 
 def _restore_explicit_nulls(
@@ -98,6 +138,8 @@ def normalize_runtime_overlay(
     unknown_keys = _collect_unknown_runtime_keys(payload)
     if unknown_keys and strict:
         raise RuntimeOverlayError("Unknown runtime keys: " + ", ".join(sorted(unknown_keys)))
+    if unknown_keys:
+        logger.warning("Ignored unknown runtime overlay keys: %s", ", ".join(sorted(unknown_keys)))
 
     sanitized = deepcopy(payload)
     for dotted_key in unknown_keys:
@@ -111,7 +153,19 @@ def normalize_runtime_overlay(
     try:
         normalized = RuntimeOverlayConfig.model_validate(sanitized).model_dump(exclude_none=True)
     except ValidationError as exc:
-        raise RuntimeOverlayError(str(exc)) from exc
+        field_names = sorted(
+            {
+                ".".join(str(part) for part in err.get("loc", ()))
+                for err in exc.errors()
+                if err.get("loc")
+            }
+        )
+        logger.warning("Runtime overlay validation failed for fields: %s", ", ".join(field_names))
+        if field_names:
+            raise RuntimeOverlayError(
+                "Invalid runtime overlay fields: " + ", ".join(field_names)
+            ) from exc
+        raise RuntimeOverlayError("Invalid runtime overlay payload.") from exc
     normalized = _restore_explicit_nulls(normalized, sanitized)
 
     warnings = [f"Ignored unknown runtime key: {key}" for key in sorted(unknown_keys)]
@@ -174,7 +228,11 @@ def runtime_to_config_overlay(runtime: dict[str, Any]) -> dict[str, Any]:
 
 
 def runtime_to_tool_overrides(runtime: dict[str, Any]) -> dict[str, Any]:
-    """Extract runtime values that map cleanly onto generic MCP tool arguments."""
+    """Extract runtime values that map cleanly onto generic MCP tool arguments.
+
+    Security note: callers must validate `local_output_root` derived from
+    `destinations.local.root` before using it for filesystem writes.
+    """
     overrides: dict[str, Any] = {}
 
     run_cfg = runtime.get("run", {})
