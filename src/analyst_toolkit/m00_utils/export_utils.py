@@ -15,6 +15,18 @@ from joblib import dump
 _HTML_SIZE_WARNING_THRESHOLD_MB = 25
 
 
+def _format_export_path(export_path: str, run_id: str | None) -> Path:
+    if run_id and "{run_id}" in export_path:
+        export_path = export_path.format(run_id=run_id)
+    return Path(export_path)
+
+
+def _resolve_export_file_path(export_path: Path, run_id: str | None) -> Path:
+    if not run_id or export_path.name == run_id or export_path.name.startswith(f"{run_id}_"):
+        return export_path
+    return export_path.with_name(f"{run_id}_{export_path.name}")
+
+
 def export_dataframes(
     data_dict: dict[str, pd.DataFrame],
     export_path: str,
@@ -26,7 +38,7 @@ def export_dataframes(
     """
     Export a dictionary of DataFrames. (Updated to accept 'xlsx' as a valid format).
     """
-    export_path = Path(export_path)  # type: ignore
+    export_path = _format_export_path(export_path, run_id)
     normalized_format = file_format.lower()
 
     # The export path's parent directory should always exist.
@@ -35,22 +47,20 @@ def export_dataframes(
     if normalized_format == "csv":
         # When format is CSV, export_path is treated as a base name for multiple files.
         # We'll use its parent directory and stem.
-        base_dir = export_path.parent
-        base_stem = export_path.stem
+        resolved_export_path = _resolve_export_file_path(export_path, run_id)
+        base_dir = resolved_export_path.parent
+        base_stem = resolved_export_path.stem
         for name, df in data_dict.items():
             if isinstance(df, pd.DataFrame) and not df.empty:
                 # Construct a unique filename for each dataframe
-                filename = (
-                    f"{run_id}_{base_stem}_{name}.csv" if run_id else f"{base_stem}_{name}.csv"
-                )
+                filename = f"{base_stem}_{name}.csv"
                 df.to_csv(base_dir / filename, index=False, encoding=encoding)
         if logging_mode != "off":
             logging.info(f"📊 Exported {len(data_dict)} CSV files to directory {base_dir}")
 
     # Accept both 'excel' and 'xlsx' as valid identifiers for an Excel file.
     elif normalized_format in ["excel", "xlsx"]:
-        base_name = export_path.name
-        path_with_run_id = export_path.with_name(f"{run_id}_{base_name}") if run_id else export_path
+        path_with_run_id = _resolve_export_file_path(export_path, run_id)
         # Set explicit Excel number formats so spreadsheet apps render dates consistently
         with pd.ExcelWriter(
             path_with_run_id,
@@ -173,7 +183,9 @@ def export_validation_results(results: dict, config: dict, run_id: str = None):
 
     export_dataframes(
         data_dict=export_payload,
-        export_path=config.get("export_path", "exports/reports/validation/validation_report.xlsx"),
+        export_path=config.get(
+            "export_path", "exports/reports/validation/{run_id}_validation_report.xlsx"
+        ),
         file_format="csv" if config.get("as_csv", False) else "excel",
         run_id=run_id,
     )
@@ -199,7 +211,9 @@ def export_profile_summary(profile: dict, config: dict, notebook: bool = True, r
             export_payload[k] = df_copy
     export_dataframes(
         data_dict=export_payload,
-        export_path=config.get("export_path", "exports/reports/diagnostics/profile_summary.xlsx"),
+        export_path=config.get(
+            "export_path", "exports/reports/diagnostics/{run_id}_profile_summary.xlsx"
+        ),
         file_format="csv" if config.get("as_csv", False) else "excel",
         run_id=run_id,
     )
@@ -249,7 +263,9 @@ def export_duplicates_report(report: dict, config: dict, run_id: str):
 
     export_dataframes(
         data_dict=export_payload,
-        export_path=config.get("export_path", "exports/reports/duplicates/duplicates_summary.xlsx"),
+        export_path=config.get(
+            "export_path", "exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
+        ),
         file_format="csv" if config.get("as_csv") else "excel",
         run_id=run_id,
     )
@@ -278,7 +294,7 @@ def export_normalization_results(results: dict, config: dict, run_id: str = None
     export_dataframes(
         data_dict=export_payload,
         export_path=config.get(
-            "export_path", "exports/reports/normalization/normalization_report.xlsx"
+            "export_path", "exports/reports/normalization/{run_id}_normalization_report.xlsx"
         ),
         file_format="csv" if config.get("as_csv", False) else "excel",
         run_id=run_id,

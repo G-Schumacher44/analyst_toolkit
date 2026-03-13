@@ -43,8 +43,29 @@ def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
         )
 
 
+def count_normalization_changes(changelog: dict) -> int:
+    total = 0
+    for key, cdf in changelog.items():
+        if cdf is None or (hasattr(cdf, "empty") and cdf.empty):
+            continue
+        if key == "values_mapped" and "Mappings Applied" in cdf.columns:
+            total += int(cdf["Mappings Applied"].sum())
+        elif key == "types_coerced" and "Status" in cdf.columns:
+            total += int((cdf["Status"].str.contains("Success", na=False)).sum())
+        elif key == "datetimes_parsed" and "NaT Added" in cdf.columns:
+            total += int(cdf["NaT Added"].sum())
+        else:
+            total += len(cdf)
+    return total
+
+
 def run_normalization_pipeline(
-    config: dict, notebook: bool = False, df: pd.DataFrame = None, run_id: str = None
+    config: dict,
+    notebook: bool = False,
+    df: pd.DataFrame = None,
+    run_id: str = None,
+    *,
+    return_metadata: bool = False,
 ):
     """Executes the data normalization pipeline with robust configuration handling."""
     if "normalization" in config:
@@ -93,8 +114,8 @@ def run_normalization_pipeline(
 
     if settings.get("export", True):
         export_path = settings.get(
-            "export_path", f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
-        )
+            "export_path", "exports/reports/normalization/{run_id}_normalization_report.xlsx"
+        ).format(run_id=run_id)
         export_dataframes(report_tables, export_path)
         if settings.get("export_html", False):
             html_path = settings.get(
@@ -110,4 +131,9 @@ def run_normalization_pipeline(
             raise ValueError("Checkpoint enabled but 'checkpoint_path' is missing.")
         save_joblib(df_normalized, path=checkpoint_path)
 
+    if return_metadata:
+        return df_normalized, {
+            "changelog": changelog,
+            "changes_made": count_normalization_changes(changelog),
+        }
     return df_normalized

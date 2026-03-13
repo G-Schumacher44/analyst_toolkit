@@ -1,7 +1,7 @@
 """MCP tool: toolkit_normalization — data cleaning and standardization via M03."""
 
-from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
 from analyst_toolkit.m03_normalization.run_normalization_pipeline import (
+    count_normalization_changes,
     run_normalization_pipeline,
 )
 from analyst_toolkit.mcp_server.io import (
@@ -50,31 +50,20 @@ async def _toolkit_normalization(
         }
     }
 
-    # Compute changes_made from changelog before running the full pipeline
-    _rules_cfg = base_cfg if base_cfg else {}
-    _, _, changelog = apply_normalization(df, _rules_cfg)
-
-    def _count_changelog(cl: dict) -> int:
-        total = 0
-        for key, cdf in cl.items():
-            if cdf is None or (hasattr(cdf, "empty") and cdf.empty):
-                continue
-            if key == "values_mapped" and "Mappings Applied" in cdf.columns:
-                total += int(cdf["Mappings Applied"].sum())
-            elif key == "types_coerced" and "Status" in cdf.columns:
-                total += int((cdf["Status"].str.contains("Success", na=False)).sum())
-            elif key == "datetimes_parsed" and "NaT Added" in cdf.columns:
-                total += int(cdf["NaT Added"].sum())
-            else:
-                total += len(cdf)
-        return total
-
-    changes_made = _count_changelog(changelog)
-
     # run_normalization_pipeline handles transformation and reporting
-    df_normalized = run_normalization_pipeline(
-        config=module_cfg, df=df, notebook=False, run_id=run_id
+    pipeline_result = run_normalization_pipeline(
+        config=module_cfg,
+        df=df,
+        notebook=False,
+        run_id=run_id,
+        return_metadata=True,
     )
+    if isinstance(pipeline_result, tuple):
+        df_normalized, metadata = pipeline_result
+    else:
+        df_normalized, metadata = pipeline_result, {}
+    changelog = metadata.get("changelog", {})
+    changes_made = metadata.get("changes_made", count_normalization_changes(changelog))
 
     # Save to session
     session_id = save_to_session(df_normalized, session_id=session_id, run_id=run_id)
@@ -104,7 +93,7 @@ async def _toolkit_normalization(
             warnings,
         )
 
-        xlsx_path = f"exports/reports/normalization/normalization_report_{run_id}.xlsx"
+        xlsx_path = f"exports/reports/normalization/{run_id}_normalization_report.xlsx"
         xlsx_url = check_upload(
             upload_artifact(
                 xlsx_path, run_id, "normalization", config=kwargs, session_id=session_id

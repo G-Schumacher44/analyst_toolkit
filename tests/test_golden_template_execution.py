@@ -105,7 +105,6 @@ async def test_golden_quick_migration_template_executes(mocker):
     session_id = "sess_golden_quick"
 
     _patch_common_module(mocker, normalization_tool, df, session_id)
-    mocker.patch.object(normalization_tool, "apply_normalization", return_value=(df, None, {}))
     mocker.patch.object(normalization_tool, "run_normalization_pipeline", return_value=df.copy())
     norm_res = await normalization_tool._toolkit_normalization(
         session_id=session_id,

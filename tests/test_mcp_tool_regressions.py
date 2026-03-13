@@ -196,7 +196,6 @@ async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
     assert "validation" in inferred["configs"]
 
     mocker.patch.object(normalization_tool, "load_input", return_value=df)
-    mocker.patch.object(normalization_tool, "apply_normalization", return_value=(df, None, {}))
     mocker.patch.object(normalization_tool, "run_normalization_pipeline", return_value=df)
     mocker.patch.object(normalization_tool, "save_to_session", return_value="sess_roundtrip")
     mocker.patch.object(normalization_tool, "get_session_metadata", return_value={"row_count": 2})
@@ -391,8 +390,17 @@ async def test_normalization_reports_artifact_contract(mocker):
     df = pd.DataFrame({"name": ["Alice"]})
 
     mocker.patch.object(normalization_tool, "load_input", return_value=df)
-    mocker.patch.object(normalization_tool, "apply_normalization", return_value=(df, None, {}))
-    mocker.patch.object(normalization_tool, "run_normalization_pipeline", return_value=df)
+    mocker.patch.object(
+        normalization_tool,
+        "run_normalization_pipeline",
+        return_value=(
+            df,
+            {
+                "changelog": {"values_mapped": pd.DataFrame([{"Mappings Applied": 2}])},
+                "changes_made": 2,
+            },
+        ),
+    )
     mocker.patch.object(normalization_tool, "save_to_session", return_value="sess_norm")
     mocker.patch.object(normalization_tool, "get_session_metadata", return_value={"row_count": 1})
     mocker.patch.object(normalization_tool, "save_output", return_value="gs://dummy/norm.csv")
@@ -410,6 +418,12 @@ async def test_normalization_reports_artifact_contract(mocker):
     assert "artifact_matrix" in result
     assert "html_report" in result["artifact_matrix"]
     assert "html_report" in result["missing_required_artifacts"]
+    assert "xlsx_report" in result["artifact_matrix"]
+    assert result["artifact_matrix"]["xlsx_report"]["status"] == "missing"
+    assert any(
+        "exports/reports/normalization/norm_artifact_contract_normalization_report.xlsx" in warning
+        for warning in result["warnings"]
+    )
     assert (
         result["dashboard_path"]
         == "exports/reports/normalization/norm_artifact_contract_normalization_report.html"
