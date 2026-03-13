@@ -67,7 +67,7 @@ format-check:
 	ruff format --check src/ tests/
 
 yaml-lint:
-	yamlint .github/workflows .coderabbit.yaml
+	yamllint .github/workflows .coderabbit.yaml
 
 typecheck:
 	mypy src/analyst_toolkit/mcp_server

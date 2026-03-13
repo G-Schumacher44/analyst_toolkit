@@ -73,7 +73,7 @@ jobs:
 
       - name: Lint YAML
         run: |
-          yamlint \
+          yamllint \
             .github/workflows \
             .coderabbit.yaml
 

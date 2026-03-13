@@ -18,7 +18,7 @@ Describe what changed and why.
 
 - [ ] `ruff check src/`
 - [ ] `ruff format --check src/ tests/`
-- [ ] `yamlint .github/workflows .coderabbit.yaml`
+- [ ] `yamllint .github/workflows .coderabbit.yaml`
 - [ ] `mypy src/analyst_toolkit/mcp_server`
 - [ ] `pytest tests/`
 - [ ] `pre-commit run --all-files`

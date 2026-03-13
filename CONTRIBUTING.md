@@ -34,7 +34,7 @@ Before opening or updating a PR, run:
 ```bash
 ruff check src/
 ruff format --check src/ tests/
-yamlint .github/workflows .coderabbit.yaml
+yamllint .github/workflows .coderabbit.yaml
 mypy src/analyst_toolkit/mcp_server
 pytest tests/
 ```
