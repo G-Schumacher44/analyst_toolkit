@@ -9,6 +9,7 @@ def user_quickstart_payload() -> dict:
 - You can edit module YAML configs directly before runs.
 - You can keep automation (`infer_configs`) and still override any field.
 - You can enable/disable plotting and HTML export per module.
+- When HTML export is enabled, module tools return standalone dashboard artifacts that should be opened or linked for review.
 
 ## Recommended Order (Manual Pipeline)
 1. `diagnostics`
@@ -17,6 +18,11 @@ def user_quickstart_payload() -> dict:
 4. `normalization` -> `duplicates` -> `outliers` -> `imputation` -> `validation`
 5. `final_audit`
 6. `get_run_history` + `get_data_health_report`
+
+## Dashboard Artifacts
+- Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
+- Agents should surface those dashboard links to users instead of burying them in long summaries.
+- Use the dashboard artifact as the primary review surface when it exists.
 
 ## Key Example: Fuzzy Matching
 In normalization config:
@@ -39,6 +45,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "step": 1,
                 "tool": "diagnostics",
                 "required_inputs": ["gcs_path|session_id", "run_id"],
+                "outputs": ["session_id", "summary", "dashboard_url?"],
             },
             {
                 "step": 2,
@@ -116,7 +123,13 @@ def agent_playbook_payload() -> dict:
                 "step": 1,
                 "tool": "diagnostics",
                 "required_inputs": ["gcs_path|session_id", "run_id"],
-                "outputs": ["session_id", "summary", "artifact_url?", "plot_urls?"],
+                "outputs": [
+                    "session_id",
+                    "summary",
+                    "dashboard_url?",
+                    "artifact_url?",
+                    "plot_urls?",
+                ],
                 "next": [2],
             },
             {
@@ -162,6 +175,10 @@ def agent_playbook_payload() -> dict:
                 ],
                 "required_inputs": ["session_id", "run_id", "config per tool"],
                 "outputs": ["updated session_id", "module summaries", "artifacts"],
+                "notes": [
+                    "When a module returns dashboard_url, surface that link to the user.",
+                    "Prefer the standalone dashboard artifact as the main review surface.",
+                ],
                 "next": [7],
             },
             {

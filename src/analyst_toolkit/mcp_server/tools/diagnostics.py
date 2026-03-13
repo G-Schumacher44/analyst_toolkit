@@ -17,7 +17,11 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
-from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
+from analyst_toolkit.mcp_server.response_utils import (
+    next_action,
+    with_dashboard_artifact,
+    with_next_actions,
+)
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -155,6 +159,12 @@ async def _toolkit_diagnostics(
         "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
         "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Diagnostics dashboard",
+    )
     res = with_next_actions(
         res,
         [
@@ -184,7 +194,7 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="diagnostics",
     fn=_toolkit_diagnostics,
-    description="Run data profiling on a dataset. Plotting is opt-in (pass plotting=true).",
+    description="Run data profiling on a dataset and return a standalone diagnostics dashboard artifact. Plotting is opt-in (pass plotting=true).",
     input_schema=base_input_schema(
         extra_props={
             "plotting": {

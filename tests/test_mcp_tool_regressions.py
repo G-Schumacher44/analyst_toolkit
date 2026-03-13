@@ -12,6 +12,7 @@ import analyst_toolkit.mcp_server.tools.final_audit as final_audit_tool
 import analyst_toolkit.mcp_server.tools.imputation as imputation_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
+import analyst_toolkit.mcp_server.tools.outliers as outliers_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -409,3 +410,108 @@ async def test_normalization_reports_artifact_contract(mocker):
     assert "artifact_matrix" in result
     assert "html_report" in result["artifact_matrix"]
     assert "html_report" in result["missing_required_artifacts"]
+    assert (
+        result["dashboard_path"]
+        == "exports/reports/normalization/norm_artifact_contract_normalization_report.html"
+    )
+    assert result["dashboard_url"] == ""
+    assert result["dashboard_label"] == "Normalization dashboard"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "tool_module",
+        "tool_name",
+        "run_return_name",
+        "run_return_value",
+        "run_id",
+        "expected_path",
+        "expected_label",
+    ),
+    [
+        (
+            diagnostics_tool,
+            "_toolkit_diagnostics",
+            "run_diag_pipeline",
+            None,
+            "diag_artifact_contract",
+            "exports/reports/diagnostics/diag_artifact_contract_diagnostics_report.html",
+            "Diagnostics dashboard",
+        ),
+        (
+            duplicates_tool,
+            "_toolkit_duplicates",
+            "run_duplicates_pipeline",
+            pd.DataFrame({"id": [1], "is_duplicate": [False]}),
+            "dup_artifact_contract",
+            "exports/reports/duplicates/dup_artifact_contract_duplicates_report.html",
+            "Duplicates dashboard",
+        ),
+        (
+            outliers_tool,
+            "_toolkit_outliers",
+            "run_outlier_detection_pipeline",
+            (
+                pd.DataFrame({"value": [1]}),
+                {"outlier_log": pd.DataFrame(columns=["column"])},
+            ),
+            "outlier_artifact_contract",
+            "exports/reports/outliers/detection/outlier_artifact_contract_outlier_report.html",
+            "Outlier detection dashboard",
+        ),
+        (
+            imputation_tool,
+            "_toolkit_imputation",
+            "run_imputation_pipeline",
+            pd.DataFrame({"value": [1.0]}),
+            "imputation_artifact_contract",
+            "exports/reports/imputation/imputation_artifact_contract_imputation_report.html",
+            "Imputation dashboard",
+        ),
+        (
+            final_audit_tool,
+            "_toolkit_final_audit",
+            "run_final_audit_pipeline",
+            pd.DataFrame({"value": [1]}),
+            "final_audit_artifact_contract",
+            "exports/reports/final_audit/final_audit_artifact_contract_final_audit_report.html",
+            "Final audit dashboard",
+        ),
+    ],
+)
+async def test_other_modules_report_dashboard_artifact_contract(
+    mocker,
+    monkeypatch,
+    tool_module,
+    tool_name,
+    run_return_name,
+    run_return_value,
+    run_id,
+    expected_path,
+    expected_label,
+):
+    df = pd.DataFrame({"value": [1]})
+    mocker.patch.object(tool_module, "load_input", return_value=df)
+    mocker.patch.object(tool_module, "save_to_session", return_value="sess_dash")
+    mocker.patch.object(tool_module, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(tool_module, "append_to_run_history", return_value=None)
+    mocker.patch.object(tool_module, "upload_artifact", return_value="")
+    mocker.patch.object(tool_module, run_return_name, return_value=run_return_value)
+
+    if hasattr(tool_module, "get_session_metadata"):
+        mocker.patch.object(tool_module, "get_session_metadata", return_value={"row_count": 1})
+    if hasattr(tool_module, "should_export_html"):
+        mocker.patch.object(tool_module, "should_export_html", return_value=True)
+    if tool_module is final_audit_tool:
+        monkeypatch.setattr(tool_module, "ALLOW_EMPTY_CERT_RULES", True)
+
+    result = await getattr(tool_module, tool_name)(
+        session_id="sess_dash",
+        run_id=run_id,
+        config={},
+    )
+
+    assert result["dashboard_path"] == expected_path
+    assert result["dashboard_url"] == ""
+    assert result["dashboard_label"] == expected_label

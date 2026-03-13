@@ -22,6 +22,7 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.response_utils import with_dashboard_artifact
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -167,6 +168,12 @@ async def _toolkit_imputation(
         "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
         "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Imputation dashboard",
+    )
     append_to_run_history(run_id, res, session_id=session_id)
     return res
 
@@ -176,6 +183,6 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="imputation",
     fn=_toolkit_imputation,
-    description="Run missing value imputation on a dataset using configured rules.",
+    description="Run missing value imputation on a dataset using configured rules and return a standalone imputation dashboard artifact.",
     input_schema=base_input_schema(),
 )

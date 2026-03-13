@@ -23,7 +23,11 @@ from analyst_toolkit.mcp_server.io import (
     should_export_html,
     upload_artifact,
 )
-from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
+from analyst_toolkit.mcp_server.response_utils import (
+    next_action,
+    with_dashboard_artifact,
+    with_next_actions,
+)
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
 
@@ -182,6 +186,12 @@ async def _toolkit_validation(
             ),
         ]
 
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Validation dashboard",
+    )
     res = with_next_actions(res, next_steps)
     append_to_run_history(run_id, res, session_id=session_id)
     return res
@@ -192,6 +202,6 @@ from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
 register_tool(
     name="validation",
     fn=_toolkit_validation,
-    description="Run schema, dtype, categorical, and range validation on a dataset.",
+    description="Run schema, dtype, categorical, and range validation on a dataset and return a standalone validation dashboard artifact.",
     input_schema=base_input_schema(),
 )

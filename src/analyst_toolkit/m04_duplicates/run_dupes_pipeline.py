@@ -150,7 +150,12 @@ def run_duplicates_pipeline(
             html_path = settings.get(
                 "export_html_path", "exports/reports/duplicates/{run_id}_duplicates_report.html"
             ).format(run_id=run_id)
-            export_html_report(duplicates_report, html_path, "Duplicates", run_id)
+            html_report = dict(duplicates_report)
+            html_report["__dashboard_meta__"] = {
+                "subset_columns": subset_cols or [],
+                "mode": mode,
+            }
+            export_html_report(html_report, html_path, "Duplicates", run_id, plot_paths=plot_paths)
 
     checkpoint_cfg = settings.get("checkpoint", {})
     if isinstance(checkpoint_cfg, dict) and checkpoint_cfg.get("run", False):
