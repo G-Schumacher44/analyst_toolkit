@@ -1,4 +1,10 @@
+import importlib
+
 import pandas as pd
+
+imputation_pipeline_module = importlib.import_module(
+    "analyst_toolkit.m07_imputation.run_imputation_pipeline"
+)
 
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
     run_outlier_detection_pipeline,
@@ -59,22 +65,23 @@ def test_imputation_exports_html_with_plot_paths(mocker):
     df_imputed = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
     changelog = pd.DataFrame([{"Column": "value", "Strategy": "mean"}])
 
-    mocker.patch(
-        "analyst_toolkit.m07_imputation.run_imputation_pipeline.apply_imputation",
+    mocker.patch.object(
+        imputation_pipeline_module,
+        "apply_imputation",
         return_value=(df_imputed, changelog),
     )
-    mocker.patch(
-        "analyst_toolkit.m07_imputation.run_imputation_pipeline.generate_imputation_report",
+    mocker.patch.object(
+        imputation_pipeline_module,
+        "generate_imputation_report",
         return_value={"imputation_actions_log": changelog},
     )
-    mocker.patch("analyst_toolkit.m07_imputation.run_imputation_pipeline.export_dataframes")
-    mocker.patch(
-        "analyst_toolkit.m07_imputation.run_imputation_pipeline.plot_imputation_comparison",
+    mocker.patch.object(imputation_pipeline_module, "export_dataframes")
+    mocker.patch.object(
+        imputation_pipeline_module,
+        "plot_imputation_comparison",
         return_value="exports/plots/imputation/run_imp_plot.png",
     )
-    export_html = mocker.patch(
-        "analyst_toolkit.m07_imputation.run_imputation_pipeline.export_html_report"
-    )
+    export_html = mocker.patch.object(imputation_pipeline_module, "export_html_report")
 
     run_imputation_pipeline(
         config={
