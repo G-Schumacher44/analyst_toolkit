@@ -134,7 +134,13 @@ def run_imputation_pipeline(
             )
             if "{run_id}" in html_path:
                 html_path = html_path.format(run_id=run_id)
-            export_html_report(imputation_report, html_path, "Imputation", run_id)
+            export_html_report(
+                imputation_report,
+                html_path,
+                "Imputation",
+                run_id,
+                plot_paths=plot_paths,
+            )
 
     checkpoint_cfg = settings.get("checkpoint", {})
     if isinstance(checkpoint_cfg, dict) and checkpoint_cfg.get("run", False):

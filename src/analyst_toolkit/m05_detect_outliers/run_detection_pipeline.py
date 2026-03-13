@@ -68,6 +68,7 @@ def run_outlier_detection_pipeline(
     outlier_log_df = detection_results.get("outlier_log")
 
     plot_save_dir = None
+    plot_paths = {}
     plotting_cfg = module_cfg.get("plotting", {})
     if plotting_cfg.get("run") and outlier_log_df is not None and not outlier_log_df.empty:
         save_dir_template = plotting_cfg.get("plot_save_dir", "exports/plots/outliers/{run_id}")
@@ -75,7 +76,7 @@ def run_outlier_detection_pipeline(
 
         plotting_cfg["run_id"] = run_id
         plotting_cfg["plot_save_dir"] = plot_save_dir
-        generate_outlier_plots(df, outlier_log_df, plotting_cfg)
+        plot_paths = generate_outlier_plots(df, outlier_log_df, plotting_cfg)
 
     outlier_report = generate_outlier_report(detection_results)
 
@@ -103,6 +104,7 @@ def run_outlier_detection_pipeline(
                 html_path_template.format(run_id=run_id),
                 "Outlier Detection",
                 run_id,
+                plot_paths=plot_paths,
             )
 
     if plotting_cfg.get("show_plots_inline") and notebook:
