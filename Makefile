@@ -1,5 +1,5 @@
 .PHONY: help install install-mcp install-notebook install-dev \
-        lint format typecheck test check \
+        lint format format-check yaml-lint typecheck test precommit check \
         mcp-up mcp-down mcp-logs mcp-health \
         docker-build docker-pull \
         pipeline clean
@@ -18,9 +18,12 @@ help:
 	@echo "  Code quality"
 	@echo "    lint             Ruff lint check"
 	@echo "    format           Ruff auto-format"
+	@echo "    format-check     Ruff formatting check"
+	@echo "    yaml-lint        YAML lint check"
 	@echo "    typecheck        Mypy type check (mcp_server)"
 	@echo "    test             Run pytest suite"
-	@echo "    check            lint + typecheck + test"
+	@echo "    precommit        Run all pre-commit hooks"
+	@echo "    check            Full local quality gate"
 	@echo ""
 	@echo "  MCP server (Docker)"
 	@echo "    mcp-up           Start MCP server via docker-compose"
@@ -54,11 +57,17 @@ install-dev:
 
 # ─── Code quality ──────────────────────────────────────────────────────────────
 lint:
-	ruff check src/
+	ruff check src/ tests/
 
 format:
 	ruff format src/
-	ruff check --fix src/
+	ruff check --fix src/ tests/
+
+format-check:
+	ruff format --check src/ tests/
+
+yaml-lint:
+	yamllint .github/workflows .coderabbit.yaml
 
 typecheck:
 	mypy src/analyst_toolkit/mcp_server
@@ -66,7 +75,10 @@ typecheck:
 test:
 	pytest tests/ -v
 
-check: lint typecheck test
+precommit:
+	pre-commit run --all-files
+
+check: lint format-check yaml-lint typecheck test precommit
 
 # ─── MCP server ────────────────────────────────────────────────────────────────
 mcp-up:

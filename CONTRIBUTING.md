@@ -24,6 +24,8 @@ make install-mcp
 3. Open a pull request using the PR template.
 4. Link related issues in the PR description (`Closes #123`).
 5. If behavior, API, or docs meaningfully change, add an entry to `CHANGELOG.md` under `Unreleased`.
+6. If CodeRabbit is enabled for the repository, request CodeRabbit review on the PR and resolve or explicitly dismiss its feedback before merge.
+7. If behavior changes, add or update tests in the same PR.
 
 ## Quality Gates
 
@@ -31,7 +33,9 @@ Before opening or updating a PR, run:
 
 ```bash
 ruff check src/
-mypy src tests
+ruff format --check src/ tests/
+yamllint .github/workflows .coderabbit.yaml
+mypy src/analyst_toolkit/mcp_server
 pytest tests/
 ```
 
@@ -47,6 +51,8 @@ Also run pre-commit hooks:
 pre-commit run --all-files
 ```
 
+If CodeRabbit is enabled for the repository, include it in the PR review loop in addition to normal human review. In this repo it is currently expected as a local review step, not a CI gate.
+
 CI enforces linting, type checks, tests, and Docker smoke tests.
 
 ## Testing Guidance
@@ -54,6 +60,7 @@ CI enforces linting, type checks, tests, and Docker smoke tests.
 - Add or update tests for behavior changes.
 - Prefer focused unit tests near the changed module.
 - For MCP tool changes, include regression coverage in `tests/mcp_server/` and/or `tests/test_mcp_tool_regressions.py`.
+- Do not defer test coverage for code behavior changes to a follow-up PR unless the current PR is strictly docs-only.
 
 ## MCP and Data Pipeline Changes
 

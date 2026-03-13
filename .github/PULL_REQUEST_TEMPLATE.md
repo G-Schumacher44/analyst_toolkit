@@ -17,9 +17,12 @@ Describe what changed and why.
 ## Validation
 
 - [ ] `ruff check src/`
-- [ ] `mypy src tests`
+- [ ] `ruff format --check src/ tests/`
+- [ ] `yamllint .github/workflows .coderabbit.yaml`
+- [ ] `mypy src/analyst_toolkit/mcp_server`
 - [ ] `pytest tests/`
 - [ ] `pre-commit run --all-files`
+- [ ] CodeRabbit review requested or completed (if enabled for this repo)
 
 ## Changelog
 

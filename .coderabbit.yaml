@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  review_details: false
+  collapse_walkthrough: false
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: true
+    auto_incremental_review: true
+  path_filters:
+    - "src/**"
+    - "tests/**"
+    - "README.md"
+    - "CONTRIBUTING.md"
+    - "CHANGELOG.md"
+    - "resource_hub/**"
+    - ".github/**"
+    - ".pre-commit-config.yaml"
+    - "pyproject.toml"
+    - "requirements-*.txt"
+    - "Makefile"
+    - "!local_plans/**"
+    - "!notebooks/*.html"
+    - "!exports/**"
+    - "!data/**"
+    - "!repo_files/**"
+    - "!.venv/**"
+    - "!.mypy_cache/**"
+    - "!.pytest_cache/**"
+    - "!.ruff_cache/**"
+  path_instructions:
+    - path: "src/analyst_toolkit/mcp_server/**"
+      instructions: |
+        Review with extra scrutiny for security hardening, auth defaults, local filesystem exposure,
+        idempotency, determinism of run/job identity, and response-contract bloat. Prefer findings on
+        trust-boundary widening, nondeterministic retries, and oversized tool-return payloads.
+    - path: "src/analyst_toolkit/m00_utils/**"
+      instructions: |
+        Focus on shared rendering, export, and serialization risks. Flag changes that duplicate logic,
+        create unstable artifact formats, or couple export behavior to notebook-only runtime features.
+    - path: "tests/mcp_server/**"
+      instructions: |
+        Focus on MCP contract coverage, transport/auth behavior, and regression completeness.
+    - path: "tests/hardening/**"
+      instructions: |
+        Focus on security posture, deterministic behavior, and whether the tests actually cover the
+        identified trust-boundary and idempotency risks.
+    - path: "src/analyst_toolkit/m01_diagnostics/**"
+      instructions: |
+        For dashboard work, prefer extraction into reusable dashboard builders over duplicating display
+        logic. The exported dashboard should preserve the current notebook tone while remaining standalone HTML.
+    - path: "src/analyst_toolkit/m02_validation/**"
+      instructions: |
+        Preserve the validation dashboard structure, especially summary plus drill-down sections, while
+        removing Jupyter-only assumptions from exported HTML.
+    - path: "src/analyst_toolkit/m10_final_audit/**"
+      instructions: |
+        Treat final audit as a polished deliverable artifact. Review for clear narrative structure, compact
+        MCP responses, and export behavior that works outside notebook environments.
+
+chat:
+  auto_reply: true
