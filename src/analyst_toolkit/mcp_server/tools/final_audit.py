@@ -69,7 +69,13 @@ async def _toolkit_final_audit(
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
     run_id = run_id or runtime_overrides.get("run_id")
-    for key in ("output_bucket", "output_prefix"):
+    for key in (
+        "output_bucket",
+        "output_prefix",
+        "local_output_root",
+        "drive_folder_id",
+        "upload_artifacts",
+    ):
         kwargs.setdefault(key, runtime_overrides.get(key))
 
     run_id, lifecycle = resolve_run_context(run_id, session_id)

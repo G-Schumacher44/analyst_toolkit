@@ -582,6 +582,7 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
     assert result["runtime_applied"] is True
     assert result["run_id"] == "final_runtime"
     assert captured["input_path"] == "gs://bucket/final.csv"
+    assert "final_runtime" in result["artifact_path"]
 
 
 @pytest.mark.asyncio

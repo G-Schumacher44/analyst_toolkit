@@ -47,7 +47,9 @@ async def _toolkit_outliers(
     session_id = session_id or runtime_overrides.get("session_id")
     run_id = run_id or runtime_overrides.get("run_id")
     for key in ("output_bucket", "output_prefix"):
-        kwargs.setdefault(key, runtime_overrides.get(key))
+        value = runtime_overrides.get(key)
+        if value is not None:
+            kwargs.setdefault(key, value)
 
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 

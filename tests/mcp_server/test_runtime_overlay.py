@@ -77,6 +77,16 @@ def test_normalize_runtime_overlay_strict_mode_rejects_unknown_keys():
         normalize_runtime_overlay(runtime, strict=True)
 
 
+def test_normalize_runtime_overlay_honors_execution_strict_config():
+    runtime = {
+        "execution": {"strict_config": True},
+        "artifacts": {"export_html": True, "mystery_flag": True},
+    }
+
+    with pytest.raises(RuntimeOverlayError):
+        normalize_runtime_overlay(runtime)
+
+
 def test_normalize_runtime_overlay_rejects_oversized_yaml():
     oversized = "runtime:\n  artifacts:\n    export_html: true\n" + ("a" * MAX_RUNTIME_YAML_LENGTH)
 
@@ -150,3 +160,12 @@ def test_runtime_to_tool_overrides_maps_run_and_destination_fields():
         "drive_folder_id": "drive-folder",
         "upload_artifacts": False,
     }
+
+
+def test_runtime_to_tool_overrides_applies_gcs_when_enabled_omitted():
+    overrides = runtime_to_tool_overrides(
+        {"destinations": {"gcs": {"bucket_uri": "gs://out-bucket", "prefix": "custom/prefix"}}}
+    )
+
+    assert overrides["output_bucket"] == "gs://out-bucket"
+    assert overrides["output_prefix"] == "custom/prefix"

@@ -47,7 +47,15 @@ def build_artifact_contract(
         probe_local_paths=probe_local_paths,
     )
     plot_keys = set(plots) | set(plot_refs)
-    plots_available = bool(plot_keys)
+    plot_entries = {
+        key: _resolve_reference_status(
+            plots.get(key, ""),
+            plot_refs.get(key, ""),
+            probe_local_paths=probe_local_paths,
+        )
+        for key in plot_keys
+    }
+    plots_available = any(status == "available" for status, _reason in plot_entries.values())
     plot_reason = "" if plots_available else "not_generated_or_upload_failed"
     plot_status = "available" if plots_available else "missing"
     matrix: dict[str, dict[str, Any]] = {
@@ -192,7 +200,7 @@ def _is_allowed_local_probe(candidate: str) -> bool:
     if any(part == ".." for part in candidate_path.parts):
         return False
 
-    allowed_roots = [Path.cwd()]
+    allowed_roots: list[Path] = []
     exports_root = Path.cwd() / "exports"
     if exports_root.exists():
         allowed_roots.append(exports_root)
@@ -200,6 +208,8 @@ def _is_allowed_local_probe(candidate: str) -> bool:
     extra_root = os.environ.get("ANALYST_MCP_LOCAL_OUTPUT_BASE", "").strip()
     if extra_root:
         allowed_roots.append(Path(extra_root).expanduser())
+    if not allowed_roots:
+        return False
 
     resolved_candidate = candidate_path.resolve(strict=False)
     for root in allowed_roots:

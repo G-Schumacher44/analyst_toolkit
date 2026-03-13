@@ -67,6 +67,29 @@ def test_deliver_artifact_rejects_local_root_traversal(tmp_path, monkeypatch):
     )
 
 
+def test_deliver_artifact_rejects_local_root_absolute_path(tmp_path, monkeypatch):
+    source = tmp_path / "exports" / "reports" / "diag.html"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("<html>diag</html>", encoding="utf-8")
+    monkeypatch.setenv("ANALYST_MCP_LOCAL_OUTPUT_BASE", str(tmp_path))
+
+    delivery = deliver_artifact(
+        str(source),
+        run_id="run-123",
+        module="diagnostics",
+        config={"local_output_root": "/tmp/escape"},
+        session_id=None,
+        resolve_path_root=lambda run_id, session_id: f"paths/{run_id}",
+        logger=logging.getLogger("test"),
+    )
+
+    assert delivery["destinations"]["local"]["status"] == "rejected"
+    assert any(
+        "must be relative to the configured local output base" in warning
+        for warning in delivery["warnings"]
+    )
+
+
 def test_deliver_artifact_surfaces_drive_as_unsupported(tmp_path):
     source = tmp_path / "exports" / "reports" / "diag.html"
     source.parent.mkdir(parents=True, exist_ok=True)

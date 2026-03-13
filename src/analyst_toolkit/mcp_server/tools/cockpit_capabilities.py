@@ -208,6 +208,11 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                 "user_editable": True,
             },
             {
+                "path": "runtime.destinations.gcs.enabled",
+                "description": "Explicitly opt in to remote GCS artifact uploads.",
+                "user_editable": True,
+            },
+            {
                 "path": "<module>.run",
                 "description": "Enable/disable individual module execution.",
                 "user_editable": True,
@@ -246,6 +251,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                     "runtime.run.input_path",
                     "runtime.artifacts.export_html",
                     "runtime.artifacts.plotting",
+                    "runtime.destinations.gcs.enabled",
                     "runtime.destinations.gcs.bucket_uri",
                     "runtime.destinations.gcs.prefix",
                 ],

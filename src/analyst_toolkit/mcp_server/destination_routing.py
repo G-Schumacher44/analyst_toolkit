@@ -51,17 +51,18 @@ def _local_relative_path(local_path: str) -> Path:
     path = Path(local_path)
     if any(part == ".." for part in path.parts):
         raise ValueError("Local artifact path must not contain parent-directory traversal.")
+    resolved = path.resolve(strict=False)
     if not path.is_absolute():
         return path
 
     cwd = Path.cwd()
     try:
-        return path.relative_to(cwd)
+        return resolved.relative_to(cwd.resolve(strict=False))
     except ValueError:
-        if "exports" in path.parts:
-            exports_index = path.parts.index("exports")
-            return Path(*path.parts[exports_index:])
-    return Path(path.name)
+        if "exports" in resolved.parts:
+            exports_index = resolved.parts.index("exports")
+            return Path(*resolved.parts[exports_index:])
+    return Path(resolved.name)
 
 
 def _resolve_local_output_root(root: str) -> Path:

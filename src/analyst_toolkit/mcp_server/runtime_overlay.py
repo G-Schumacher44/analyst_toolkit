@@ -135,6 +135,27 @@ def normalize_runtime_overlay(
     if not payload:
         return {}, []
 
+    execution_cfg = payload.get("execution", {})
+    if isinstance(execution_cfg, dict):
+        strict_flag = execution_cfg.get("strict_config")
+        if strict_flag is not None:
+            if isinstance(strict_flag, bool):
+                strict = strict or strict_flag
+            elif isinstance(strict_flag, str):
+                lowered = strict_flag.strip().lower()
+                if lowered in {"1", "true", "yes", "on"}:
+                    strict = True
+                elif lowered not in {"0", "false", "no", "off", ""}:
+                    logger.warning(
+                        "Ignoring non-boolean runtime execution.strict_config value: %r",
+                        strict_flag,
+                    )
+            else:
+                logger.warning(
+                    "Ignoring non-boolean runtime execution.strict_config value: %r",
+                    strict_flag,
+                )
+
     unknown_keys = _collect_unknown_runtime_keys(payload)
     if unknown_keys and strict:
         raise RuntimeOverlayError("Unknown runtime keys: " + ", ".join(sorted(unknown_keys)))
@@ -251,7 +272,7 @@ def runtime_to_tool_overrides(runtime: dict[str, Any]) -> dict[str, Any]:
             overrides["local_output_root"] = local_cfg["root"]
 
         gcs_cfg = destinations.get("gcs", {})
-        if isinstance(gcs_cfg, dict) and gcs_cfg.get("enabled"):
+        if isinstance(gcs_cfg, dict) and gcs_cfg.get("enabled") is not False:
             if gcs_cfg.get("bucket_uri"):
                 overrides["output_bucket"] = gcs_cfg["bucket_uri"]
             if gcs_cfg.get("prefix"):
