@@ -111,24 +111,7 @@ def run_validation_pipeline(
                 html_path = settings.get(
                     "export_html_path", "exports/reports/validation/{run_id}_validation_report.html"
                 ).format(run_id=run_id)
-                checks = {
-                    k: v
-                    for k, v in validation_results.items()
-                    if isinstance(v, dict) and "passed" in v
-                }
-                report_tables = {
-                    k: pd.DataFrame(
-                        [
-                            {
-                                "Rule": k,
-                                "Passed": v.get("passed"),
-                                "Description": v.get("rule_description", ""),
-                            }
-                        ]
-                    )
-                    for k, v in checks.items()
-                }
-                export_html_report(report_tables, html_path, "Validation", run_id)
+                export_html_report(validation_results, html_path, "Validation", run_id)
 
         if settings.get("show_inline", True) and notebook:
             from analyst_toolkit.m02_validation.validation_display import display_validation_summary

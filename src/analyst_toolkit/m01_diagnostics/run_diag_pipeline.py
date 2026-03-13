@@ -78,20 +78,6 @@ def run_diag_pipeline(
         full_profile = run_data_profile(df, config=module_cfg)
         settings = profile_cfg.get("settings", {})
 
-        if settings.get("export", False):
-            export_path = settings.get(
-                "export_path", f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
-            )
-            export_dataframes(
-                data_dict=full_profile["for_export"], export_path=export_path, run_id=run_id
-            )
-            if settings.get("export_html", False):
-                html_path = settings.get(
-                    "export_html_path",
-                    "exports/reports/diagnostics/{run_id}_diagnostics_report.html",
-                ).format(run_id=run_id)
-                export_html_report(full_profile["for_export"], html_path, "Diagnostics", run_id)
-
         plot_paths = {}
         plotting_cfg = module_cfg.get("plotting", {})
         if plotting_cfg.get("run", True):
@@ -137,6 +123,26 @@ def run_diag_pipeline(
             else:
                 logging.info("Individual distribution plots skipped (include_distributions=False).")
             # --- END OF OPTIMIZATION ---
+
+        if settings.get("export", False):
+            export_path = settings.get(
+                "export_path", f"exports/reports/diagnostics/{run_id}_diagnostics_report.xlsx"
+            )
+            export_dataframes(
+                data_dict=full_profile["for_export"], export_path=export_path, run_id=run_id
+            )
+            if settings.get("export_html", False):
+                html_path = settings.get(
+                    "export_html_path",
+                    "exports/reports/diagnostics/{run_id}_diagnostics_report.html",
+                ).format(run_id=run_id)
+                export_html_report(
+                    full_profile["for_display"],
+                    html_path,
+                    "Diagnostics",
+                    run_id,
+                    plot_paths=plot_paths,
+                )
 
         if settings.get("show_inline", False) and notebook:
             from analyst_toolkit.m01_diagnostics.diag_display import display_profile_summary
