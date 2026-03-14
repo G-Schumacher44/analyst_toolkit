@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
 from analyst_toolkit.mcp_server.server import TOOL_REGISTRY, app
 
 
@@ -28,6 +29,7 @@ def test_rpc_tools_list(client):
     assert "get_agent_playbook" in tool_names
     assert "get_user_quickstart" in tool_names
     assert "get_capability_catalog" in tool_names
+    assert "get_pipeline_dashboard" in tool_names
     assert "preflight_config" in tool_names
     assert "get_job_status" in tool_names
     assert "list_jobs" in tool_names
@@ -209,6 +211,120 @@ def test_rpc_tool_not_found(client):
     error = response.json()["error"]
     assert error["code"] == -32601
     assert "Tool not found" in error["message"]
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
+    history = [
+        {
+            "module": "diagnostics",
+            "status": "pass",
+            "session_id": "sess_pipeline",
+            "summary": {"rows": 100},
+            "dashboard_url": "https://example.com/diag.html",
+            "export_url": "gs://bucket/diag.csv",
+        },
+        {
+            "module": "validation",
+            "status": "warn",
+            "session_id": "sess_pipeline",
+            "summary": {"passed": False, "failed_rules": 2},
+            "dashboard_path": "exports/reports/validation/run_val.html",
+            "warnings": ["rule mismatch"],
+        },
+        {
+            "module": "final_audit",
+            "status": "fail",
+            "session_id": "sess_pipeline",
+            "summary": {"passed": False},
+            "dashboard_path": "exports/reports/final_audit/run_final.html",
+            "export_url": "gs://bucket/final.csv",
+        },
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    export_html = mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/run-pipeline-001_pipeline_dashboard.html",
+    )
+    deliver = mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "https://example.com/pipeline.html",
+            "local_path": "/tmp/run-pipeline-001_pipeline_dashboard.html",
+            "url": "https://example.com/pipeline.html",
+            "warnings": [],
+            "destinations": {
+                "gcs": {"status": "available", "url": "https://example.com/pipeline.html"}
+            },
+        },
+    )
+
+    result = await cockpit_module._toolkit_get_pipeline_dashboard(run_id="run-pipeline-001")
+
+    assert result["status"] == "pass"
+    assert result["module"] == "pipeline_dashboard"
+    assert result["session_id"] == ""
+    assert result["dashboard_label"] == "Pipeline dashboard"
+    assert result["artifact_url"] == "https://example.com/pipeline.html"
+    assert result["summary"]["failed_modules"] == 1
+    assert result["summary"]["warned_modules"] == 1
+    assert result["summary"]["ready_modules"] == 1
+    assert result["summary"]["not_run_modules"] == 6
+    export_html.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/pipeline/run-pipeline-001_pipeline_dashboard.html",
+        "Pipeline Dashboard",
+        "run-pipeline-001",
+    )
+    deliver.assert_called_once_with(
+        "/tmp/run-pipeline-001_pipeline_dashboard.html",
+        run_id="run-pipeline-001",
+        module="pipeline_dashboard",
+        config={},
+        session_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path(mocker):
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=[])
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    export_html = mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/pipeline_dashboard.html",
+    )
+    mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "",
+            "local_path": "/tmp/pipeline_dashboard.html",
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    await cockpit_module._toolkit_get_pipeline_dashboard(run_id="../unsafe run")
+
+    export_html.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/pipeline/unsafe_run_pipeline_dashboard.html",
+        "Pipeline Dashboard",
+        "unsafe_run",
+    )
 
 
 @pytest.mark.asyncio
