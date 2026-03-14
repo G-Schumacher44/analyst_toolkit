@@ -452,9 +452,9 @@ async def test_toolkit_auto_heal_accepts_runtime_overrides(monkeypatch):
     assert result["run_id"] == "auto_runtime"
     assert infer_calls[0]["gcs_path"] == "gs://bucket/runtime.csv"
     assert infer_calls[0]["run_id"] == "auto_runtime"
-    assert result["dashboard_label"] == "Auto-heal dashboard"
-    assert result["artifact_url"] == "https://example.com/auto"
-    assert result["artifact_matrix"]["html_report"]["status"] == "available"
+    assert result["dashboard_label"] == ""
+    assert result["artifact_url"] == ""
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
     assert norm_calls[0]["runtime"]["artifacts"]["export_html"] is False
     assert imp_calls[0]["runtime"]["artifacts"]["export_html"] is False
 

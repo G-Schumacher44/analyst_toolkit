@@ -146,6 +146,10 @@ async def _run_auto_heal_pipeline(
         message = "Auto-healing completed with failures. Review failed_steps and summaries."
 
     artifact_path = f"exports/reports/auto_heal/{run_id}_auto_heal_report.html"
+    export_html = True
+    artifacts_cfg = runtime_cfg.get("artifacts", {}) if isinstance(runtime_cfg, dict) else {}
+    if isinstance(artifacts_cfg, dict) and "export_html" in artifacts_cfg:
+        export_html = bool(artifacts_cfg.get("export_html"))
     auto_heal_report = {
         "status": status,
         "message": message,
@@ -173,24 +177,40 @@ async def _run_auto_heal_pipeline(
             },
         },
     }
-    export_html_report(auto_heal_report, artifact_path, "Auto Heal", run_id)
-    artifact_delivery = deliver_artifact(
-        artifact_path,
-        run_id=run_id,
-        module="auto_heal",
-        config=runtime_overrides,
-        session_id=current_session_id,
-    )
-    artifact_path = artifact_delivery["local_path"]
-    artifact_url = artifact_delivery["url"]
+    artifact_delivery = {
+        "reference": "",
+        "local_path": "",
+        "url": "",
+        "warnings": [],
+        "destinations": {},
+    }
+    artifact_url = ""
+    warnings = list(lifecycle["warnings"]) + list(runtime_warnings)
+    if export_html:
+        try:
+            artifact_path = export_html_report(auto_heal_report, artifact_path, "Auto Heal", run_id)
+            artifact_delivery = deliver_artifact(
+                artifact_path,
+                run_id=run_id,
+                module="auto_heal",
+                config=runtime_overrides,
+                session_id=current_session_id,
+            )
+            artifact_path = artifact_delivery["local_path"]
+            artifact_url = artifact_delivery["url"]
+            warnings.extend(artifact_delivery["warnings"])
+        except Exception as exc:
+            warnings.append(f"Auto-heal dashboard export failed: {exc}")
+            artifact_path = ""
+    else:
+        artifact_path = ""
 
-    warnings = list(lifecycle["warnings"]) + list(runtime_warnings) + artifact_delivery["warnings"]
     artifact_contract = build_artifact_contract(
         imp_res.get("export_url") or norm_res.get("export_url", ""),
         artifact_path=artifact_path,
         artifact_url=artifact_url,
-        expect_html=True,
-        required_html=True,
+        expect_html=export_html,
+        required_html=False,
         probe_local_paths=True,
     )
     warnings.extend(artifact_contract["artifact_warnings"])

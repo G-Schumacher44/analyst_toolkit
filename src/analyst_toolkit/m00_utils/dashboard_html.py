@@ -1986,7 +1986,7 @@ def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
         step = step_results.get(step_name, {})
         summary = step.get("summary", {}) if isinstance(step, dict) else {}
         status = str(step.get("status", "skipped")).upper() if isinstance(step, dict) else "SKIPPED"
-        artifact = step.get("artifact_path") or step.get("artifact_url") or "No dashboard"
+        artifact = step.get("artifact_url") or step.get("artifact_path") or "No dashboard"
         cards.append(
             "<div class='cert-stat-card'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
