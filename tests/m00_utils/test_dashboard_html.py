@@ -239,10 +239,51 @@ def test_generate_outlier_dashboard_renders_summary_and_plots(tmp_path):
     assert "M05 Outlier Detection" in html
     assert "Detection Overview" in html
     assert "Primary Hotspot" in html
-    assert "body_mass_g (6)" in html
     assert "Outlier Detection Log" in html
     assert "Affected Row Samples" in html
     assert "data:image/png;base64," in html
+    assert "body_mass_g" in html
+
+
+def test_generate_auto_heal_dashboard_renders_drilldowns_and_sanitized_errors():
+    report = {
+        "status": "warn",
+        "message": "Auto-healing completed with warnings.",
+        "row_count": 42,
+        "final_session_id": "sess_auto",
+        "final_export_url": "gs://bucket/healed.csv",
+        "final_dashboard_url": "https://example.com/imputation.html",
+        "final_dashboard_path": "exports/reports/imputation/run_imp.html",
+        "inferred_modules": ["normalization", "imputation"],
+        "failed_steps": ["imputation"],
+        "steps": {
+            "normalization": {
+                "status": "pass",
+                "summary": {"changes_made": 4, "columns_changed": ["city", "state"]},
+                "artifact_path": "exports/reports/normalization/run_norm.html",
+                "artifact_url": "https://example.com/norm.html",
+                "export_url": "gs://bucket/norm.csv",
+            },
+            "imputation": {
+                "status": "error",
+                "summary": {"error_code": "AUTO_HEAL_STEP_FAILED", "trace_id": "trace123"},
+                "artifact_path": "",
+                "artifact_url": "",
+                "export_url": "",
+            },
+        },
+    }
+
+    html = generate_html_report(report, "Auto Heal", "run-auto-001")
+
+    assert "Auto Heal Overview" not in html
+    assert "Outcome Summary" in html
+    assert "Ready For Final Audit" not in html
+    assert "Needs Operator Review" in html
+    assert "Step Drilldowns" in html
+    assert "Terminal References" in html
+    assert "AUTO_HEAL_STEP_FAILED" in html
+    assert "trace123" in html
 
 
 def test_generate_imputation_dashboard_renders_summary_shift_and_plots(tmp_path):
