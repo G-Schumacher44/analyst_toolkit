@@ -840,7 +840,9 @@ def _assemble_page(
 ) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     page_title = (
-        module_name if module_name.strip().lower().endswith("dashboard") else f"{module_name} Dashboard"
+        module_name
+        if module_name.strip().lower().endswith("dashboard")
+        else f"{module_name} Dashboard"
     )
     toc_html = ""
     if toc_items:
