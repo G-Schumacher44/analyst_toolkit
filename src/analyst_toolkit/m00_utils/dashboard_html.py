@@ -11,6 +11,20 @@ from typing import Any
 
 import pandas as pd
 
+from analyst_toolkit.m00_utils.dashboard_shared import (
+    _display_name,
+    _embed_reference_src,
+    _metric_value,
+    _module_badge,
+    _normalize_reference_text,
+    _render_reference_value,
+    _render_section,
+    _slugify,
+    _status_chip,
+    _status_tone_class,
+    _tab_status_label,
+)
+
 _MAX_PREVIEW_ROWS = 50
 _SIZE_WARNING_THRESHOLD_MB = 25
 
@@ -1006,14 +1020,6 @@ _DASHBOARD_SCRIPT = """
 """
 
 
-def _slugify(value: str) -> str:
-    return "".join(ch.lower() if ch.isalnum() else "-" for ch in value).strip("-")
-
-
-def _display_name(value: str) -> str:
-    return value.replace("_", " ").replace("-", " ").title()
-
-
 def _normalize_text(value: str) -> str:
     replacements = {
         "âœ… OK": "OK",
@@ -1125,62 +1131,6 @@ def _render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
     return (
         "<p class='plot-intro'>The standalone export keeps the visuals in the same file so the report travels without sidecar assets.</p>"
         "<div class='plot-grid'>" + "".join(cards) + "</div>"
-    )
-
-
-def _metric_value(value: Any) -> str:
-    rendered = html.escape(str(value))
-    compact_class = " compact" if len(str(value)) > 18 else ""
-    return f"<p class='metric-stat{compact_class}'>{rendered}</p>"
-
-
-def _status_tone_class(value: Any) -> str:
-    normalized = str(value or "").strip().lower()
-    if normalized in {
-        "pass",
-        "passed",
-        "ok",
-        "available",
-        "ready",
-        "ready for final audit",
-        "healthy",
-        "certified",
-        "proceed",
-    }:
-        return "pass"
-    if normalized in {
-        "fail",
-        "failed",
-        "error",
-        "blocked",
-        "rejected",
-        "repair",
-    }:
-        return "fail"
-    if normalized:
-        return "warn"
-    return ""
-
-
-def _normalize_reference_text(value: Any) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    if text.startswith(("http://", "https://")):
-        return text
-    if "/exports/" in text:
-        return "/" + text[text.index("exports/") :]
-    if text.startswith("exports/"):
-        return "/" + text
-    return text
-
-
-def _render_section(title: str, body: str, *, open_by_default: bool = False) -> str:
-    open_attr = " open" if open_by_default else ""
-    return (
-        f"<details class='section'{open_attr} id='{_slugify(title)}'>"
-        f"<summary>{html.escape(title)}</summary>"
-        f"{body}</details>"
     )
 
 
@@ -2510,32 +2460,6 @@ def _render_imputation_dashboard(
     )
 
 
-def _render_reference_value(value: Any, *, empty_label: str) -> str:
-    if not value:
-        return f"<p class='empty'>{html.escape(empty_label)}</p>"
-
-    normalized = _normalize_reference_text(value)
-    rendered = html.escape(normalized)
-    if normalized.startswith(("http://", "https://", "/exports/")):
-        return (
-            "<p class='subtle'><a href='"
-            f"{rendered}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
-        )
-    return f"<p class='subtle'><code>{rendered}</code></p>"
-
-
-def _embed_reference_src(path_value: Any, url_value: Any) -> str:
-    normalized_url = _normalize_reference_text(url_value)
-    normalized_path = _normalize_reference_text(path_value)
-    if normalized_url.startswith(("http://", "https://")):
-        return normalized_url
-    if normalized_path.startswith("/exports/") or normalized_path.startswith(
-        ("http://", "https://")
-    ):
-        return normalized_path
-    return ""
-
-
 def _render_auto_heal_summary_table(summary: Any) -> str:
     if not isinstance(summary, dict) or not summary:
         return "<p class='empty'>No step summary available.</p>"
@@ -2734,34 +2658,6 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
         toc_items=toc,
         sections=sections,
     )
-
-
-def _module_badge(status: str) -> str:
-    normalized = str(status or "unknown").lower()
-    if normalized in {"pass", "ok", "available"}:
-        return f"<span class='badge-ok'>{html.escape(normalized.upper())}</span>"
-    if normalized in {"warn", "warning", "missing", "disabled", "not_run"}:
-        return f"<span class='badge-warn'>{html.escape(normalized.upper())}</span>"
-    return f"<span class='pill warn'>{html.escape(normalized.upper())}</span>"
-
-
-def _status_chip(status: str) -> str:
-    normalized = _tab_status_label(status).lower()
-    chip_class = (
-        "ok"
-        if normalized in {"pass", "available"}
-        else "fail"
-        if normalized in {"fail", "error"}
-        else "warn"
-    )
-    return f"<span class='status-chip {chip_class}'>{html.escape(normalized.upper())}</span>"
-
-
-def _tab_status_label(status: str) -> str:
-    normalized = str(status or "not_run").upper()
-    if normalized == "UNKNOWN":
-        return "NOT_RUN"
-    return normalized
 
 
 def _render_terminal_references(
