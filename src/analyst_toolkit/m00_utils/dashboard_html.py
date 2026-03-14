@@ -458,9 +458,169 @@ _DASHBOARD_CSS = """
     grid-template-columns: 1.2fr 0.8fr;
     gap: 16px;
   }
+  .tab-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    position: sticky;
+    top: 10px;
+    z-index: 3;
+    padding: 10px 12px;
+    border: 1px solid rgba(91, 106, 115, 0.18);
+    border-radius: 20px;
+    background: rgba(252, 250, 245, 0.94);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+  }
+  .tab-button {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    color: #22303a;
+    border-radius: 999px;
+    padding: 10px 14px;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .tab-button.active {
+    background: var(--accent);
+    color: #f8fafc;
+    border-color: rgba(31, 75, 74, 0.75);
+  }
+  .tab-button .tab-status {
+    display: inline-flex;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(34, 48, 58, 0.1);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+  }
+  .tab-button.active .tab-status {
+    background: rgba(248, 250, 252, 0.18);
+  }
+  .tab-panel {
+    display: none;
+  }
+  .tab-panel.active {
+    display: block;
+    animation: fade-in 160ms ease-out;
+  }
+  .module-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .module-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .module-mini-card {
+    background: #fcfaf5;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .module-mini-card h3 {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
+    color: #22303a;
+  }
+  .module-callout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 16px 18px;
+    border: 1px dashed rgba(91, 106, 115, 0.35);
+    border-radius: 18px;
+    background: rgba(244, 239, 226, 0.62);
+  }
+  .module-callout p {
+    margin: 0;
+  }
+  .terminal-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .terminal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .terminal-slot {
+    background: #fcfaf5;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .terminal-slot h4 {
+    margin: 0 0 8px;
+    font-size: 0.88rem;
+    color: #22303a;
+  }
+  .terminal-art {
+    min-height: 150px;
+    border: 1px dashed rgba(91, 106, 115, 0.35);
+    border-radius: 18px;
+    padding: 18px;
+    background:
+      radial-gradient(circle at top left, rgba(190, 149, 67, 0.12), transparent 40%),
+      linear-gradient(135deg, rgba(244, 239, 226, 0.9), rgba(252, 250, 245, 0.98));
+  }
+  .terminal-art h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+  }
+  .terminal-art p {
+    margin: 0;
+  }
+  .action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 180px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #f8fafc;
+    text-decoration: none;
+    font-weight: 700;
+  }
+  .action-link.secondary {
+    background: #fcfaf5;
+    color: #22303a;
+    border: 1px solid var(--line);
+  }
+  .tab-embed {
+    width: 100%;
+    min-height: 920px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: var(--shadow);
+  }
   @media (max-width: 920px) {
     .cert-ledger {
       grid-template-columns: 1fr;
+    }
+    .module-callout {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .tab-embed {
+      min-height: 760px;
     }
   }
   pre {
@@ -510,6 +670,17 @@ _DASHBOARD_SCRIPT = """
       if (!modal) return;
       modal.close();
       if (image) image.src = "";
+    },
+    openTab(button) {
+      const shell = button.closest("[data-tab-shell]");
+      if (!shell) return;
+      const target = button.dataset.tabTarget || "";
+      shell.querySelectorAll(".tab-button").forEach((node) => {
+        node.classList.toggle("active", node === button);
+      });
+      shell.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.classList.toggle("active", panel.id === target);
+      });
     }
   };
 
@@ -1993,6 +2164,22 @@ def _render_reference_value(value: Any, *, empty_label: str) -> str:
     return f"<p class='subtle'><code>{rendered}</code></p>"
 
 
+def _embed_reference_src(path_value: Any, url_value: Any) -> str:
+    preferred = path_value or url_value
+    if not preferred:
+        return ""
+    text = str(preferred).strip()
+    if not text:
+        return ""
+    if "/exports/" in text:
+        return "/" + text[text.index("exports/") :]
+    if text.startswith("exports/"):
+        return "/" + text
+    if text.startswith(("http://", "https://")):
+        return text
+    return ""
+
+
 def _render_auto_heal_summary_table(summary: Any) -> str:
     if not isinstance(summary, dict) or not summary:
         return "<p class='empty'>No step summary available.</p>"
@@ -2211,6 +2398,267 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
     )
 
 
+def _module_badge(status: str) -> str:
+    normalized = str(status or "unknown").lower()
+    if normalized in {"pass", "ok", "available"}:
+        return f"<span class='badge-ok'>{html.escape(normalized.upper())}</span>"
+    if normalized in {"warn", "warning", "missing", "disabled", "not_run"}:
+        return f"<span class='badge-warn'>{html.escape(normalized.upper())}</span>"
+    return f"<span class='pill warn'>{html.escape(normalized.upper())}</span>"
+
+
+def _tab_status_label(status: str) -> str:
+    normalized = str(status or "not_run").upper()
+    if normalized == "UNKNOWN":
+        return "NOT_RUN"
+    return normalized
+
+
+def _render_terminal_references(
+    *,
+    final_dashboard: Any,
+    final_export: Any,
+    final_status: str,
+    failed_modules: int,
+    modules: dict[str, Any],
+    module_order: list[str],
+) -> str:
+    expected_terminal = modules.get("Final Audit") or {}
+    expected_status = _tab_status_label(expected_terminal.get("status", "not_run"))
+    fallback_module = None
+    fallback_dashboard = ""
+    fallback_export = ""
+    for module_name in reversed(module_order):
+        payload = modules.get(module_name) or {}
+        if not isinstance(payload, dict):
+            continue
+        candidate_dashboard = payload.get("dashboard_url") or payload.get("dashboard_path") or ""
+        candidate_export = payload.get("export_url") or payload.get("artifact_url") or ""
+        if candidate_dashboard or candidate_export:
+            fallback_module = module_name
+            fallback_dashboard = candidate_dashboard
+            fallback_export = candidate_export
+            break
+    terminal_ready = bool(final_dashboard or final_export)
+    fallback_detail = (
+        (
+            "<p class='subtle'><strong>Fallback Dashboard</strong></p>"
+            + _render_reference_value(
+                fallback_dashboard, empty_label="No fallback dashboard recorded."
+            )
+            + "<p class='subtle'><strong>Fallback Export</strong></p>"
+            + _render_reference_value(fallback_export, empty_label="No fallback export recorded.")
+        )
+        if fallback_module
+        else ""
+    )
+    summary_line = (
+        "Terminal artifacts are available for direct review."
+        if terminal_ready
+        else (
+            "Terminal artifacts have not been recorded yet for this pipeline view. "
+            "Final Audit is the expected terminal source."
+        )
+    )
+    empty_state = (
+        ""
+        if terminal_ready
+        else (
+            "<div class='terminal-art'>"
+            "<h3>Awaiting Terminal Artifacts</h3>"
+            f"<p class='subtle'><strong>Expected Terminal Module:</strong> Final Audit ({html.escape(expected_status)})</p>"
+            f"<p class='subtle'><strong>Best Available Fallback:</strong> {html.escape(fallback_module or 'None recorded')}</p>"
+            "<p class='subtle'>No final dashboard or final export was attached to this run. Review the fallback surface below until the terminal certification artifacts land.</p>"
+            f"{fallback_detail}"
+            "</div>"
+        )
+    )
+    return (
+        "<div class='terminal-card'>"
+        f"<p class='subtle'>{html.escape(summary_line)}</p>"
+        "<div class='terminal-grid'>"
+        "<div class='terminal-slot'>"
+        "<h4>Final Dashboard</h4>"
+        f"{_render_reference_value(final_dashboard, empty_label='No final dashboard recorded.')}"
+        "</div>"
+        "<div class='terminal-slot'>"
+        "<h4>Final Export</h4>"
+        f"{_render_reference_value(final_export, empty_label='No final export recorded.')}"
+        "</div>"
+        "<div class='terminal-slot'>"
+        "<h4>Pipeline End State</h4>"
+        f"<p class='subtle'><strong>Status:</strong> {html.escape(final_status.upper())}</p>"
+        f"<p class='subtle'><strong>Blocking Modules:</strong> {failed_modules}</p>"
+        f"<p class='subtle'><strong>Expected Terminal Module:</strong> Final Audit ({html.escape(expected_status)})</p>"
+        "</div>"
+        "</div>"
+        f"{empty_state}"
+        "</div>"
+    )
+
+
+def _render_pipeline_module_panel(module_name: str, payload: dict[str, Any]) -> str:
+    effective_payload = payload if isinstance(payload, dict) and payload else {"status": "not_run"}
+    status = str(effective_payload.get("status", "not_run")).lower()
+    summary = effective_payload.get("summary", {})
+    dashboard_url = effective_payload.get("dashboard_url")
+    dashboard_path = effective_payload.get("dashboard_path")
+    dashboard_ref = dashboard_url or dashboard_path
+    embed_src = _embed_reference_src(dashboard_path, dashboard_url)
+    export_ref = effective_payload.get("export_url") or effective_payload.get("artifact_url")
+    warnings = effective_payload.get("warnings", [])
+    summary_table = _render_auto_heal_summary_table(summary)
+    warning_table = (
+        _render_df(pd.DataFrame({"Warning": [str(item) for item in warnings]}), full_preview=True)
+        if warnings
+        else "<p class='empty'>No module warnings recorded.</p>"
+    )
+    warning_count = len(warnings)
+    summary_keys = len(summary) if isinstance(summary, dict) else 0
+    dashboard_card = (
+        "<div class='card'>"
+        f"<h3>{html.escape(module_name)} Report</h3>"
+        f"<iframe class='tab-embed' src='{html.escape(embed_src, quote=True)}' title='{html.escape(module_name)} report'></iframe>"
+        "<div class='module-callout'>"
+        "<p class='subtle'>If the embedded report does not load in your environment, open the standalone module dashboard directly.</p>"
+        f"<a class='action-link' href='{html.escape(embed_src, quote=True)}' target='_blank' rel='noopener noreferrer'>Open Report Directly</a>"
+        "</div>"
+        "</div>"
+        if embed_src
+        else (
+            "<div class='card'>"
+            f"<h3>{html.escape(module_name)} Report</h3>"
+            "<div class='module-callout'>"
+            "<p class='subtle'>No embeddable dashboard reference was recorded for this module in the current pipeline run.</p>"
+            "<span class='action-link secondary'>Report Unavailable</span>"
+            "</div>"
+            "</div>"
+        )
+    )
+    if status == "not_run":
+        not_run_note = (
+            "<div class='card'>"
+            f"<h3>{html.escape(module_name)} Not Run</h3>"
+            "<p class='subtle'>This module was not observed in the current pipeline execution. That may be expected if prerequisites were skipped or the flow terminated early.</p>"
+            "</div>"
+        )
+    else:
+        not_run_note = ""
+    return (
+        "<div class='module-shell'>"
+        "<div class='module-mini-grid'>"
+        "<div class='module-mini-card'>"
+        "<h3>Module Status</h3>"
+        f"{_metric_value(status.upper())}"
+        f"<p class='subtle'>{html.escape(module_name)} latest recorded state.</p>"
+        "</div>"
+        "<div class='module-mini-card'>"
+        "<h3>Warnings</h3>"
+        f"{_metric_value(warning_count)}"
+        "<p class='subtle'>Review warnings and operator notes before treating the module as complete.</p>"
+        "</div>"
+        "<div class='module-mini-card'>"
+        "<h3>Summary Fields</h3>"
+        f"{_metric_value(summary_keys)}"
+        "<p class='subtle'>Top-level summary values recorded for this stage.</p>"
+        "</div>"
+        "</div>"
+        "<div class='cert-ledger'>"
+        "<div class='card'>"
+        "<h3>Artifact References</h3>"
+        "<p class='subtle'><strong>Dashboard</strong></p>"
+        f"{_render_reference_value(dashboard_ref, empty_label='No dashboard artifact recorded.')}"
+        "<p class='subtle'><strong>Data Export</strong></p>"
+        f"{_render_reference_value(export_ref, empty_label='No data artifact recorded.')}"
+        "</div>"
+        f"<div class='card'><h3>{html.escape(module_name)} Summary</h3>{summary_table}{warning_table if warning_count else ''}</div>"
+        "</div>"
+        f"{not_run_note}"
+        f"{dashboard_card}"
+        "</div>"
+    )
+
+
+def _render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
+    final_status = str(report.get("final_status", "unknown"))
+    session_id = str(report.get("session_id", ""))
+    health_score = report.get("health_score", "N/A")
+    health_status = str(report.get("health_status", "unknown")).upper()
+    ready_modules = int(report.get("ready_modules", 0))
+    warned_modules = int(report.get("warned_modules", 0))
+    failed_modules = int(report.get("failed_modules", 0))
+    not_run_modules = int(report.get("not_run_modules", 0))
+    module_order = report.get("module_order", [])
+    modules = report.get("modules", {})
+    final_dashboard = report.get("final_dashboard_url") or report.get("final_dashboard_path")
+    final_export = report.get("final_export_url")
+
+    banner_class = "ok" if failed_modules == 0 else "warn"
+    banner = (
+        f"<div class='banner {banner_class}'>"
+        "<div class='banner-item'><strong>Stage:</strong> Pipeline Review Shell</div>"
+        f"<div class='banner-item'><strong>Final Status:</strong> {html.escape(final_status.upper())}</div>"
+        f"<div class='banner-item'><strong>Health:</strong> {html.escape(str(health_score))} ({html.escape(health_status)})</div>"
+        f"<div class='banner-item'><strong>Session:</strong> {html.escape(session_id or 'Unavailable')}</div>"
+        f"<div class='banner-item'><strong>Modules:</strong> {len(module_order)}</div>"
+        "</div>"
+    )
+
+    executive = (
+        "<div class='stack'>"
+        "<div class='cert-grid'>"
+        "<div class='cert-stat-card'><h3>Healthy Modules</h3>"
+        f"{_metric_value(ready_modules)}"
+        "<p class='subtle'>Modules with pass-level outcomes.</p></div>"
+        "<div class='cert-stat-card'><h3>Warned Modules</h3>"
+        f"{_metric_value(warned_modules)}"
+        "<p class='subtle'>Modules that need review but did not fail outright.</p></div>"
+        "<div class='cert-stat-card'><h3>Failed Modules</h3>"
+        f"{_metric_value(failed_modules)}"
+        "<p class='subtle'>Blocking modules or missing end-state evidence.</p></div>"
+        "<div class='cert-stat-card'><h3>Not Run</h3>"
+        f"{_metric_value(not_run_modules)}"
+        "<p class='subtle'>Pipeline stages not observed in the current run history.</p></div>"
+        "</div>"
+        "<div class='cert-ledger'>"
+        "<div class='card'><h3>Final References</h3>"
+        f"{_render_terminal_references(final_dashboard=final_dashboard, final_export=final_export, final_status=final_status, failed_modules=failed_modules, modules=modules, module_order=module_order)}"
+        "</div>"
+        f"<div class='card'><h3>Module Status Ledger</h3>{_render_df(pd.DataFrame([{'Module': name, 'Status': _tab_status_label((modules.get(name) or {}).get('status', 'unknown')), 'Badge': _module_badge(_tab_status_label((modules.get(name) or {}).get('status', 'unknown')))} for name in module_order]), full_preview=True, allow_html_cols={'Badge'})}</div>"
+        "</div>"
+        "</div>"
+    )
+
+    tab_buttons = [
+        "<button class='tab-button active' type='button' data-tab-target='pipeline-overview' onclick='window.atkDashboard.openTab(this)'>Executive Summary</button>"
+    ]
+    tab_panels = [f"<div class='tab-panel active' id='pipeline-overview'>{executive}</div>"]
+    for module_name in module_order:
+        panel_id = f"pipeline-{_slugify(module_name)}"
+        status = _tab_status_label((modules.get(module_name) or {}).get("status", "unknown"))
+        tab_buttons.append(
+            f"<button class='tab-button' type='button' data-tab-target='{panel_id}' onclick='window.atkDashboard.openTab(this)'>{html.escape(module_name)}<span class='tab-status'>{html.escape(status)}</span></button>"
+        )
+        tab_panels.append(
+            f"<div class='tab-panel' id='{panel_id}'>{_render_pipeline_module_panel(module_name, modules.get(module_name, {}))}</div>"
+        )
+
+    sections = [
+        "<div class='tab-shell' data-tab-shell='pipeline'>"
+        f"<div class='tab-nav'>{''.join(tab_buttons)}</div>"
+        f"{''.join(tab_panels)}"
+        "</div>"
+    ]
+    toc: list[tuple[str, str]] = []
+    return _assemble_page(
+        module_name="Pipeline Dashboard",
+        run_id=run_id,
+        banner_html=banner,
+        toc_items=toc,
+        sections=sections,
+    )
+
+
 def generate_dashboard_html(
     report_tables: dict[str, Any],
     module_name: str,
@@ -2237,4 +2685,6 @@ def generate_dashboard_html(
         return _render_imputation_dashboard(report_tables, run_id, plot_paths)
     if normalized == "auto heal":
         return _render_auto_heal_dashboard(report_tables, run_id)
+    if normalized == "pipeline dashboard":
+        return _render_pipeline_dashboard(report_tables, run_id)
     return _render_generic_dashboard(report_tables, module_name, run_id, plot_paths)

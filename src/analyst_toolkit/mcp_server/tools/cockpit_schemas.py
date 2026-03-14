@@ -71,3 +71,15 @@ DATA_HEALTH_REPORT_INPUT_SCHEMA = {
     },
     "required": ["run_id"],
 }
+
+PIPELINE_DASHBOARD_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "run_id": {"type": "string"},
+        "session_id": {
+            "type": "string",
+            "description": "Optional session scope. Recommended when reusing run_id values.",
+        },
+    },
+    "required": ["run_id"],
+}

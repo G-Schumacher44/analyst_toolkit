@@ -286,6 +286,152 @@ def test_generate_auto_heal_dashboard_renders_drilldowns_and_sanitized_errors():
     assert "trace123" in html
 
 
+def test_generate_pipeline_dashboard_renders_tabs_and_exec_summary():
+    report = {
+        "final_status": "warn",
+        "session_id": "sess_pipeline",
+        "health_score": 84,
+        "health_status": "green",
+        "ready_modules": 4,
+        "warned_modules": 2,
+        "failed_modules": 1,
+        "not_run_modules": 4,
+        "module_order": [
+            "Diagnostics",
+            "Auto Heal",
+            "Normalization",
+            "Duplicates",
+            "Outliers",
+            "Outlier Handling",
+            "Imputation",
+            "Validation",
+            "Final Audit",
+        ],
+        "modules": {
+            "Diagnostics": {
+                "status": "pass",
+                "summary": {"rows": 100, "null_rate": 0.01},
+                "dashboard_url": "https://example.com/diag.html",
+                "dashboard_path": "",
+                "artifact_url": "",
+                "export_url": "gs://bucket/diag.csv",
+                "warnings": [],
+            },
+            "Validation": {
+                "status": "warn",
+                "summary": {"passed": False, "failed_rules": 2},
+                "dashboard_url": "",
+                "dashboard_path": "exports/reports/validation/run_val.html",
+                "artifact_url": "",
+                "export_url": "",
+                "warnings": ["rule mismatch"],
+            },
+            "Outlier Handling": {
+                "status": "not_run",
+                "summary": {},
+                "dashboard_url": "",
+                "dashboard_path": "",
+                "artifact_url": "",
+                "export_url": "",
+                "warnings": [],
+            },
+            "Final Audit": {
+                "status": "fail",
+                "summary": {"passed": False},
+                "dashboard_url": "",
+                "dashboard_path": "exports/reports/final_audit/run_final.html",
+                "artifact_url": "",
+                "export_url": "gs://bucket/final.csv",
+                "warnings": [],
+            },
+        },
+        "final_dashboard_url": "https://example.com/final.html",
+        "final_dashboard_path": "",
+        "final_export_url": "gs://bucket/final.csv",
+    }
+
+    html = generate_html_report(report, "Pipeline Dashboard", "run-pipeline-001")
+
+    assert "Pipeline Review Shell" in html
+    assert "Executive Summary" in html
+    assert "Diagnostics" in html
+    assert "Auto Heal" in html
+    assert "Outlier Handling" in html
+    assert "Validation" in html
+    assert "Final Audit" in html
+    assert "<span class='tab-status'>PASS</span>" in html
+    assert "<span class='tab-status'>NOT_RUN</span>" in html
+    assert "<span class='tab-status'>WARN</span>" in html
+    assert "<span class='tab-status'>FAIL</span>" in html
+    assert "Not Run" in html
+    assert "window.atkDashboard.openTab" in html
+    assert "Final References" in html
+    assert "Terminal artifacts are available for direct review." in html
+    assert "Pipeline End State" in html
+    assert "Open Report Directly" in html
+    assert "Not Run" in html
+    assert "No embeddable dashboard reference was recorded" in html
+    assert "tab-embed" in html
+    assert "<iframe" in html
+    assert "https://example.com/diag.html" in html
+    assert "src='/exports/reports/validation/run_val.html'" in html
+    assert "src='/exports/reports/final_audit/run_final.html'" in html
+
+
+def test_generate_pipeline_dashboard_surfaces_terminal_fallback_when_final_artifacts_missing():
+    report = {
+        "final_status": "warn",
+        "session_id": "sess_pipeline",
+        "health_score": 84,
+        "health_status": "green",
+        "ready_modules": 2,
+        "warned_modules": 1,
+        "failed_modules": 1,
+        "not_run_modules": 5,
+        "module_order": ["Diagnostics", "Validation", "Final Audit"],
+        "modules": {
+            "Diagnostics": {
+                "status": "pass",
+                "summary": {"rows": 100},
+                "dashboard_url": "",
+                "dashboard_path": "exports/reports/diagnostics/sample_diag.html",
+                "artifact_url": "",
+                "export_url": "gs://bucket/diag.csv",
+                "warnings": [],
+            },
+            "Validation": {
+                "status": "warn",
+                "summary": {"passed": False},
+                "dashboard_url": "",
+                "dashboard_path": "exports/reports/validation/sample_validation.html",
+                "artifact_url": "",
+                "export_url": "",
+                "warnings": [],
+            },
+            "Final Audit": {
+                "status": "not_run",
+                "summary": {},
+                "dashboard_url": "",
+                "dashboard_path": "",
+                "artifact_url": "",
+                "export_url": "",
+                "warnings": [],
+            },
+        },
+        "final_dashboard_url": "",
+        "final_dashboard_path": "",
+        "final_export_url": "",
+    }
+
+    html = generate_html_report(report, "Pipeline Dashboard", "run-pipeline-missing-final")
+
+    assert "Awaiting Terminal Artifacts" in html
+    assert "Expected Terminal Module:</strong> Final Audit (NOT_RUN)" in html
+    assert "Best Available Fallback:</strong> Validation" in html
+    assert "Fallback Dashboard" in html
+    assert "exports/reports/validation/sample_validation.html" in html
+
+
 def test_generate_imputation_dashboard_renders_summary_shift_and_plots(tmp_path):
     plot_path = tmp_path / "imputation.png"
     plot_path.write_bytes(_ONE_PIXEL_PNG)
