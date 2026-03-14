@@ -6,19 +6,21 @@ from typing import Any
 
 import pandas as pd
 
+from analyst_toolkit.m00_utils.dashboard_auto_heal import render_auto_heal_dashboard
 from analyst_toolkit.m00_utils.dashboard_certification import (
     render_final_audit_dashboard,
     render_validation_dashboard,
 )
 from analyst_toolkit.m00_utils.dashboard_core import _assemble_page
-from analyst_toolkit.m00_utils.dashboard_modules import (
-    render_auto_heal_dashboard,
-    render_diagnostics_dashboard,
+from analyst_toolkit.m00_utils.dashboard_data_prep import (
     render_duplicates_dashboard,
     render_imputation_dashboard,
     render_normalization_dashboard,
     render_outlier_detection_dashboard,
     render_outlier_handling_dashboard,
+)
+from analyst_toolkit.m00_utils.dashboard_diagnostics import (
+    render_diagnostics_dashboard,
 )
 from analyst_toolkit.m00_utils.dashboard_plots import render_plot_grid
 from analyst_toolkit.m00_utils.dashboard_shared import _display_name, _render_section

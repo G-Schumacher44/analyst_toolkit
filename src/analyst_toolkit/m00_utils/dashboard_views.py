@@ -39,6 +39,272 @@ def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = Tr
     )
 
 
+def _render_cockpit_overview(
+    overview: dict[str, Any],
+    operating_posture: dict[str, Any],
+    operator_brief: dict[str, Any],
+    best_surfaces: dict[str, Any],
+    blockers: list[dict[str, Any]],
+    recent_run_gaps: list[Any],
+) -> str:
+    brief_lanes = "".join(
+        "<div class='brief-lane'>"
+        f"<h4>{html.escape(str(item.get('title', 'Lane')))}</h4>"
+        f"<p>{html.escape(str(item.get('detail', '')))}</p>"
+        "</div>"
+        for item in operator_brief.get("lanes", [])
+        if isinstance(item, dict)
+    )
+    surface_items = []
+    for label, payload in (
+        ("Latest Pipeline Dashboard", best_surfaces.get("pipeline_dashboard", {})),
+        ("Latest Auto-Heal Dashboard", best_surfaces.get("auto_heal_dashboard", {})),
+        ("Latest Final Audit Dashboard", best_surfaces.get("final_audit_dashboard", {})),
+    ):
+        surface_items.append(
+            "<div class='surface-item'>"
+            f"<h4>{html.escape(label)}</h4>"
+            f"<p class='subtle'><strong>Run:</strong> {html.escape(str((payload or {}).get('run_id') or 'Unavailable'))}</p>"
+            f"{_render_reference_value((payload or {}).get('reference', ''), empty_label='No artifact recorded.')}"
+            "</div>"
+        )
+
+    blocker_items = []
+    for item in blockers:
+        blocker_items.append(
+            "<div class='surface-item'>"
+            f"<h4>{html.escape(str(item.get('run_id', 'unknown')))} · {html.escape(str(item.get('status', 'UNKNOWN')))}</h4>"
+            f"<p class='subtle'><strong>Latest module:</strong> {html.escape(str(item.get('latest_module', 'unknown')))}</p>"
+            f"<p class='subtle'><strong>Warnings recorded:</strong> {html.escape(str(item.get('warning_count', 0)))}</p>"
+            "</div>"
+        )
+    blocker_fallback_html = "<p class='empty'>No warn/fail runs in the current cockpit slice.</p>"
+    gap_items = "".join(
+        "<div class='surface-item'>"
+        "<h4>Missing Dashboard Or Artifact</h4>"
+        f"<p class='subtle'>{html.escape(str(item))}</p>"
+        "</div>"
+        for item in recent_run_gaps
+        if str(item).strip()
+    )
+    gaps_panel = (
+        "<div class='readme-section'>"
+        "<h3>Missing Dashboards Or Artifacts</h3>"
+        "<p class='subtle'>These are recent runs where the cockpit could not find an expected dashboard or artifact reference.</p>"
+        "<div class='missing-list'>"
+        f"{gap_items}"
+        "</div>"
+        "</div>"
+        if gap_items
+        else ""
+    )
+    return (
+        "<div class='hub-stack'>"
+        "<div class='brief-card'>"
+        f"<p class='hub-kicker'>{html.escape(str(operator_brief.get('title', 'Cockpit Briefing')))}</p>"
+        "<h3>What This Cockpit Helps You Review</h3>"
+        f"<p>{html.escape(str(operator_brief.get('summary', '')))}</p>"
+        "<p><strong>This page is organized into three simple lanes:</strong></p>"
+        f"<div class='brief-lanes'>{brief_lanes}</div>"
+        "</div>"
+        "<div class='hub-grid'>"
+        "<div class='hub-card'><p class='hub-kicker'>Ops Snapshot</p><h3>Recent Runs</h3>"
+        f"{_metric_value(overview.get('recent_run_count', 0))}"
+        "<p class='subtle'>History-backed runs discovered from local cockpit data.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Attention</p><h3>Warning Runs</h3>"
+        f"{_metric_value(overview.get('warning_runs', 0))}"
+        "<p class='subtle'>Runs that ended in warn-level states and likely need review.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Blocking</p><h3>Failed Runs</h3>"
+        f"{_metric_value(overview.get('failed_runs', 0))}"
+        "<p class='subtle'>Runs with fail/error end states in the recent cockpit slice.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Stable</p><h3>Healthy Runs</h3>"
+        f"{_metric_value(overview.get('healthy_runs', 0))}"
+        "<p class='subtle'>Recent runs that currently look safe to treat as pass-level outcomes.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Coverage</p><h3>Pipeline Dashboards</h3>"
+        f"{_metric_value(overview.get('pipeline_dashboards_available', 0))}"
+        "<p class='subtle'>Recent runs that already have a pipeline dashboard artifact available.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Coverage</p><h3>Auto-Heal Dashboards</h3>"
+        f"{_metric_value(overview.get('auto_heal_dashboards_available', 0))}"
+        "<p class='subtle'>Recent runs with an operator-facing remediation dashboard already attached.</p></div>"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>Current Alerts And Blockers</h3>"
+        "<div class='alert-list'>"
+        f"{''.join(blocker_items) if blocker_items else blocker_fallback_html}"
+        "</div>"
+        "</div>"
+        "<div class='overview-split'>"
+        "<div class='overview-column'>"
+        "<div class='readme-section'>"
+        "<h3>Recent Run Dashboards</h3>"
+        "<div class='surface-list'>"
+        f"{''.join(surface_items)}"
+        "</div>"
+        "</div>"
+        "</div>"
+        f"{gaps_panel}"
+        "</div>"
+        "</div>"
+    )
+
+
+def _render_cockpit_recent_runs(recent_runs: list[dict[str, Any]]) -> str:
+    recent_run_cards: list[str] = []
+    for run in recent_runs:
+        dashboard_ref = run.get("pipeline_dashboard") or run.get("best_dashboard")
+        export_ref = run.get("best_export")
+        recent_run_cards.append(
+            "<div class='resource-card'>"
+            f"<p class='resource-meta'>{html.escape(str(run.get('timestamp') or 'Recent run'))}</p>"
+            f"<h3>{html.escape(str(run.get('run_id', 'unknown')))}</h3>"
+            f"{_status_chip(str(run.get('status', 'unknown')))}"
+            "<div class='module-mini-grid'>"
+            "<div class='module-mini-card'><h3>Status</h3>"
+            f"{_metric_value(_tab_status_label(run.get('status', 'unknown')))}"
+            f"<p class='subtle'>Latest module: {html.escape(str(run.get('latest_module', 'unknown')))}</p></div>"
+            "<div class='module-mini-card'><h3>Health</h3>"
+            f"{_metric_value(run.get('health_score', 'N/A'))}"
+            f"<p class='subtle'>{html.escape(str(run.get('health_status', 'unknown')).upper())}</p></div>"
+            "<div class='module-mini-card'><h3>Warnings</h3>"
+            f"{_metric_value(run.get('warning_count', 0))}"
+            f"<p class='subtle'>Modules observed: {html.escape(str(run.get('module_count', 0)))}</p></div>"
+            "</div>"
+            "<p class='subtle'><strong>Session:</strong> "
+            f"{html.escape(str(run.get('session_id') or 'Unavailable'))}</p>"
+            "<p class='subtle'><strong>Best Dashboard</strong></p>"
+            f"{_render_reference_value(dashboard_ref, empty_label='No dashboard recorded.')}"
+            "<p class='subtle'><strong>Best Export</strong></p>"
+            f"{_render_reference_value(export_ref, empty_label='No export recorded.')}"
+            "</div>"
+        )
+    return (
+        "<div class='hub-stack'>" + "".join(recent_run_cards) + "</div>"
+        if recent_run_cards
+        else "<p class='empty'>No recent runs were discovered in local history.</p>"
+    )
+
+
+def _render_cockpit_resources(
+    resources: list[dict[str, Any]], resource_groups: list[dict[str, Any]]
+) -> str:
+    grouped_resources: list[str] = []
+    template_items = [item for item in resources if str(item.get("Kind", "")).lower() == "template"]
+    reference_items = [
+        item for item in resources if str(item.get("Kind", "")).lower() != "template"
+    ]
+    for group in resource_groups:
+        group_items = group.get("items", [])
+        if str(group.get("title", "")).lower() == "templates and contracts":
+            group_items = template_items
+        items_html = []
+        for item in group_items:
+            items_html.append(_render_resource_inline_item(item, show_detail=True))
+        grouped_resources.append(
+            "<div class='readme-section'>"
+            f"<h3>{html.escape(str(group.get('title', 'Resources')))}</h3>"
+            f"<p class='subtle'>{html.escape(str(group.get('intro', '')))}</p>"
+            "<div class='resource-inline-list scroll-pane'>"
+            f"{''.join(items_html)}"
+            "</div>"
+            "</div>"
+        )
+    all_resource_refs = "".join(
+        _render_resource_inline_item(item, show_detail=False) for item in reference_items
+    )
+    return (
+        "<div class='readme-grid'>"
+        "<div class='readme-section'>"
+        "<h3>Resources For Reading, Planning, And Setup</h3>"
+        "<p class='subtle'>Use this tab when you want context before you click deeper. The guides explain the toolkit in plain language, the templates give you safe starting points, and the catalog helps when you need the exact setting behind a visible behavior.</p>"
+        "</div>"
+        "<div class='resource-group-grid'>"
+        f"{''.join(grouped_resources)}"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>All References</h3>"
+        "<p class='subtle'>This is the compact shelf of guides, catalogs, and other non-template references linked from the cockpit.</p>"
+        "<div class='resource-inline-list scroll-pane'>"
+        f"{all_resource_refs}"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+
+
+def _render_cockpit_launchpad(
+    launchpad: list[dict[str, Any]], launch_sequences: list[dict[str, Any]]
+) -> str:
+    sequence_cards = []
+    for sequence in launch_sequences:
+        steps_html = "".join(
+            f"<li>{html.escape(str(step))}</li>"
+            for step in sequence.get("steps", [])
+            if str(step).strip()
+        )
+        sequence_cards.append(
+            "<div class='sequence-card'>"
+            f"<h3>{html.escape(str(sequence.get('title', 'Workflow')))}</h3>"
+            f"<ol class='sequence-list'>{steps_html}</ol>"
+            "</div>"
+        )
+    launch_cards = []
+    for item in launchpad:
+        launch_cards.append(
+            "<div class='launch-item'>"
+            "<p class='resource-meta'>Open This Next</p>"
+            f"<h3>{html.escape(str(item.get('Action', 'Action')))}</h3>"
+            f"<p class='subtle'>{html.escape(str(item.get('Why', '')))}</p>"
+            f"<p class='subtle'><strong>Tool surface:</strong> {html.escape(str(item.get('Tool', 'tool')))}</p>"
+            "</div>"
+        )
+    return (
+        "<div class='readme-grid'>"
+        "<div class='readme-section'>"
+        "<h3>Launchpad For Moving From Review To Action</h3>"
+        "<p class='subtle'>Use this tab when you are ready to move from understanding the run to doing something about it. The workflow cards show the common paths people take through the toolkit, and the cards below point to the specific surfaces that support those tasks.</p>"
+        "</div>"
+        "<div class='sequence-grid'>"
+        f"{''.join(sequence_cards)}"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>Things You Can Open Next</h3>"
+        "<div class='launch-list'>"
+        f"{''.join(launch_cards)}"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+
+
+def _render_cockpit_dictionary(data_dictionary: dict[str, Any]) -> str:
+    return (
+        "<div class='readme-grid'>"
+        "<div class='brief-card'>"
+        "<p class='hub-kicker'>Planned Surface</p>"
+        "<h3>Data Dictionary Lane</h3>"
+        f"<p>{html.escape(str(data_dictionary.get('direction', '')))}</p>"
+        "</div>"
+        "<div class='hub-grid'>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Status</p>"
+        "<h3>Data Dictionary</h3>"
+        f"{_status_chip(str(data_dictionary.get('status', 'not_implemented')))}"
+        "<p class='subtle'>Reserve the future prelaunch dictionary and schema-expectation surface in the cockpit.</p>"
+        "<p class='subtle'><strong>Template</strong></p>"
+        f"{_render_reference_value(data_dictionary.get('template_path', ''), empty_label='No template recorded.')}"
+        "<p class='subtle'><strong>Plan</strong></p>"
+        f"{_render_reference_value(data_dictionary.get('implementation_plan', ''), empty_label='No plan recorded.')}"
+        "</div>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Why It Matters</p>"
+        "<h3>Prelaunch Report Space</h3>"
+        "<p class='subtle'>This tab exists so the eventual dictionary does not feel bolted on later. It should sit beside the rest of the operator surfaces, inherit infer_configs evidence, and give users a readable preflight view before the heavier pipeline stages run.</p>"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+
+
 def _render_terminal_references(
     *,
     final_dashboard: Any,
@@ -323,247 +589,18 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
         "</div>"
     )
 
-    brief_lanes = "".join(
-        "<div class='brief-lane'>"
-        f"<h4>{html.escape(str(item.get('title', 'Lane')))}</h4>"
-        f"<p>{html.escape(str(item.get('detail', '')))}</p>"
-        "</div>"
-        for item in operator_brief.get("lanes", [])
-        if isinstance(item, dict)
+    overview_section = _render_cockpit_overview(
+        overview,
+        operating_posture,
+        operator_brief,
+        best_surfaces,
+        blockers,
+        recent_run_gaps,
     )
-    surface_items = []
-    for label, payload in (
-        ("Latest Pipeline Dashboard", best_surfaces.get("pipeline_dashboard", {})),
-        ("Latest Auto-Heal Dashboard", best_surfaces.get("auto_heal_dashboard", {})),
-        ("Latest Final Audit Dashboard", best_surfaces.get("final_audit_dashboard", {})),
-    ):
-        surface_items.append(
-            "<div class='surface-item'>"
-            f"<h4>{html.escape(label)}</h4>"
-            f"<p class='subtle'><strong>Run:</strong> {html.escape(str((payload or {}).get('run_id') or 'Unavailable'))}</p>"
-            f"{_render_reference_value((payload or {}).get('reference', ''), empty_label='No artifact recorded.')}"
-            "</div>"
-        )
-    blocker_items = []
-    for item in blockers:
-        blocker_items.append(
-            "<div class='surface-item'>"
-            f"<h4>{html.escape(str(item.get('run_id', 'unknown')))} · {html.escape(str(item.get('status', 'UNKNOWN')))}</h4>"
-            f"<p class='subtle'><strong>Latest module:</strong> {html.escape(str(item.get('latest_module', 'unknown')))}</p>"
-            f"<p class='subtle'><strong>Warnings recorded:</strong> {html.escape(str(item.get('warning_count', 0)))}</p>"
-            "</div>"
-        )
-    blocker_fallback_html = "<p class='empty'>No warn/fail runs in the current cockpit slice.</p>"
-    gap_items = "".join(
-        "<div class='surface-item'>"
-        "<h4>Missing Dashboard Or Artifact</h4>"
-        f"<p class='subtle'>{html.escape(str(item))}</p>"
-        "</div>"
-        for item in recent_run_gaps
-        if str(item).strip()
-    )
-    gaps_panel = (
-        "<div class='readme-section'>"
-        "<h3>Missing Dashboards Or Artifacts</h3>"
-        "<p class='subtle'>These are recent runs where the cockpit could not find an expected dashboard or artifact reference.</p>"
-        "<div class='missing-list'>"
-        f"{gap_items}"
-        "</div>"
-        "</div>"
-        if gap_items
-        else ""
-    )
-    overview_section = (
-        "<div class='hub-stack'>"
-        "<div class='brief-card'>"
-        f"<p class='hub-kicker'>{html.escape(str(operator_brief.get('title', 'Cockpit Briefing')))}</p>"
-        "<h3>What This Cockpit Helps You Review</h3>"
-        f"<p>{html.escape(str(operator_brief.get('summary', '')))}</p>"
-        "<p><strong>This page is organized into three simple lanes:</strong></p>"
-        f"<div class='brief-lanes'>{brief_lanes}</div>"
-        "</div>"
-        "<div class='hub-grid'>"
-        "<div class='hub-card'><p class='hub-kicker'>Ops Snapshot</p><h3>Recent Runs</h3>"
-        f"{_metric_value(overview.get('recent_run_count', 0))}"
-        "<p class='subtle'>History-backed runs discovered from local cockpit data.</p></div>"
-        "<div class='hub-card'><p class='hub-kicker'>Attention</p><h3>Warning Runs</h3>"
-        f"{_metric_value(overview.get('warning_runs', 0))}"
-        "<p class='subtle'>Runs that ended in warn-level states and likely need review.</p></div>"
-        "<div class='hub-card'><p class='hub-kicker'>Blocking</p><h3>Failed Runs</h3>"
-        f"{_metric_value(overview.get('failed_runs', 0))}"
-        "<p class='subtle'>Runs with fail/error end states in the recent cockpit slice.</p></div>"
-        "<div class='hub-card'><p class='hub-kicker'>Stable</p><h3>Healthy Runs</h3>"
-        f"{_metric_value(overview.get('healthy_runs', 0))}"
-        "<p class='subtle'>Recent runs that currently look safe to treat as pass-level outcomes.</p></div>"
-        "<div class='hub-card'><p class='hub-kicker'>Coverage</p><h3>Pipeline Dashboards</h3>"
-        f"{_metric_value(overview.get('pipeline_dashboards_available', 0))}"
-        "<p class='subtle'>Recent runs that already have a pipeline dashboard artifact available.</p></div>"
-        "<div class='hub-card'><p class='hub-kicker'>Coverage</p><h3>Auto-Heal Dashboards</h3>"
-        f"{_metric_value(overview.get('auto_heal_dashboards_available', 0))}"
-        "<p class='subtle'>Recent runs with an operator-facing remediation dashboard already attached.</p></div>"
-        "</div>"
-        "<div class='readme-section'>"
-        "<h3>Current Alerts And Blockers</h3>"
-        "<div class='alert-list'>"
-        f"{''.join(blocker_items) if blocker_items else blocker_fallback_html}"
-        "</div>"
-        "</div>"
-        "<div class='overview-split'>"
-        "<div class='overview-column'>"
-        "<div class='readme-section'>"
-        "<h3>Recent Run Dashboards</h3>"
-        "<div class='surface-list'>"
-        f"{''.join(surface_items)}"
-        "</div>"
-        "</div>"
-        "</div>"
-        f"{gaps_panel}"
-        "</div>"
-        "</div>"
-    )
-
-    recent_run_cards: list[str] = []
-    for run in recent_runs:
-        dashboard_ref = run.get("pipeline_dashboard") or run.get("best_dashboard")
-        export_ref = run.get("best_export")
-        recent_run_cards.append(
-            "<div class='resource-card'>"
-            f"<p class='resource-meta'>{html.escape(str(run.get('timestamp') or 'Recent run'))}</p>"
-            f"<h3>{html.escape(str(run.get('run_id', 'unknown')))}</h3>"
-            f"{_status_chip(str(run.get('status', 'unknown')))}"
-            "<div class='module-mini-grid'>"
-            "<div class='module-mini-card'><h3>Status</h3>"
-            f"{_metric_value(_tab_status_label(run.get('status', 'unknown')))}"
-            f"<p class='subtle'>Latest module: {html.escape(str(run.get('latest_module', 'unknown')))}</p></div>"
-            "<div class='module-mini-card'><h3>Health</h3>"
-            f"{_metric_value(run.get('health_score', 'N/A'))}"
-            f"<p class='subtle'>{html.escape(str(run.get('health_status', 'unknown')).upper())}</p></div>"
-            "<div class='module-mini-card'><h3>Warnings</h3>"
-            f"{_metric_value(run.get('warning_count', 0))}"
-            f"<p class='subtle'>Modules observed: {html.escape(str(run.get('module_count', 0)))}</p></div>"
-            "</div>"
-            "<p class='subtle'><strong>Session:</strong> "
-            f"{html.escape(str(run.get('session_id') or 'Unavailable'))}</p>"
-            "<p class='subtle'><strong>Best Dashboard</strong></p>"
-            f"{_render_reference_value(dashboard_ref, empty_label='No dashboard recorded.')}"
-            "<p class='subtle'><strong>Best Export</strong></p>"
-            f"{_render_reference_value(export_ref, empty_label='No export recorded.')}"
-            "</div>"
-        )
-    recent_runs_section = (
-        "<div class='hub-stack'>" + "".join(recent_run_cards) + "</div>"
-        if recent_run_cards
-        else "<p class='empty'>No recent runs were discovered in local history.</p>"
-    )
-
-    grouped_resources: list[str] = []
-    template_items = [item for item in resources if str(item.get("Kind", "")).lower() == "template"]
-    reference_items = [
-        item for item in resources if str(item.get("Kind", "")).lower() != "template"
-    ]
-    for group in resource_groups:
-        group_items = group.get("items", [])
-        if str(group.get("title", "")).lower() == "templates and contracts":
-            group_items = template_items
-        items_html = []
-        for item in group_items:
-            items_html.append(_render_resource_inline_item(item, show_detail=True))
-        grouped_resources.append(
-            "<div class='readme-section'>"
-            f"<h3>{html.escape(str(group.get('title', 'Resources')))}</h3>"
-            f"<p class='subtle'>{html.escape(str(group.get('intro', '')))}</p>"
-            "<div class='resource-inline-list scroll-pane'>"
-            f"{''.join(items_html)}"
-            "</div>"
-            "</div>"
-        )
-    all_resource_refs = "".join(
-        _render_resource_inline_item(item, show_detail=False) for item in reference_items
-    )
-    resources_panel = (
-        "<div class='readme-grid'>"
-        "<div class='readme-section'>"
-        "<h3>Resources For Reading, Planning, And Setup</h3>"
-        "<p class='subtle'>Use this tab when you want context before you click deeper. The guides explain the toolkit in plain language, the templates give you safe starting points, and the catalog helps when you need the exact setting behind a visible behavior.</p>"
-        "</div>"
-        "<div class='resource-group-grid'>"
-        f"{''.join(grouped_resources)}"
-        "</div>"
-        "<div class='readme-section'>"
-        "<h3>All References</h3>"
-        "<p class='subtle'>This is the compact shelf of guides, catalogs, and other non-template references linked from the cockpit.</p>"
-        "<div class='resource-inline-list scroll-pane'>"
-        f"{all_resource_refs}"
-        "</div>"
-        "</div>"
-        "</div>"
-    )
-    sequence_cards = []
-    for sequence in launch_sequences:
-        steps_html = "".join(
-            f"<li>{html.escape(str(step))}</li>"
-            for step in sequence.get("steps", [])
-            if str(step).strip()
-        )
-        sequence_cards.append(
-            "<div class='sequence-card'>"
-            f"<h3>{html.escape(str(sequence.get('title', 'Workflow')))}</h3>"
-            f"<ol class='sequence-list'>{steps_html}</ol>"
-            "</div>"
-        )
-    launch_cards = []
-    for item in launchpad:
-        launch_cards.append(
-            "<div class='launch-item'>"
-            "<p class='resource-meta'>Open This Next</p>"
-            f"<h3>{html.escape(str(item.get('Action', 'Action')))}</h3>"
-            f"<p class='subtle'>{html.escape(str(item.get('Why', '')))}</p>"
-            f"<p class='subtle'><strong>Tool surface:</strong> {html.escape(str(item.get('Tool', 'tool')))}</p>"
-            "</div>"
-        )
-    launchpad_panel = (
-        "<div class='readme-grid'>"
-        "<div class='readme-section'>"
-        "<h3>Launchpad For Moving From Review To Action</h3>"
-        "<p class='subtle'>Use this tab when you are ready to move from understanding the run to doing something about it. The workflow cards show the common paths people take through the toolkit, and the cards below point to the specific surfaces that support those tasks.</p>"
-        "</div>"
-        "<div class='sequence-grid'>"
-        f"{''.join(sequence_cards)}"
-        "</div>"
-        "<div class='readme-section'>"
-        "<h3>Things You Can Open Next</h3>"
-        "<div class='launch-list'>"
-        f"{''.join(launch_cards)}"
-        "</div>"
-        "</div>"
-        "</div>"
-    )
-    dictionary_tab = (
-        "<div class='readme-grid'>"
-        "<div class='brief-card'>"
-        "<p class='hub-kicker'>Planned Surface</p>"
-        "<h3>Data Dictionary Lane</h3>"
-        f"<p>{html.escape(str(data_dictionary.get('direction', '')))}</p>"
-        "</div>"
-        "<div class='hub-grid'>"
-        "<div class='hub-card'>"
-        "<p class='hub-kicker'>Status</p>"
-        "<h3>Data Dictionary</h3>"
-        f"{_status_chip(str(data_dictionary.get('status', 'not_implemented')))}"
-        "<p class='subtle'>Reserve the future prelaunch dictionary and schema-expectation surface in the cockpit.</p>"
-        "<p class='subtle'><strong>Template</strong></p>"
-        f"{_render_reference_value(data_dictionary.get('template_path', ''), empty_label='No template recorded.')}"
-        "<p class='subtle'><strong>Plan</strong></p>"
-        f"{_render_reference_value(data_dictionary.get('implementation_plan', ''), empty_label='No plan recorded.')}"
-        "</div>"
-        "<div class='hub-card'>"
-        "<p class='hub-kicker'>Why It Matters</p>"
-        "<h3>Prelaunch Report Space</h3>"
-        "<p class='subtle'>This tab exists so the eventual dictionary does not feel bolted on later. It should sit beside the rest of the operator surfaces, inherit infer_configs evidence, and give users a readable preflight view before the heavier pipeline stages run.</p>"
-        "</div>"
-        "</div>"
-        "</div>"
-    )
+    recent_runs_section = _render_cockpit_recent_runs(recent_runs)
+    resources_panel = _render_cockpit_resources(resources, resource_groups)
+    launchpad_panel = _render_cockpit_launchpad(launchpad, launch_sequences)
+    dictionary_tab = _render_cockpit_dictionary(data_dictionary)
 
     tab_buttons = [
         "<button class='tab-button active' type='button' data-tab-target='cockpit-overview' onclick='window.atkDashboard.openTab(this)'>Overview</button>",
