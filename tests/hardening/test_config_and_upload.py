@@ -91,6 +91,15 @@ def test_should_export_html_honors_nested_module_config():
         )
         is False
     )
+    assert (
+        should_export_html(
+            {
+                "runtime": {"artifacts": {"export_html": False}},
+                "normalization": {"settings": {"export": True, "export_html": True}},
+            }
+        )
+        is False
+    )
 
 
 def _install_fake_google_storage(monkeypatch, calls: list):

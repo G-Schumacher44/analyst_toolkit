@@ -1,5 +1,21 @@
 """Static guide/playbook payloads for cockpit tools."""
 
+import os
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _trusted_history_enabled() -> bool:
+    return _env_bool(
+        "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
+        _env_bool("ANALYST_MCP_STDIO", False),
+    )
+
 
 def user_quickstart_payload() -> dict:
     guide = """
@@ -21,8 +37,7 @@ def user_quickstart_payload() -> dict:
 6. `get_run_history` + `get_data_health_report`
 
 ## Dashboard Artifacts
-- Start a new review session by building the cockpit dashboard when possible.
-- Surface the cockpit dashboard link first so the user has one human-readable landing page before diving into module reports.
+- In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
 - If the local artifact server is not already serving exported HTML, ask the user to start it before relying on local dashboard links.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
@@ -68,8 +83,10 @@ Use this to auto-correct typos while controlling aggressiveness via score cutoff
 
 Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
-    machine_guide = {
-        "ordered_steps": [
+    trusted_history = _trusted_history_enabled()
+    ordered_steps = []
+    if trusted_history:
+        ordered_steps.append(
             {
                 "step": 0,
                 "tool": "get_cockpit_dashboard",
@@ -79,9 +96,12 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                     "Build this first when possible so the user gets one human-readable landing page.",
                     "If the local artifact server is not running, ask the user to start it before depending on local dashboard links.",
                 ],
-            },
+            }
+        )
+    ordered_steps.extend(
+        [
             {
-                "step": 1,
+                "step": 1 if trusted_history else 0,
                 "tool": "diagnostics",
                 "required_inputs": [
                     "gcs_path|session_id|runtime.run.input_path",
@@ -90,12 +110,12 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "outputs": ["session_id", "summary", "dashboard_url?"],
             },
             {
-                "step": 2,
+                "step": 2 if trusted_history else 1,
                 "tool": "infer_configs",
                 "required_inputs": ["gcs_path|session_id"],
             },
             {
-                "step": 3,
+                "step": 3 if trusted_history else 2,
                 "tool_chain": [
                     "normalization",
                     "duplicates",
@@ -106,11 +126,14 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "required_inputs": ["session_id", "run_id", "config", "runtime?"],
             },
             {
-                "step": 4,
+                "step": 4 if trusted_history else 3,
                 "tool": "final_audit",
                 "required_inputs": ["session_id", "run_id"],
             },
-        ],
+        ]
+    )
+    machine_guide = {
+        "ordered_steps": ordered_steps,
         "example_calls": [
             {
                 "tool": "diagnostics",
@@ -163,12 +186,18 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             "markdown": guide.strip(),
         },
         "machine_guide": machine_guide,
-        "quick_actions": [
-            {
-                "label": "Open cockpit dashboard",
-                "tool": "get_cockpit_dashboard",
-                "arguments_schema_hint": {"required": []},
-            },
+        "quick_actions": (
+            [
+                {
+                    "label": "Open cockpit dashboard",
+                    "tool": "get_cockpit_dashboard",
+                    "arguments_schema_hint": {"required": []},
+                },
+            ]
+            if trusted_history
+            else []
+        )
+        + [
             {
                 "label": "Run diagnostics",
                 "tool": "diagnostics",
@@ -201,6 +230,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
 
 
 def agent_playbook_payload() -> dict:
+    trusted_history = _trusted_history_enabled()
     return {
         "status": "pass",
         "version": "1.0",
@@ -211,21 +241,27 @@ def agent_playbook_payload() -> dict:
             "Optional output bucket/prefix overrides",
             "Optional runtime overlay for cross-cutting execution control",
         ],
-        "ordered_steps": [
+        "ordered_steps": (
+            [
+                {
+                    "step": 0,
+                    "tool": "get_cockpit_dashboard",
+                    "required_inputs": [],
+                    "outputs": ["dashboard_url?", "dashboard_path?"],
+                    "notes": [
+                        "Build this at the start of a trusted/local session when possible.",
+                        "Return the cockpit dashboard link to the user as the human-facing landing page before deeper tool work.",
+                        "If local HTML artifacts are not being served yet, prompt the user to start the local artifact server.",
+                    ],
+                    "next": [1],
+                },
+            ]
+            if trusted_history
+            else []
+        )
+        + [
             {
-                "step": 0,
-                "tool": "get_cockpit_dashboard",
-                "required_inputs": [],
-                "outputs": ["dashboard_url?", "dashboard_path?"],
-                "notes": [
-                    "Build this at the start of a session when possible.",
-                    "Return the cockpit dashboard link to the user as the human-facing landing page before deeper tool work.",
-                    "If local HTML artifacts are not being served yet, prompt the user to start the local artifact server.",
-                ],
-                "next": [1],
-            },
-            {
-                "step": 1,
+                "step": 1 if trusted_history else 0,
                 "tool": "diagnostics",
                 "required_inputs": [
                     "gcs_path|session_id|runtime.run.input_path",
@@ -241,21 +277,21 @@ def agent_playbook_payload() -> dict:
                 "next": [2],
             },
             {
-                "step": 2,
+                "step": 2 if trusted_history else 1,
                 "tool": "get_data_health_report",
                 "required_inputs": ["run_id", "session_id?"],
                 "outputs": ["health_score", "breakdown"],
                 "next": [3],
             },
             {
-                "step": 3,
+                "step": 3 if trusted_history else 2,
                 "tool": "infer_configs",
                 "required_inputs": ["gcs_path|session_id"],
                 "outputs": ["configs (YAML strings by module)"],
                 "next": [4],
             },
             {
-                "step": 4,
+                "step": 4 if trusted_history else 3,
                 "tool": "get_capability_catalog",
                 "required_inputs": [],
                 "outputs": ["editable knobs + defaults + example paths"],

@@ -134,12 +134,11 @@ def test_rpc_user_quickstart_tool(client):
     assert "cockpit dashboard" in result["content"]["markdown"].lower()
     assert "local artifact server" in result["content"]["markdown"].lower()
     assert "machine_guide" in result
-    assert result["machine_guide"]["ordered_steps"][0]["tool"] == "get_cockpit_dashboard"
-    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "diagnostics"
-    assert result["machine_guide"]["ordered_steps"][2]["tool"] == "infer_configs"
-    assert result["machine_guide"]["ordered_steps"][2]["required_inputs"] == ["gcs_path|session_id"]
+    assert result["machine_guide"]["ordered_steps"][0]["tool"] == "diagnostics"
+    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
+    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == ["gcs_path|session_id"]
     assert len(result["quick_actions"]) >= 2
-    assert any(a["tool"] == "get_cockpit_dashboard" for a in result["quick_actions"])
+    assert not any(a["tool"] == "get_cockpit_dashboard" for a in result["quick_actions"])
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
     assert any(a["tool"] == "auto_heal" for a in result["quick_actions"])
@@ -160,8 +159,7 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client):
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["status"] == "pass"
-    assert result["ordered_steps"][0]["tool"] == "get_cockpit_dashboard"
-    assert "local artifact server" in " ".join(result["ordered_steps"][0]["notes"]).lower()
+    assert result["ordered_steps"][0]["tool"] == "diagnostics"
     infer_step = next(
         step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
     )
@@ -347,6 +345,7 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
 
 @pytest.mark.asyncio
 async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
+    mocker.patch.object(cockpit_module, "TRUSTED_HISTORY_ENABLED", True)
     mocker.patch.object(
         cockpit_module,
         "_build_cockpit_dashboard_report",
@@ -402,6 +401,20 @@ async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
         config={},
         session_id=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_cockpit_dashboard_denies_when_untrusted(mocker):
+    mocker.patch.object(cockpit_module, "TRUSTED_HISTORY_ENABLED", False)
+    export_html = mocker.patch.object(cockpit_module, "export_html_report")
+    deliver = mocker.patch.object(cockpit_module, "deliver_artifact")
+
+    result = await cockpit_module._toolkit_get_cockpit_dashboard(limit=5)
+
+    assert result["status"] == "error"
+    assert result["code"] == "COCKPIT_HISTORY_DISABLED"
+    export_html.assert_not_called()
+    deliver.assert_not_called()
 
 
 def test_rpc_data_dictionary_stub_tool(client):

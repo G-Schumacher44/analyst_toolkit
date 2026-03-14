@@ -87,6 +87,10 @@ _DASHBOARD_CSS = """
     background: #fbe4df;
     border-color: rgba(153, 27, 27, 0.22);
   }
+  .banner.fail {
+    background: #fbe4df;
+    border-color: rgba(159, 18, 57, 0.28);
+  }
   .banner.ok {
     background: var(--ok-soft);
     border-color: rgba(20, 83, 45, 0.18);
@@ -759,27 +763,6 @@ _DASHBOARD_CSS = """
   }
   .brief-card p {
     margin: 0 0 10px;
-  }
-  .brief-lanes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-    margin-top: 14px;
-  }
-  .brief-lane {
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: rgba(248, 250, 252, 0.08);
-    border: 1px solid rgba(248, 250, 252, 0.12);
-  }
-  .brief-lane h4,
-  .brief-lane p {
-    margin: 0;
-    color: #f8fafc;
-  }
-  .brief-lane h4 {
-    margin-bottom: 6px;
-    font-size: 0.95rem;
   }
   .brief-lanes {
     display: grid;
@@ -3030,6 +3013,7 @@ def _render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
 
 def _render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
     overview = report.get("overview", {})
+    operating_posture = report.get("operating_posture", {})
     operator_brief = report.get("operator_brief", {})
     best_surfaces = report.get("best_surfaces", {})
     blockers = report.get("blockers", [])
@@ -3041,9 +3025,18 @@ def _render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
     launch_sequences = report.get("launch_sequences", [])
     data_dictionary = report.get("data_dictionary", {})
 
+    posture_label = str(operating_posture.get("label", "Healthy"))
+    banner_class = (
+        "fail"
+        if posture_label.lower() == "blocked"
+        else "warn"
+        if posture_label.lower() in {"needs review", "warn", "warning"}
+        else "ok"
+    )
     banner = (
-        "<div class='banner ok'>"
+        f"<div class='banner {banner_class}'>"
         "<div class='banner-item'><strong>Stage:</strong> Cockpit Operator Hub</div>"
+        f"<div class='banner-item'><strong>Posture:</strong> {html.escape(posture_label)}</div>"
         f"<div class='banner-item'><strong>Recent Runs:</strong> {html.escape(str(overview.get('recent_run_count', 0)))}</div>"
         f"<div class='banner-item'><strong>Warning Runs:</strong> {html.escape(str(overview.get('warning_runs', 0)))}</div>"
         f"<div class='banner-item'><strong>Failed Runs:</strong> {html.escape(str(overview.get('failed_runs', 0)))}</div>"

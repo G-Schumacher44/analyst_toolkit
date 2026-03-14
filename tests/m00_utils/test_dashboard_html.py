@@ -527,6 +527,7 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
 
     assert "Cockpit Dashboard" in html
     assert "Cockpit Operator Hub" in html
+    assert "Needs Review" in html
     assert "Overview" in html
     assert "Recent Runs" in html
     assert "Resources" in html

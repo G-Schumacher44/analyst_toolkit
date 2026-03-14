@@ -54,26 +54,50 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
 
-def _find_nested_export_html(config: object) -> bool | None:
+def _collect_export_html_flags(
+    config: object,
+    *,
+    path: tuple[object, ...] = (),
+    runtime_flags: list[bool] | None = None,
+    module_flags: list[bool] | None = None,
+) -> tuple[list[bool], list[bool]]:
+    if runtime_flags is None:
+        runtime_flags = []
+    if module_flags is None:
+        module_flags = []
     if isinstance(config, dict):
-        if "export_html" in config:
-            return bool(config["export_html"])
-        for value in config.values():
-            nested = _find_nested_export_html(value)
-            if nested is not None:
-                return nested
+        for key, value in config.items():
+            next_path = path + (key,)
+            if key == "export_html":
+                flag = bool(value)
+                if next_path == ("runtime", "artifacts", "export_html"):
+                    runtime_flags.append(flag)
+                else:
+                    module_flags.append(flag)
+                continue
+            _collect_export_html_flags(
+                value,
+                path=next_path,
+                runtime_flags=runtime_flags,
+                module_flags=module_flags,
+            )
     elif isinstance(config, list):
-        for value in config:
-            nested = _find_nested_export_html(value)
-            if nested is not None:
-                return nested
-    return None
+        for idx, value in enumerate(config):
+            _collect_export_html_flags(
+                value,
+                path=path + (idx,),
+                runtime_flags=runtime_flags,
+                module_flags=module_flags,
+            )
+    return runtime_flags, module_flags
 
 
 def should_export_html(config: dict) -> bool:
-    nested = _find_nested_export_html(config)
-    if nested is not None:
-        return nested
+    runtime_flags, module_flags = _collect_export_html_flags(config)
+    if runtime_flags:
+        return runtime_flags[-1]
+    if module_flags:
+        return len(set(module_flags)) == 1 and module_flags[0]
     return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
 
 

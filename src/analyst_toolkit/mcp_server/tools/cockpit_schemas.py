@@ -113,8 +113,9 @@ COCKPIT_DASHBOARD_INPUT_SCHEMA = {
     "properties": {
         "limit": {
             "type": "integer",
-            "description": "How many recent runs to include in the cockpit dashboard.",
+            "description": "How many recent runs to include in the cockpit dashboard. Maximum 50.",
             "minimum": 1,
+            "maximum": 50,
             "default": 8,
         }
     },

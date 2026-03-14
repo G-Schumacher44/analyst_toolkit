@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,10 @@ def _env_int(name: str, default: int) -> int:
 TEMPLATE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC", 8.0)
 RUN_HISTORY_DEFAULT_SUMMARY_ONLY = _env_bool("ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT", True)
 RUN_HISTORY_DEFAULT_LIMIT = _env_int("ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT", 50)
+TRUSTED_HISTORY_ENABLED = _env_bool(
+    "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
+    _env_bool("ANALYST_MCP_STDIO", False),
+)
 
 
 def _build_capability_catalog() -> dict[str, Any]:
@@ -225,18 +230,50 @@ def _safe_run_id_for_path(run_id: str) -> str:
     return normalized or "pipeline_run"
 
 
+def _trusted_history_denial() -> dict[str, Any]:
+    return {
+        "status": "error",
+        "code": "COCKPIT_HISTORY_DISABLED",
+        "message": (
+            "Cockpit history access is disabled. Enable ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL=1 "
+            "or use trusted/local stdio mode."
+        ),
+        "warnings": [],
+    }
+
+
+def _history_sort_value(path: Path) -> float:
+    fallback = path.stat().st_mtime
+    history = _read_history_entries(path)
+    newest = ""
+    for entry in history:
+        timestamp = str(entry.get("timestamp", "") or "")
+        if timestamp > newest:
+            newest = timestamp
+    if not newest:
+        return fallback
+    try:
+        return datetime.fromisoformat(newest.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return fallback
+
+
 def _iter_recent_history_files(limit: int) -> list[Path]:
+    if not TRUSTED_HISTORY_ENABLED:
+        return []
     history_root = Path("exports/reports/history")
     if not history_root.exists():
         return []
     return sorted(
         history_root.glob("**/*_history.json"),
-        key=lambda path: path.stat().st_mtime,
+        key=_history_sort_value,
         reverse=True,
     )[:limit]
 
 
 def _read_history_entries(path: Path) -> list[dict[str, Any]]:
+    if not TRUSTED_HISTORY_ENABLED:
+        return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -677,6 +714,9 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
 
 
 async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
+    if not TRUSTED_HISTORY_ENABLED:
+        return _trusted_history_denial()
+    limit = max(1, min(int(limit), 50))
     report = _build_cockpit_dashboard_report(limit)
     artifact_path = "exports/reports/cockpit/cockpit_dashboard.html"
     artifact_delivery = empty_delivery_state()
