@@ -10,6 +10,10 @@ from typing import Any
 
 import pandas as pd
 
+from analyst_toolkit.m00_utils.dashboard_certification import (
+    render_final_audit_dashboard,
+    render_validation_dashboard,
+)
 from analyst_toolkit.m00_utils.dashboard_core import _assemble_page
 from analyst_toolkit.m00_utils.dashboard_shared import (
     _display_name,
@@ -1567,9 +1571,9 @@ def generate_dashboard_html(
     if normalized == "diagnostics":
         return _render_diagnostics_dashboard(report_tables, run_id, plot_paths)
     if normalized == "validation":
-        return _render_validation_dashboard(report_tables, run_id)
+        return render_validation_dashboard(report_tables, run_id)
     if normalized == "final audit":
-        return _render_final_audit_dashboard(report_tables, run_id)
+        return render_final_audit_dashboard(report_tables, run_id)
     if normalized == "normalization":
         return _render_normalization_dashboard(report_tables, run_id)
     if normalized == "duplicates":
