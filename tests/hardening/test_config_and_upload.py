@@ -9,6 +9,7 @@ from analyst_toolkit.mcp_server.io import (
     save_output,
     upload_artifact,
 )
+from analyst_toolkit.mcp_server.io_storage import should_export_html
 from analyst_toolkit.mcp_server.state import StateStore
 
 
@@ -77,6 +78,32 @@ def test_check_upload_accumulates_multiple_warnings():
     check_upload("", "report.html", warnings)
     check_upload("", "report.xlsx", warnings)
     assert len(warnings) == 2
+
+
+def test_should_export_html_honors_nested_module_config(monkeypatch):
+    monkeypatch.setenv("ANALYST_REPORT_BUCKET", "")
+    assert (
+        should_export_html({"normalization": {"settings": {"export": True, "export_html": True}}})
+        is True
+    )
+    assert (
+        should_export_html(
+            {"diagnostics": {"profile": {"settings": {"export": True, "export_html": False}}}}
+        )
+        is False
+    )
+    assert (
+        should_export_html(
+            {
+                "runtime": {"artifacts": {"export_html": False}},
+                "normalization": {"settings": {"export": True, "export_html": True}},
+            }
+        )
+        is False
+    )
+    assert should_export_html({"metadata": {"export_html": True}}) is False
+    assert should_export_html({"runtime": {"artifacts": {"export_html": "false"}}}) is False
+    assert should_export_html({"normalization": {"settings": {"export_html": ["true"]}}}) is False
 
 
 def _install_fake_google_storage(monkeypatch, calls: list):

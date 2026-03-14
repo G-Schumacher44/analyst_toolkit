@@ -432,6 +432,124 @@ def test_generate_pipeline_dashboard_surfaces_terminal_fallback_when_final_artif
     assert "exports/reports/validation/sample_validation.html" in html
 
 
+def test_generate_cockpit_dashboard_renders_operator_hub():
+    report = {
+        "overview": {
+            "recent_run_count": 2,
+            "warning_runs": 1,
+            "failed_runs": 1,
+            "healthy_runs": 1,
+            "pipeline_dashboards_available": 1,
+            "auto_heal_dashboards_available": 1,
+        },
+        "operating_posture": {
+            "label": "Needs Review",
+            "detail": "Warn-level outcomes are still present in the current cockpit slice.",
+        },
+        "operator_brief": {
+            "title": "Cockpit Briefing",
+            "summary": "This cockpit is the control tower for the toolkit. Use it to assess recent run health, open the strongest available artifact surface, and move into the right guide or tool without guessing where to start.",
+            "lanes": [
+                {
+                    "title": "Review",
+                    "detail": "Start with recent runs and best-available surfaces to see what already exists for the current operating slice.",
+                },
+                {
+                    "title": "Orient",
+                    "detail": "Use the resource hub when you need human-readable guidance, templates, or capability references before editing config.",
+                },
+                {
+                    "title": "Act",
+                    "detail": "Use the launchpad when you are ready to move from review into execution for a specific tool or workflow.",
+                },
+            ],
+        },
+        "best_surfaces": {
+            "pipeline_dashboard": {
+                "run_id": "run_001",
+                "reference": "exports/reports/pipeline/run_001_pipeline_dashboard.html",
+            },
+            "auto_heal_dashboard": {
+                "run_id": "run_002",
+                "reference": "exports/reports/auto_heal/run_002_auto_heal_report.html",
+            },
+            "final_audit_dashboard": {"run_id": "", "reference": ""},
+        },
+        "blockers": [
+            {
+                "run_id": "run_001",
+                "status": "WARN",
+                "latest_module": "validation",
+                "warning_count": 1,
+            }
+        ],
+        "recent_run_gaps": [
+            "No recent final audit dashboard was recorded.",
+        ],
+        "recent_runs": [
+            {
+                "run_id": "run_001",
+                "session_id": "sess_001",
+                "status": "warn",
+                "latest_module": "validation",
+                "health_score": 82,
+                "health_status": "green",
+                "warning_count": 1,
+                "module_count": 4,
+                "pipeline_dashboard": "exports/reports/pipeline/run_001_pipeline_dashboard.html",
+                "best_dashboard": "exports/reports/validation/run_001_validation.html",
+                "best_export": "gs://bucket/run_001.csv",
+            }
+        ],
+        "resources": [
+            {
+                "Title": "Quickstart",
+                "Kind": "guide",
+                "Reference": "tool:get_user_quickstart",
+                "Detail": "Human-oriented operating guide.",
+            }
+        ],
+        "launchpad": [
+            {
+                "Action": "Infer Configs",
+                "Tool": "infer_configs",
+                "Why": "Seed config review and prelaunch dictionary work.",
+            }
+        ],
+        "data_dictionary": {
+            "status": "not_implemented",
+            "template_path": "config/data_dictionary_request_template.yaml",
+            "implementation_plan": "local_plans/DATA_DICTIONARY_IMPLEMENTATION_WAVE_2026-03-14.md",
+        },
+    }
+
+    html = generate_html_report(report, "Cockpit Dashboard", "cockpit")
+
+    assert "Cockpit Dashboard" in html
+    assert "Cockpit Operator Hub" in html
+    assert "Needs Review" in html
+    assert "Overview" in html
+    assert "Recent Runs" in html
+    assert "Resources" in html
+    assert "Launchpad" in html
+    assert "Data Dictionary" in html
+    assert "What This Cockpit Helps You Review" in html
+    assert "Review" in html
+    assert "Orient" in html
+    assert "Act" in html
+    assert "Recent Run Dashboards" in html
+    assert "Current Alerts And Blockers" in html
+    assert "Missing Dashboards Or Artifacts" in html
+    assert "Missing Dashboard Or Artifact" in html
+    assert "Resources For Reading, Planning, And Setup" in html
+    assert "Launchpad For Moving From Review To Action" in html
+    assert "Data Dictionary Lane" in html
+    assert "run_001" in html
+    assert "tool:get_user_quickstart" in html
+    assert "infer_configs" in html
+    assert "config/data_dictionary_request_template.yaml" in html
+
+
 def test_generate_imputation_dashboard_renders_summary_shift_and_plots(tmp_path):
     plot_path = tmp_path / "imputation.png"
     plot_path.write_bytes(_ONE_PIXEL_PNG)

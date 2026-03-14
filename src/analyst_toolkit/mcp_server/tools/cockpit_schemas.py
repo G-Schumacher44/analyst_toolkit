@@ -108,6 +108,19 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
     },
 }
 
+COCKPIT_DASHBOARD_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "limit": {
+            "type": "integer",
+            "description": "How many recent runs to include in the cockpit dashboard. Maximum 50.",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 8,
+        }
+    },
+}
+
 PIPELINE_DASHBOARD_INPUT_SCHEMA = {
     "type": "object",
     "properties": {

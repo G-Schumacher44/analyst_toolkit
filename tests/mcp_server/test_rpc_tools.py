@@ -29,6 +29,7 @@ def test_rpc_tools_list(client):
     assert "get_agent_playbook" in tool_names
     assert "get_user_quickstart" in tool_names
     assert "get_capability_catalog" in tool_names
+    assert "get_cockpit_dashboard" in tool_names
     assert "get_pipeline_dashboard" in tool_names
     assert "data_dictionary" in tool_names
     assert "preflight_config" in tool_names
@@ -113,8 +114,10 @@ def test_rpc_capability_catalog_filters_and_compact(client):
     )
 
 
-def test_rpc_user_quickstart_tool(client):
+def test_rpc_user_quickstart_tool(client, monkeypatch):
     """Verify user quickstart tool returns human-readable guide text."""
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL", "false")
+    monkeypatch.setenv("ANALYST_MCP_STDIO", "false")
     payload = {
         "jsonrpc": "2.0",
         "id": 25,
@@ -130,10 +133,14 @@ def test_rpc_user_quickstart_tool(client):
     assert "fuzzy matching" in result["content"]["markdown"].lower()
     assert "plotting" in result["content"]["markdown"].lower()
     assert "auto_heal" in result["content"]["markdown"]
+    assert "cockpit dashboard" in result["content"]["markdown"].lower()
+    assert "local artifact server" in result["content"]["markdown"].lower()
     assert "machine_guide" in result
+    assert result["machine_guide"]["ordered_steps"][0]["tool"] == "diagnostics"
     assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
     assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == ["gcs_path|session_id"]
     assert len(result["quick_actions"]) >= 2
+    assert not any(a["tool"] == "get_cockpit_dashboard" for a in result["quick_actions"])
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
     assert any(a["tool"] == "auto_heal" for a in result["quick_actions"])
@@ -143,7 +150,9 @@ def test_rpc_user_quickstart_tool(client):
     assert result["trace_id"]
 
 
-def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client):
+def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL", "false")
+    monkeypatch.setenv("ANALYST_MCP_STDIO", "false")
     payload = {
         "jsonrpc": "2.0",
         "id": 31,
@@ -154,6 +163,7 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client):
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["status"] == "pass"
+    assert result["ordered_steps"][0]["tool"] == "diagnostics"
     infer_step = next(
         step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
     )
@@ -262,6 +272,7 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
         "export_html_report",
         return_value="/tmp/run-pipeline-001_pipeline_dashboard.html",
     )
+    append_history = mocker.patch.object(cockpit_module, "append_to_run_history")
     deliver = mocker.patch.object(
         cockpit_module,
         "deliver_artifact",
@@ -300,6 +311,11 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
         config={},
         session_id=None,
     )
+    append_history.assert_called_once_with(
+        "run-pipeline-001",
+        mocker.ANY,
+        session_id=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -315,6 +331,7 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
         "export_html_report",
         return_value="/tmp/pipeline_dashboard.html",
     )
+    mocker.patch.object(cockpit_module, "append_to_run_history")
     mocker.patch.object(
         cockpit_module,
         "deliver_artifact",
@@ -335,6 +352,119 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
         "Pipeline Dashboard",
         "unsafe_run",
     )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_uses_session_specific_artifact_path(mocker):
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=[])
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    export_html = mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/pipeline_dashboard.html",
+    )
+    mocker.patch.object(cockpit_module, "append_to_run_history")
+    mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "",
+            "local_path": "/tmp/pipeline_dashboard.html",
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    await cockpit_module._toolkit_get_pipeline_dashboard(
+        run_id="run-pipeline-001",
+        session_id="session-42",
+    )
+
+    export_html.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/pipeline/run-pipeline-001_session-42_pipeline_dashboard.html",
+        "Pipeline Dashboard",
+        "run-pipeline-001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
+    mocker.patch.object(cockpit_module, "TRUSTED_HISTORY_ENABLED", True)
+    mocker.patch.object(
+        cockpit_module,
+        "_build_cockpit_dashboard_report",
+        return_value={
+            "overview": {
+                "recent_run_count": 2,
+                "warning_runs": 1,
+                "failed_runs": 1,
+                "pipeline_dashboards_available": 1,
+                "auto_heal_dashboards_available": 1,
+            },
+            "recent_runs": [],
+            "resources": [],
+            "launchpad": [],
+        },
+    )
+    export_html = mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/cockpit_dashboard.html",
+    )
+    deliver = mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "https://example.com/cockpit.html",
+            "local_path": "/tmp/cockpit_dashboard.html",
+            "url": "https://example.com/cockpit.html",
+            "warnings": [],
+            "destinations": {
+                "gcs": {"status": "available", "url": "https://example.com/cockpit.html"}
+            },
+        },
+    )
+
+    result = await cockpit_module._toolkit_get_cockpit_dashboard(limit=5)
+
+    assert result["status"] == "pass"
+    assert result["module"] == "cockpit_dashboard"
+    assert result["dashboard_label"] == "Cockpit dashboard"
+    assert result["artifact_url"] == "https://example.com/cockpit.html"
+    assert result["summary"]["recent_run_count"] == 2
+    export_html.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/cockpit/cockpit_dashboard_limit_5.html",
+        "Cockpit Dashboard",
+        "cockpit_dashboard_limit_5",
+    )
+    deliver.assert_called_once_with(
+        "/tmp/cockpit_dashboard.html",
+        run_id="cockpit_dashboard_limit_5",
+        module="cockpit_dashboard",
+        config={"upload_artifacts": False},
+        session_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_cockpit_dashboard_denies_when_untrusted(mocker):
+    mocker.patch.object(cockpit_module, "TRUSTED_HISTORY_ENABLED", False)
+    export_html = mocker.patch.object(cockpit_module, "export_html_report")
+    deliver = mocker.patch.object(cockpit_module, "deliver_artifact")
+
+    result = await cockpit_module._toolkit_get_cockpit_dashboard(limit=5)
+
+    assert result["status"] == "error"
+    assert result["code"] == "COCKPIT_HISTORY_DISABLED"
+    export_html.assert_not_called()
+    deliver.assert_not_called()
 
 
 def test_rpc_data_dictionary_stub_tool(client):

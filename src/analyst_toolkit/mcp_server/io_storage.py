@@ -9,6 +9,8 @@ from uuid import uuid4
 
 import pandas as pd
 
+logger = logging.getLogger(__name__)
+
 _CONTENT_TYPES = {
     ".html": "text/html",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -54,9 +56,91 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
 
+def _collect_export_html_flags(
+    config: object,
+    *,
+    path: tuple[object, ...] = (),
+    runtime_flags: list[bool] | None = None,
+    module_flags: list[bool] | None = None,
+    malformed_flags: list[bool] | None = None,
+) -> tuple[list[bool], list[bool], list[bool]]:
+    sanctioned_module_suffixes = {
+        ("settings", "export_html"),
+        ("profile", "settings", "export_html"),
+        ("export", "export_html"),
+        ("settings", "export", "export_html"),
+    }
+
+    def _is_sanctioned_module_path(candidate: tuple[object, ...]) -> bool:
+        if candidate == ("export_html",):
+            return True
+        return any(candidate[-len(suffix) :] == suffix for suffix in sanctioned_module_suffixes)
+
+    if runtime_flags is None:
+        runtime_flags = []
+    if module_flags is None:
+        module_flags = []
+    if malformed_flags is None:
+        malformed_flags = []
+    if isinstance(config, dict):
+        for key, value in config.items():
+            next_path = path + (key,)
+            if key == "export_html":
+                if not isinstance(value, bool):
+                    if next_path == (
+                        "runtime",
+                        "artifacts",
+                        "export_html",
+                    ) or _is_sanctioned_module_path(next_path):
+                        malformed_flags.append(True)
+                    continue
+                if next_path == ("runtime", "artifacts", "export_html"):
+                    runtime_flags.append(value)
+                elif _is_sanctioned_module_path(next_path):
+                    module_flags.append(value)
+                continue
+            _collect_export_html_flags(
+                value,
+                path=next_path,
+                runtime_flags=runtime_flags,
+                module_flags=module_flags,
+                malformed_flags=malformed_flags,
+            )
+    elif isinstance(config, list):
+        for idx, value in enumerate(config):
+            _collect_export_html_flags(
+                value,
+                path=path + (idx,),
+                runtime_flags=runtime_flags,
+                module_flags=module_flags,
+                malformed_flags=malformed_flags,
+            )
+    return runtime_flags, module_flags, malformed_flags
+
+
 def should_export_html(config: dict) -> bool:
-    if "export_html" in config:
-        return bool(config["export_html"])
+    runtime_flags, module_flags, malformed_flags = _collect_export_html_flags(config)
+    if malformed_flags:
+        logger.warning(
+            "Malformed export_html configuration detected on sanctioned paths; "
+            "disabling HTML export."
+        )
+        return False
+    if runtime_flags:
+        if len(runtime_flags) > 1:
+            logger.warning(
+                "Multiple runtime.artifacts.export_html values detected: %s; using last value.",
+                runtime_flags,
+            )
+        return runtime_flags[-1]
+    if module_flags:
+        if len(set(module_flags)) != 1:
+            logger.warning(
+                "Conflicting module export_html flags detected: %s; disabling HTML export.",
+                module_flags,
+            )
+            return False
+        return module_flags[0]
     return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
 
 
