@@ -72,6 +72,42 @@ DATA_HEALTH_REPORT_INPUT_SCHEMA = {
     "required": ["run_id"],
 }
 
+DATA_DICTIONARY_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "gcs_path": {
+            "type": "string",
+            "description": "Optional input dataset path when no session_id exists yet.",
+        },
+        "session_id": {
+            "type": "string",
+            "description": "Optional session scope when building from an existing run context.",
+        },
+        "run_id": {
+            "type": "string",
+            "description": "Optional run identifier used for future artifact names.",
+        },
+        "runtime": {
+            "type": "object",
+            "description": "Optional runtime overlay for cross-cutting execution settings.",
+        },
+        "profile_depth": {
+            "type": "string",
+            "enum": ["light", "standard", "deep"],
+            "default": "standard",
+        },
+        "include_examples": {
+            "type": "boolean",
+            "default": True,
+        },
+        "prelaunch_report": {
+            "type": "boolean",
+            "default": True,
+            "description": "Reserve a prelaunch dictionary/readiness surface seeded from infer_configs.",
+        },
+    },
+}
+
 PIPELINE_DASHBOARD_INPUT_SCHEMA = {
     "type": "object",
     "properties": {

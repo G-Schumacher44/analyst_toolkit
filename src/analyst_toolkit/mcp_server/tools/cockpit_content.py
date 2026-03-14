@@ -25,6 +25,7 @@ def user_quickstart_payload() -> dict:
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
 - `auto_heal` returns its own standalone dashboard artifact and should be surfaced the same way.
+- `data_dictionary` is currently a reserved MCP surface. Use its template and plan references to prepare the future prelaunch dictionary flow; do not present it as implemented yet.
 
 ## Runtime Overlay
 - Use `runtime` for run-scoped execution policy.
@@ -42,6 +43,12 @@ def user_quickstart_payload() -> dict:
 - Start from `config/auto_heal_request_template.yaml` for agent-authored requests.
 - Prefer `runtime` for `run_id`, `input_path`, HTML export, and destination controls.
 - After the call, surface `dashboard_url` first and `dashboard_path` only as fallback.
+
+## Data Dictionary
+- The future `data_dictionary` flow should start from `infer_configs`, not from blind profiling alone.
+- Treat it as a prelaunch report and dictionary surface that explains expected fields, rules, and readiness before a full run.
+- Start from `config/data_dictionary_request_template.yaml` when drafting the future request shape.
+- When it lands, it should be surfaced from the cockpit dashboard as a resource/report card, not buried as a raw artifact.
 
 ## Key Example: Fuzzy Matching
 In normalization config:
@@ -121,6 +128,18 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                     "mode": "sync",
                 },
             },
+            {
+                "tool": "data_dictionary",
+                "arguments": {
+                    "gcs_path": "gs://bucket/data.csv",
+                    "run_id": "dictionary_prelaunch_001",
+                    "prelaunch_report": True,
+                    "runtime": {
+                        "run": {"input_path": "gs://bucket/data.csv"},
+                        "artifacts": {"export_html": True},
+                    },
+                },
+            },
         ],
     }
     return {
@@ -153,6 +172,11 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "arguments_schema_hint": {
                     "required": ["gcs_path|session_id|runtime.run.input_path"]
                 },
+            },
+            {
+                "label": "Plan data dictionary",
+                "tool": "data_dictionary",
+                "arguments_schema_hint": {"required": []},
             },
         ],
     }

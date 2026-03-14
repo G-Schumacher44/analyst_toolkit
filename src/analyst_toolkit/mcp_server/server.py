@@ -336,6 +336,7 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     auto_heal,
     cockpit,
     config_schema,
+    data_dictionary,
     diagnostics,
     drift,
     duplicates,

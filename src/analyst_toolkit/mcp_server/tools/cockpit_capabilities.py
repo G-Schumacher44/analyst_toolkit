@@ -181,6 +181,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             "runtime_overlay_available": True,
             "runtime_template_path": "config/runtime_overlay_template.yaml",
             "auto_heal_template_path": "config/auto_heal_request_template.yaml",
+            "data_dictionary_template_path": "config/data_dictionary_request_template.yaml",
         },
         "global_controls": [
             {
@@ -268,6 +269,16 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                 ],
             },
             {
+                "feature": "Data dictionary prelaunch planning",
+                "paths": [
+                    "config/data_dictionary_request_template.yaml",
+                    "infer_configs",
+                    "runtime.run.input_path",
+                    "runtime.run.run_id",
+                    "runtime.artifacts.export_html",
+                ],
+            },
+            {
                 "feature": "Normalization fuzzy matching",
                 "paths": [
                     "normalization.rules.fuzzy_matching.run",
@@ -290,7 +301,13 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                 "template_path": "config/auto_heal_request_template.yaml",
                 "description": "One-shot automated cleaning request with runtime-scoped controls and dashboard output.",
                 "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
-            }
+            },
+            {
+                "tool": "data_dictionary",
+                "template_path": "config/data_dictionary_request_template.yaml",
+                "description": "Reserved prelaunch dictionary flow seeded by infer_configs and intended for future cockpit/dashboard attachment.",
+                "outputs": ["not_implemented", "template_path", "implementation_plan"],
+            },
         ],
         "golden_templates": sorted(golden_configs.keys()),
         "modules": modules,

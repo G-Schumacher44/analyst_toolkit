@@ -1,0 +1,19 @@
+data_dictionary:
+  gcs_path: gs://bucket/path/to/data.csv
+  session_id: null
+  run_id: data_dictionary_prelaunch_001
+  profile_depth: standard
+  include_examples: true
+  prelaunch_report: true
+  runtime:
+    run:
+      input_path: gs://bucket/path/to/data.csv
+      run_id: data_dictionary_prelaunch_001
+    artifacts:
+      export_html: true
+      plotting: false
+    destinations:
+      gcs:
+        enabled: false
+        bucket_uri: gs://bucket
+        prefix: reports/data_dictionary

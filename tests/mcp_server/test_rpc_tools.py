@@ -30,6 +30,7 @@ def test_rpc_tools_list(client):
     assert "get_user_quickstart" in tool_names
     assert "get_capability_catalog" in tool_names
     assert "get_pipeline_dashboard" in tool_names
+    assert "data_dictionary" in tool_names
     assert "preflight_config" in tool_names
     assert "get_job_status" in tool_names
     assert "list_jobs" in tool_names
@@ -51,6 +52,10 @@ def test_rpc_capability_catalog_tool(client):
     assert result["status"] == "pass"
     assert result["summary"]["editable_configs"] is True
     assert result["summary"]["auto_heal_template_path"] == "config/auto_heal_request_template.yaml"
+    assert (
+        result["summary"]["data_dictionary_template_path"]
+        == "config/data_dictionary_request_template.yaml"
+    )
     assert any(
         p.endswith("fuzzy_matching.settings.<column>.score_cutoff")
         for item in result["highlight_examples"]
@@ -59,6 +64,11 @@ def test_rpc_capability_catalog_tool(client):
     assert any(
         item["tool"] == "auto_heal"
         and item["template_path"] == "config/auto_heal_request_template.yaml"
+        for item in result["workflow_templates"]
+    )
+    assert any(
+        item["tool"] == "data_dictionary"
+        and item["template_path"] == "config/data_dictionary_request_template.yaml"
         for item in result["workflow_templates"]
     )
     modules = {item["tool"]: item for item in result["modules"]}
@@ -325,6 +335,30 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
         "Pipeline Dashboard",
         "unsafe_run",
     )
+
+
+def test_rpc_data_dictionary_stub_tool(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {
+            "name": "data_dictionary",
+            "arguments": {
+                "gcs_path": "gs://bucket/data.csv",
+                "run_id": "dictionary_prelaunch_001",
+                "prelaunch_report": True,
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "not_implemented"
+    assert result["module"] == "data_dictionary"
+    assert result["template_path"] == "config/data_dictionary_request_template.yaml"
+    assert result["summary"]["prelaunch_report"] is True
+    assert result["next_actions"][0]["tool"] == "infer_configs"
 
 
 @pytest.mark.asyncio
