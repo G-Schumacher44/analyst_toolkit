@@ -21,6 +21,9 @@ def user_quickstart_payload() -> dict:
 6. `get_run_history` + `get_data_health_report`
 
 ## Dashboard Artifacts
+- Start a new review session by building the cockpit dashboard when possible.
+- Surface the cockpit dashboard link first so the user has one human-readable landing page before diving into module reports.
+- If the local artifact server is not already serving exported HTML, ask the user to start it before relying on local dashboard links.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
@@ -67,6 +70,16 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
     machine_guide = {
         "ordered_steps": [
+            {
+                "step": 0,
+                "tool": "get_cockpit_dashboard",
+                "required_inputs": [],
+                "outputs": ["dashboard_url?", "dashboard_path?"],
+                "notes": [
+                    "Build this first when possible so the user gets one human-readable landing page.",
+                    "If the local artifact server is not running, ask the user to start it before depending on local dashboard links.",
+                ],
+            },
             {
                 "step": 1,
                 "tool": "diagnostics",
@@ -152,6 +165,11 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
         "machine_guide": machine_guide,
         "quick_actions": [
             {
+                "label": "Open cockpit dashboard",
+                "tool": "get_cockpit_dashboard",
+                "arguments_schema_hint": {"required": []},
+            },
+            {
                 "label": "Run diagnostics",
                 "tool": "diagnostics",
                 "arguments_schema_hint": {"required": ["gcs_path|session_id", "run_id"]},
@@ -194,6 +212,18 @@ def agent_playbook_payload() -> dict:
             "Optional runtime overlay for cross-cutting execution control",
         ],
         "ordered_steps": [
+            {
+                "step": 0,
+                "tool": "get_cockpit_dashboard",
+                "required_inputs": [],
+                "outputs": ["dashboard_url?", "dashboard_path?"],
+                "notes": [
+                    "Build this at the start of a session when possible.",
+                    "Return the cockpit dashboard link to the user as the human-facing landing page before deeper tool work.",
+                    "If local HTML artifacts are not being served yet, prompt the user to start the local artifact server.",
+                ],
+                "next": [1],
+            },
             {
                 "step": 1,
                 "tool": "diagnostics",

@@ -1,9 +1,11 @@
 """MCP tool: cockpit — user/agent guidance, capability catalog, history, and health scoring."""
 
 import asyncio
+import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 from analyst_toolkit.m00_utils.export_utils import export_html_report
@@ -35,6 +37,7 @@ from analyst_toolkit.mcp_server.tools.cockpit_runtime import (
 )
 from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
     CAPABILITY_CATALOG_INPUT_SCHEMA,
+    COCKPIT_DASHBOARD_INPUT_SCHEMA,
     DATA_HEALTH_REPORT_INPUT_SCHEMA,
     PIPELINE_DASHBOARD_INPUT_SCHEMA,
     RUN_HISTORY_INPUT_SCHEMA,
@@ -222,6 +225,315 @@ def _safe_run_id_for_path(run_id: str) -> str:
     return normalized or "pipeline_run"
 
 
+def _iter_recent_history_files(limit: int) -> list[Path]:
+    history_root = Path("exports/reports/history")
+    if not history_root.exists():
+        return []
+    return sorted(
+        history_root.glob("**/*_history.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )[:limit]
+
+
+def _read_history_entries(path: Path) -> list[dict[str, Any]]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else []
+
+
+def _dashboard_ref(entry: dict[str, Any]) -> str:
+    return str(entry.get("dashboard_url") or entry.get("dashboard_path") or "")
+
+
+def _export_ref(entry: dict[str, Any]) -> str:
+    return str(entry.get("export_url") or entry.get("artifact_url") or "")
+
+
+def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for history_file in _iter_recent_history_files(limit):
+        history = _read_history_entries(history_file)
+        if not history:
+            continue
+        last_entry = history[-1]
+        run_id = str(last_entry.get("run_id") or history_file.stem.replace("_history", ""))
+        session_id = str(last_entry.get("session_id") or "")
+        history_meta = {"parse_errors": [], "skipped_records": 0}
+        health = build_data_health_report(
+            run_id=run_id,
+            session_id=session_id or None,
+            history=history,
+            history_meta=history_meta,
+        )
+        latest_by_module: dict[str, dict[str, Any]] = {}
+        for entry in history:
+            module = str(entry.get("module", "")).strip()
+            if module:
+                latest_by_module[module] = entry
+
+        final_audit = latest_by_module.get("final_audit", {})
+        auto_heal = latest_by_module.get("auto_heal", {})
+        pipeline_path = (
+            f"exports/reports/pipeline/{_safe_run_id_for_path(run_id)}_pipeline_dashboard.html"
+        )
+        cards.append(
+            {
+                "run_id": run_id,
+                "session_id": session_id,
+                "history_entries": len(history),
+                "module_count": len(latest_by_module),
+                "status": str(
+                    final_audit.get("status")
+                    or auto_heal.get("status")
+                    or last_entry.get("status")
+                    or "unknown"
+                ),
+                "latest_module": str(last_entry.get("module", "unknown")),
+                "timestamp": str(last_entry.get("timestamp", "")),
+                "health_score": health.get("health_score", "N/A"),
+                "health_status": health.get("health_status", "unknown"),
+                "pipeline_dashboard": pipeline_path if Path(pipeline_path).exists() else "",
+                "auto_heal_dashboard": _dashboard_ref(auto_heal),
+                "final_audit_dashboard": _dashboard_ref(final_audit),
+                "best_dashboard": _dashboard_ref(final_audit)
+                or _dashboard_ref(auto_heal)
+                or _dashboard_ref(last_entry),
+                "best_export": _export_ref(final_audit)
+                or _export_ref(auto_heal)
+                or _export_ref(last_entry),
+                "warning_count": sum(len(entry.get("warnings", [])) for entry in history),
+            }
+        )
+    return cards
+
+
+def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
+    recent_runs = _build_recent_run_cards(limit)
+    warnings = sum(1 for run in recent_runs if str(run.get("status", "")).lower() in {"warn"})
+    failures = sum(
+        1 for run in recent_runs if str(run.get("status", "")).lower() in {"fail", "error"}
+    )
+    pipeline_count = sum(1 for run in recent_runs if run.get("pipeline_dashboard"))
+    auto_heal_count = sum(1 for run in recent_runs if run.get("auto_heal_dashboard"))
+    ready_count = sum(
+        1 for run in recent_runs if str(run.get("status", "")).lower() in {"pass", "available"}
+    )
+    top_pipeline = next((run for run in recent_runs if run.get("pipeline_dashboard")), {})
+    top_auto_heal = next((run for run in recent_runs if run.get("auto_heal_dashboard")), {})
+    top_final_audit = next((run for run in recent_runs if run.get("final_audit_dashboard")), {})
+    blocker_runs = [
+        {
+            "run_id": str(run.get("run_id", "")),
+            "status": str(run.get("status", "unknown")).upper(),
+            "latest_module": str(run.get("latest_module", "unknown")),
+            "warning_count": int(run.get("warning_count", 0) or 0),
+        }
+        for run in recent_runs
+        if str(run.get("status", "")).lower() in {"warn", "fail", "error"}
+    ][:3]
+    recent_run_gaps: list[str] = []
+    if not pipeline_count:
+        recent_run_gaps.append("No recent pipeline dashboard artifacts were found.")
+    if not auto_heal_count:
+        recent_run_gaps.append("No recent auto-heal dashboards were found.")
+    if not top_final_audit:
+        recent_run_gaps.append("No recent final audit dashboard was recorded.")
+    if failures:
+        posture = {
+            "label": "Blocked",
+            "detail": "At least one recent run ended in fail/error and needs operator attention.",
+        }
+    elif warnings:
+        posture = {
+            "label": "Needs Review",
+            "detail": "Recent runs exist, but warn-level outcomes still need a human read before trust.",
+        }
+    else:
+        posture = {
+            "label": "Healthy",
+            "detail": "Recent runs are landing in pass-level states with no current blocking signal.",
+        }
+    resources = [
+        {
+            "Title": "Quickstart",
+            "Kind": "guide",
+            "Reference": "tool:get_user_quickstart",
+            "Detail": "Human-oriented operating guide for the toolkit.",
+        },
+        {
+            "Title": "Agent Playbook",
+            "Kind": "guide",
+            "Reference": "tool:get_agent_playbook",
+            "Detail": "Strict ordered workflow for client agents.",
+        },
+        {
+            "Title": "Capability Catalog",
+            "Kind": "tool",
+            "Reference": "tool:get_capability_catalog",
+            "Detail": "Editable config knobs, runtime overlays, and workflow templates.",
+        },
+        {
+            "Title": "Runtime Template",
+            "Kind": "template",
+            "Reference": "config/runtime_overlay_template.yaml",
+            "Detail": "Cross-cutting run-time controls for input path, run_id, destinations, and artifacts.",
+        },
+        {
+            "Title": "Auto Heal Template",
+            "Kind": "template",
+            "Reference": "config/auto_heal_request_template.yaml",
+            "Detail": "One-shot remediation request shape with dashboard output.",
+        },
+        {
+            "Title": "Data Dictionary Template",
+            "Kind": "template",
+            "Reference": "config/data_dictionary_request_template.yaml",
+            "Detail": "Reserved prelaunch dictionary request shape seeded from infer_configs.",
+        },
+    ]
+    resource_groups = [
+        {
+            "title": "Start Here",
+            "intro": (
+                "Open these first when you need orientation, a safe execution recipe, or a human-readable "
+                "guide before touching module-specific configs."
+            ),
+            "items": [resources[0], resources[1], resources[3]],
+        },
+        {
+            "title": "Templates And Contracts",
+            "intro": (
+                "These are the copyable request shapes for runtime overlays, auto-heal, and the reserved "
+                "data dictionary workflow."
+            ),
+            "items": [resources[3], resources[4], resources[5]],
+        },
+        {
+            "title": "Capability Surfaces",
+            "intro": (
+                "Use these to inspect what the toolkit can do right now and which knobs are safe to edit "
+                "without rewriting YAML by hand."
+            ),
+            "items": [resources[2]],
+        },
+    ]
+    launchpad = [
+        {
+            "Action": "Infer Configs",
+            "Tool": "infer_configs",
+            "Why": "Seed config review and future prelaunch dictionary work from inferred rules.",
+        },
+        {
+            "Action": "Open Pipeline Dashboard",
+            "Tool": "get_pipeline_dashboard",
+            "Why": "Jump into the tabbed run-level review surface for a specific run.",
+        },
+        {
+            "Action": "Run Auto Heal",
+            "Tool": "auto_heal",
+            "Why": "Start one-shot remediation when the user explicitly wants automation.",
+        },
+        {
+            "Action": "Inspect Run History",
+            "Tool": "get_run_history",
+            "Why": "Read the prescription and healing ledger behind dashboard surfaces.",
+        },
+    ]
+    launch_sequences = [
+        {
+            "title": "Raw Dataset To First Pass",
+            "steps": [
+                "Run infer_configs to derive a safe initial config shape and identify likely module needs.",
+                "Use the runtime overlay template to set run-scoped inputs, paths, and artifact policy in one place.",
+                "Open the pipeline dashboard once module outputs exist so review stays in one run-level surface.",
+            ],
+        },
+        {
+            "title": "Repair And Certify",
+            "steps": [
+                "Use auto_heal only when the user explicitly wants one-shot remediation.",
+                "Review the auto-heal dashboard before trusting downstream artifacts.",
+                "Finish in final_audit or the pipeline dashboard to confirm the healed output is certification-ready.",
+            ],
+        },
+        {
+            "title": "Prelaunch Dictionary Path",
+            "steps": [
+                "Start from infer_configs so the data dictionary inherits inferred types, rules, and high-signal column hints.",
+                "Use the reserved data_dictionary request template to keep the eventual contract consistent.",
+                "Treat the future prelaunch report as a cockpit-linked surface, not a disconnected export.",
+            ],
+        },
+    ]
+    return {
+        "recent_runs": recent_runs,
+        "overview": {
+            "recent_run_count": len(recent_runs),
+            "warning_runs": warnings,
+            "failed_runs": failures,
+            "healthy_runs": ready_count,
+            "pipeline_dashboards_available": pipeline_count,
+            "auto_heal_dashboards_available": auto_heal_count,
+        },
+        "operator_brief": {
+            "title": "Cockpit Briefing",
+            "summary": (
+                "This cockpit is the control tower for the toolkit. Use it to assess recent run health, "
+                "open the strongest available artifact surface, and move into the right guide or tool without "
+                "guessing where to start."
+            ),
+            "lanes": [
+                {
+                    "title": "Review",
+                    "detail": "Start with recent runs and best-available surfaces to see what already exists for the current operating slice.",
+                },
+                {
+                    "title": "Orient",
+                    "detail": "Use the resource hub when you need human-readable guidance, templates, or capability references before editing config.",
+                },
+                {
+                    "title": "Act",
+                    "detail": "Use the launchpad when you are ready to move from review into execution for a specific tool or workflow.",
+                },
+            ],
+        },
+        "operating_posture": posture,
+        "best_surfaces": {
+            "pipeline_dashboard": {
+                "run_id": str(top_pipeline.get("run_id", "")),
+                "reference": str(top_pipeline.get("pipeline_dashboard", "")),
+            },
+            "auto_heal_dashboard": {
+                "run_id": str(top_auto_heal.get("run_id", "")),
+                "reference": str(top_auto_heal.get("auto_heal_dashboard", "")),
+            },
+            "final_audit_dashboard": {
+                "run_id": str(top_final_audit.get("run_id", "")),
+                "reference": str(top_final_audit.get("final_audit_dashboard", "")),
+            },
+        },
+        "blockers": blocker_runs,
+        "recent_run_gaps": recent_run_gaps,
+        "resources": resources,
+        "resource_groups": resource_groups,
+        "launchpad": launchpad,
+        "launch_sequences": launch_sequences,
+        "data_dictionary": {
+            "status": "not_implemented",
+            "template_path": "config/data_dictionary_request_template.yaml",
+            "implementation_plan": "local_plans/DATA_DICTIONARY_IMPLEMENTATION_WAVE_2026-03-14.md",
+            "direction": (
+                "The data dictionary should be generated from infer_configs output and surfaced as a "
+                "prelaunch report inside the cockpit so users can review structure expectations before "
+                "running the rest of the pipeline."
+            ),
+        },
+    }
+
+
 async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = None) -> dict:
     history = get_run_history(run_id, session_id=session_id)
     history_meta = get_last_history_read_meta(run_id, session_id=session_id)
@@ -364,6 +676,54 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
     return res
 
 
+async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
+    report = _build_cockpit_dashboard_report(limit)
+    artifact_path = "exports/reports/cockpit/cockpit_dashboard.html"
+    artifact_delivery = empty_delivery_state()
+    output_path = export_html_report(report, artifact_path, "Cockpit Dashboard", "cockpit")
+    artifact_delivery = deliver_artifact(
+        output_path,
+        run_id="cockpit_dashboard",
+        module="cockpit_dashboard",
+        config={},
+        session_id=None,
+    )
+    local_path = str(artifact_delivery.get("local_path", output_path))
+    artifact_url = str(artifact_delivery.get("url", ""))
+    res = {
+        "status": "pass",
+        "module": "cockpit_dashboard",
+        "summary": report["overview"],
+        "artifact_path": local_path,
+        "artifact_url": artifact_url,
+        "destination_delivery": {
+            "html_report": compact_destination_metadata(artifact_delivery["destinations"])
+        },
+        "warnings": list(artifact_delivery.get("warnings", [])),
+    }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=local_path,
+        artifact_url=artifact_url,
+        label="Cockpit dashboard",
+    )
+    return with_next_actions(
+        res,
+        [
+            next_action(
+                "get_capability_catalog",
+                "Open the cockpit capability catalog to inspect editable knobs, templates, and workflow surfaces.",
+                {},
+            ),
+            next_action(
+                "get_user_quickstart",
+                "Open the quickstart guide for the operator/resource hub content surfaced in the cockpit dashboard.",
+                {},
+            ),
+        ],
+    )
+
+
 register_tool(
     name="get_agent_playbook",
     fn=_toolkit_get_agent_playbook,
@@ -404,6 +764,13 @@ register_tool(
     fn=_toolkit_get_data_health_report,
     description="Returns a Visual Data Health Score (0-100) for a run.",
     input_schema=DATA_HEALTH_REPORT_INPUT_SCHEMA,
+)
+
+register_tool(
+    name="get_cockpit_dashboard",
+    fn=_toolkit_get_cockpit_dashboard,
+    description="Builds an operator cockpit dashboard with recent runs, resources, and launch surfaces.",
+    input_schema=COCKPIT_DASHBOARD_INPUT_SCHEMA,
 )
 
 register_tool(

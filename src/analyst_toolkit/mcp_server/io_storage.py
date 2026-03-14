@@ -54,9 +54,26 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
 
+def _find_nested_export_html(config: object) -> bool | None:
+    if isinstance(config, dict):
+        if "export_html" in config:
+            return bool(config["export_html"])
+        for value in config.values():
+            nested = _find_nested_export_html(value)
+            if nested is not None:
+                return nested
+    elif isinstance(config, list):
+        for value in config:
+            nested = _find_nested_export_html(value)
+            if nested is not None:
+                return nested
+    return None
+
+
 def should_export_html(config: dict) -> bool:
-    if "export_html" in config:
-        return bool(config["export_html"])
+    nested = _find_nested_export_html(config)
+    if nested is not None:
+        return nested
     return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
 
 

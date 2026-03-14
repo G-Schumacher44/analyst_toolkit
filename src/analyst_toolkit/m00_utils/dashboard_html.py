@@ -171,20 +171,29 @@ _DASHBOARD_CSS = """
   .stack > * + * {
     margin-top: 14px;
   }
+  .ledger-stack {
+    width: 100%;
+  }
+  .ledger-stack .card {
+    width: 100%;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.92rem;
     background: #fff;
     border-radius: 12px;
-    min-width: max-content;
+    table-layout: fixed;
+    min-width: 100%;
   }
   th, td {
     padding: 8px 10px;
     border: 1px solid #e7dfd1;
     text-align: left;
     vertical-align: top;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   th {
     background: #f1ece2;
@@ -200,6 +209,8 @@ _DASHBOARD_CSS = """
   .subtle {
     color: var(--muted);
     font-size: 0.88rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .table-wrap {
     width: 100%;
@@ -444,6 +455,7 @@ _DASHBOARD_CSS = """
     border-radius: 18px;
     padding: 16px;
     box-shadow: var(--shadow);
+    min-width: 0;
   }
   .cert-stat-card h3 {
     margin: 0 0 6px;
@@ -452,6 +464,33 @@ _DASHBOARD_CSS = """
   }
   .cert-stat-card .metric-stat {
     margin-bottom: 6px;
+  }
+  .cert-stat-card p,
+  .cert-stat-card code,
+  .cert-stat-card a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .cert-stat-card.pass {
+    background: var(--ok-soft);
+    border-color: rgba(20, 83, 45, 0.22);
+  }
+  .cert-stat-card.pass .metric-stat {
+    color: var(--ok);
+  }
+  .cert-stat-card.warn {
+    background: var(--warn-soft);
+    border-color: rgba(154, 52, 18, 0.22);
+  }
+  .cert-stat-card.warn .metric-stat {
+    color: var(--warn);
+  }
+  .cert-stat-card.fail {
+    background: #fbe4df;
+    border-color: rgba(159, 18, 57, 0.24);
+  }
+  .cert-stat-card.fail .metric-stat {
+    color: #9f1239;
   }
   .cert-ledger {
     display: grid;
@@ -476,6 +515,10 @@ _DASHBOARD_CSS = """
     background: rgba(252, 250, 245, 0.94);
     backdrop-filter: blur(8px);
     box-shadow: var(--shadow);
+  }
+  .tab-shell[data-tab-shell='cockpit'] .tab-nav {
+    position: static;
+    top: auto;
   }
   .tab-button {
     appearance: none;
@@ -530,6 +573,27 @@ _DASHBOARD_CSS = """
     border-radius: 18px;
     padding: 14px 16px;
     box-shadow: var(--shadow);
+  }
+  .module-mini-card.pass {
+    background: var(--ok-soft);
+    border-color: rgba(20, 83, 45, 0.22);
+  }
+  .module-mini-card.pass .metric-stat {
+    color: var(--ok);
+  }
+  .module-mini-card.warn {
+    background: var(--warn-soft);
+    border-color: rgba(154, 52, 18, 0.22);
+  }
+  .module-mini-card.warn .metric-stat {
+    color: var(--warn);
+  }
+  .module-mini-card.fail {
+    background: #fbe4df;
+    border-color: rgba(159, 18, 57, 0.24);
+  }
+  .module-mini-card.fail .metric-stat {
+    color: #9f1239;
   }
   .module-mini-card h3 {
     margin: 0 0 6px;
@@ -586,6 +650,269 @@ _DASHBOARD_CSS = """
   .terminal-art p {
     margin: 0;
   }
+  .hub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .hub-card {
+    background: linear-gradient(180deg, #fcfaf5 0%, #f4efe2 100%);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .hub-card h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    color: #22303a;
+  }
+  .hub-kicker {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5f6b6f;
+  }
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+  .status-chip.ok {
+    background: rgba(37, 99, 78, 0.14);
+    color: #1f5e4a;
+  }
+  .status-chip.warn {
+    background: rgba(190, 149, 67, 0.18);
+    color: #8a5b12;
+  }
+  .status-chip.fail {
+    background: rgba(140, 34, 34, 0.14);
+    color: #8b1e1e;
+  }
+  .resource-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .resource-card p {
+    margin: 0;
+  }
+  .resource-meta {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6c5f45;
+  }
+  .launch-list {
+    display: grid;
+    gap: 14px;
+  }
+  .launch-item {
+    padding: 16px 18px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .launch-item h3,
+  .launch-item p {
+    margin: 0;
+  }
+  .launch-item h3 {
+    margin-bottom: 8px;
+  }
+  .hub-stack {
+    display: grid;
+    gap: 16px;
+  }
+  .brief-card {
+    padding: 24px;
+    border-radius: 22px;
+    border: 1px solid rgba(91, 106, 115, 0.22);
+    background:
+      radial-gradient(circle at top right, rgba(190, 149, 67, 0.14), transparent 30%),
+      linear-gradient(135deg, #22303a 0%, #324754 100%);
+    color: #f8fafc;
+    box-shadow: 0 20px 40px rgba(34, 48, 58, 0.18);
+  }
+  .brief-card h3,
+  .brief-card p,
+  .brief-card li {
+    color: #f8fafc;
+  }
+  .brief-card h3 {
+    margin: 0 0 10px;
+    font-size: 1.25rem;
+  }
+  .brief-card p {
+    margin: 0 0 10px;
+  }
+  .brief-lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .brief-lane {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.08);
+    border: 1px solid rgba(248, 250, 252, 0.12);
+  }
+  .brief-lane h4,
+  .brief-lane p {
+    margin: 0;
+    color: #f8fafc;
+  }
+  .brief-lane h4 {
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+  }
+  .brief-lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .brief-lane {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.08);
+    border: 1px solid rgba(248, 250, 252, 0.12);
+  }
+  .brief-lane h4,
+  .brief-lane p {
+    margin: 0;
+    color: #f8fafc;
+  }
+  .brief-lane h4 {
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+  }
+  .brief-list,
+  .sequence-list {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 8px;
+  }
+  .readme-grid {
+    display: grid;
+    gap: 18px;
+  }
+  .readme-section {
+    padding: 22px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .readme-section h3 {
+    margin: 0 0 8px;
+    color: #22303a;
+  }
+  .readme-section p {
+    margin: 0 0 12px;
+  }
+  .resource-group-grid,
+  .sequence-grid {
+    display: grid;
+    gap: 16px;
+  }
+  .resource-inline-list {
+    display: grid;
+    gap: 12px;
+  }
+  .resource-inline-list.scroll-pane {
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+  .resource-inline-item {
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: rgba(244, 239, 226, 0.54);
+  }
+  .resource-inline-item h4 {
+    margin: 0 0 6px;
+    color: #22303a;
+  }
+  .sequence-card {
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .sequence-card h3 {
+    margin: 0 0 10px;
+    color: #22303a;
+  }
+  .overview-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .overview-column {
+    display: grid;
+    gap: 18px;
+  }
+  .alert-list {
+    display: grid;
+    gap: 12px;
+  }
+  .alert-card {
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+  }
+  .alert-card h4,
+  .alert-card p {
+    margin: 0;
+  }
+  .alert-card h4 {
+    margin-bottom: 6px;
+    color: #22303a;
+  }
+  .surface-list,
+  .missing-list {
+    display: grid;
+    gap: 12px;
+  }
+  .surface-item,
+  .missing-item {
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: rgba(244, 239, 226, 0.54);
+  }
+  .surface-item h4,
+  .missing-item h4,
+  .surface-item p,
+  .missing-item p {
+    margin: 0;
+  }
+  .surface-item h4,
+  .missing-item h4 {
+    margin-bottom: 6px;
+    color: #22303a;
+  }
   .action-link {
     display: inline-flex;
     align-items: center;
@@ -618,6 +945,9 @@ _DASHBOARD_CSS = """
     .module-callout {
       align-items: flex-start;
       flex-direction: column;
+    }
+    .overview-split {
+      grid-template-columns: 1fr;
     }
     .tab-embed {
       min-height: 760px;
@@ -819,6 +1149,47 @@ def _metric_value(value: Any) -> str:
     rendered = html.escape(str(value))
     compact_class = " compact" if len(str(value)) > 18 else ""
     return f"<p class='metric-stat{compact_class}'>{rendered}</p>"
+
+
+def _status_tone_class(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {
+        "pass",
+        "passed",
+        "ok",
+        "available",
+        "ready",
+        "ready for final audit",
+        "healthy",
+        "certified",
+        "proceed",
+    }:
+        return "pass"
+    if normalized in {
+        "fail",
+        "failed",
+        "error",
+        "blocked",
+        "rejected",
+        "repair",
+    }:
+        return "fail"
+    if normalized:
+        return "warn"
+    return ""
+
+
+def _normalize_reference_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith(("http://", "https://")):
+        return text
+    if "/exports/" in text:
+        return "/" + text[text.index("exports/") :]
+    if text.startswith("exports/"):
+        return "/" + text
+    return text
 
 
 def _render_section(title: str, body: str, *, open_by_default: bool = False) -> str:
@@ -1159,7 +1530,7 @@ def _render_validation_dashboard(results: dict[str, Any], run_id: str) -> str:
             "Failure Overview",
             (
                 "<div class='cert-grid'>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {'pass' if failed_checks == 0 else 'fail'}'>"
                 "<h3>Validation Health</h3>"
                 f"<p class='subtle'>Rules failed</p>{_metric_value(failed_checks)}"
                 f"<p class='subtle'>Out of {total_checks} configured checks.</p>"
@@ -1174,7 +1545,7 @@ def _render_validation_dashboard(results: dict[str, Any], run_id: str) -> str:
                 f"{_metric_value(f'{coverage_pct}%')}"
                 "<p class='subtle'>Rows evaluated under the current rule set.</p>"
                 "</div>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {'pass' if failed_checks == 0 else 'warn'}'>"
                 "<h3>Next Step</h3>"
                 f"{_metric_value('Proceed' if failed_checks == 0 else 'Repair')}"
                 "<p class='subtle'>Promotion guidance for the next pipeline step.</p>"
@@ -1302,17 +1673,17 @@ def _render_final_audit_dashboard(report: dict[str, Any], run_id: str) -> str:
             "Certificate Summary",
             (
                 "<div class='cert-grid'>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {'pass' if ok else 'fail'}'>"
                 "<h3>Certificate Status</h3>"
                 f"{_metric_value('Pass' if ok else 'Fail')}"
                 f"<p class='subtle'>{html.escape(status)}</p>"
                 "</div>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {_status_tone_class(_safe_summary_flag(summary_df, 'Certification Rules Passed'))}'>"
                 "<h3>Certification Rules</h3>"
                 f"{_metric_value(_safe_summary_flag(summary_df, 'Certification Rules Passed'))}"
                 "<p class='subtle'>Result of the strict validation contract.</p>"
                 "</div>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {_status_tone_class(_safe_summary_flag(summary_df, 'Null Value Audit Passed'))}'>"
                 "<h3>Null Audit</h3>"
                 f"{_metric_value(_safe_summary_flag(summary_df, 'Null Value Audit Passed'))}"
                 "<p class='subtle'>Required non-null columns checked at the final gate.</p>"
@@ -2160,8 +2531,9 @@ def _render_reference_value(value: Any, *, empty_label: str) -> str:
     if not value:
         return f"<p class='empty'>{html.escape(empty_label)}</p>"
 
-    rendered = html.escape(str(value))
-    if isinstance(value, str) and value.startswith(("http://", "https://")):
+    normalized = _normalize_reference_text(value)
+    rendered = html.escape(normalized)
+    if normalized.startswith(("http://", "https://", "/exports/")):
         return (
             "<p class='subtle'><a href='"
             f"{rendered}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
@@ -2173,15 +2545,13 @@ def _embed_reference_src(path_value: Any, url_value: Any) -> str:
     preferred = path_value or url_value
     if not preferred:
         return ""
-    text = str(preferred).strip()
+    text = _normalize_reference_text(preferred)
     if not text:
         return ""
     if text.startswith(("http://", "https://")):
         return text
-    if "/exports/" in text:
-        return "/" + text[text.index("exports/") :]
-    if text.startswith("exports/"):
-        return "/" + text
+    if text.startswith("/exports/"):
+        return text
     return ""
 
 
@@ -2208,12 +2578,13 @@ def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
             status = "SKIPPED"
             artifact = "No dashboard"
             export_ref = "No export"
+        tone = _status_tone_class(status)
         cards.append(
-            "<div class='cert-stat-card'>"
+            f"<div class='cert-stat-card {tone}'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
             f"{_metric_value(status)}"
-            f"<p class='subtle'><strong>Dashboard:</strong> {html.escape(str(artifact))}</p>"
-            f"<p class='subtle'><strong>Export:</strong> {html.escape(str(export_ref))}</p>"
+            f"<p class='subtle'><strong>Dashboard:</strong> {html.escape(_normalize_reference_text(artifact))}</p>"
+            f"<p class='subtle'><strong>Export:</strong> {html.escape(_normalize_reference_text(export_ref))}</p>"
             f"<p class='subtle'><strong>Summary Keys:</strong> {html.escape(', '.join(summary.keys()) if isinstance(summary, dict) and summary else 'None')}</p>"
             "</div>"
         )
@@ -2238,7 +2609,7 @@ def _render_auto_heal_step_drilldowns(step_results: dict[str, Any]) -> str:
             "<div class='card'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
             "<div class='cert-grid'>"
-            "<div class='cert-stat-card'>"
+            f"<div class='cert-stat-card {_status_tone_class(status)}'>"
             "<h3>Status</h3>"
             f"{_metric_value(status.upper())}"
             "<p class='subtle'>Outcome recorded for this repair stage.</p>"
@@ -2288,19 +2659,6 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
         "</div>"
     )
 
-    step_ledger = pd.DataFrame(
-        [
-            {
-                "Step": step_name,
-                "Status": (steps.get(step_name, {}) or {}).get("status", "skipped"),
-                "Export": (steps.get(step_name, {}) or {}).get("export_url", ""),
-                "Artifact": (steps.get(step_name, {}) or {}).get("artifact_url")
-                or (steps.get(step_name, {}) or {}).get("artifact_path", ""),
-                "Summary": str((steps.get(step_name, {}) or {}).get("summary", {})),
-            }
-            for step_name in ("normalization", "imputation")
-        ]
-    )
     failed_df = pd.DataFrame({"failed_step": failed_steps}) if failed_steps else pd.DataFrame()
     inferred_df = pd.DataFrame({"module": inferred_modules}) if inferred_modules else pd.DataFrame()
     outcome_df = pd.DataFrame(
@@ -2327,12 +2685,12 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
                 f"{_metric_value(len(inferred_modules))}"
                 "<p class='subtle'>Modules inferred and considered for execution.</p>"
                 "</div>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {_status_tone_class(readiness)}'>"
                 "<h3>Readiness</h3>"
                 f"{_metric_value(readiness)}"
                 "<p class='subtle'>Whether the healed result is ready for final certification.</p>"
                 "</div>"
-                "<div class='cert-stat-card'>"
+                f"<div class='cert-stat-card {'pass' if len(failed_steps) == 0 else 'warn'}'>"
                 "<h3>Failed Steps</h3>"
                 f"{_metric_value(len(failed_steps))}"
                 "<p class='subtle'>Repair stages that still require intervention.</p>"
@@ -2357,25 +2715,19 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
             open_by_default=True,
         ),
         _render_section(
-            "Execution Ledger",
+            "Step Drilldowns",
             (
-                "<div class='cert-ledger'>"
-                f"<div class='card'><h3>Step Ledger</h3>{_render_df(step_ledger, full_preview=True)}</div>"
+                "<div class='stack'>"
                 f"<div class='card'><h3>Inferred Modules</h3>{_render_df(inferred_df, full_preview=True)}</div>"
+                f"{_render_auto_heal_step_drilldowns(steps)}"
                 "</div>"
             ),
-            open_by_default=True,
-        ),
-        _render_section(
-            "Step Drilldowns",
-            _render_auto_heal_step_drilldowns(steps),
-            open_by_default=True,
+            open_by_default=False,
         ),
     ]
     toc = [
         ("Outcome Summary", "Outcome Summary"),
         ("Step Outcomes", "Step Outcomes"),
-        ("Execution Ledger", "Execution Ledger"),
         ("Step Drilldowns", "Step Drilldowns"),
     ]
 
@@ -2410,6 +2762,18 @@ def _module_badge(status: str) -> str:
     if normalized in {"warn", "warning", "missing", "disabled", "not_run"}:
         return f"<span class='badge-warn'>{html.escape(normalized.upper())}</span>"
     return f"<span class='pill warn'>{html.escape(normalized.upper())}</span>"
+
+
+def _status_chip(status: str) -> str:
+    normalized = _tab_status_label(status).lower()
+    chip_class = (
+        "ok"
+        if normalized in {"pass", "available"}
+        else "fail"
+        if normalized in {"fail", "error"}
+        else "warn"
+    )
+    return f"<span class='status-chip {chip_class}'>{html.escape(normalized.upper())}</span>"
 
 
 def _tab_status_label(status: str) -> str:
@@ -2552,12 +2916,12 @@ def _render_pipeline_module_panel(module_name: str, payload: dict[str, Any]) -> 
     return (
         "<div class='module-shell'>"
         "<div class='module-mini-grid'>"
-        "<div class='module-mini-card'>"
+        f"<div class='module-mini-card {_status_tone_class(status)}'>"
         "<h3>Module Status</h3>"
         f"{_metric_value(status.upper())}"
         f"<p class='subtle'>{html.escape(module_name)} latest recorded state.</p>"
         "</div>"
-        "<div class='module-mini-card'>"
+        f"<div class='module-mini-card {'pass' if warning_count == 0 else 'warn'}'>"
         "<h3>Warnings</h3>"
         f"{_metric_value(warning_count)}"
         "<p class='subtle'>Review warnings and operator notes before treating the module as complete.</p>"
@@ -2664,6 +3028,313 @@ def _render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
     )
 
 
+def _render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
+    overview = report.get("overview", {})
+    operator_brief = report.get("operator_brief", {})
+    best_surfaces = report.get("best_surfaces", {})
+    blockers = report.get("blockers", [])
+    recent_run_gaps = report.get("recent_run_gaps", [])
+    recent_runs = report.get("recent_runs", [])
+    resources = report.get("resources", [])
+    resource_groups = report.get("resource_groups", [])
+    launchpad = report.get("launchpad", [])
+    launch_sequences = report.get("launch_sequences", [])
+    data_dictionary = report.get("data_dictionary", {})
+
+    banner = (
+        "<div class='banner ok'>"
+        "<div class='banner-item'><strong>Stage:</strong> Cockpit Operator Hub</div>"
+        f"<div class='banner-item'><strong>Recent Runs:</strong> {html.escape(str(overview.get('recent_run_count', 0)))}</div>"
+        f"<div class='banner-item'><strong>Warning Runs:</strong> {html.escape(str(overview.get('warning_runs', 0)))}</div>"
+        f"<div class='banner-item'><strong>Failed Runs:</strong> {html.escape(str(overview.get('failed_runs', 0)))}</div>"
+        "</div>"
+    )
+
+    brief_lanes = "".join(
+        "<div class='brief-lane'>"
+        f"<h4>{html.escape(str(item.get('title', 'Lane')))}</h4>"
+        f"<p>{html.escape(str(item.get('detail', '')))}</p>"
+        "</div>"
+        for item in operator_brief.get("lanes", [])
+        if isinstance(item, dict)
+    )
+    surface_items = []
+    for label, payload in (
+        ("Latest Pipeline Dashboard", best_surfaces.get("pipeline_dashboard", {})),
+        ("Latest Auto-Heal Dashboard", best_surfaces.get("auto_heal_dashboard", {})),
+        ("Latest Final Audit Dashboard", best_surfaces.get("final_audit_dashboard", {})),
+    ):
+        surface_items.append(
+            "<div class='surface-item'>"
+            f"<h4>{html.escape(label)}</h4>"
+            f"<p class='subtle'><strong>Run:</strong> {html.escape(str((payload or {}).get('run_id') or 'Unavailable'))}</p>"
+            f"{_render_reference_value((payload or {}).get('reference', ''), empty_label='No artifact recorded.')}"
+            "</div>"
+        )
+    blocker_items = []
+    for item in blockers:
+        blocker_items.append(
+            "<div class='surface-item'>"
+            f"<h4>{html.escape(str(item.get('run_id', 'unknown')))} · {html.escape(str(item.get('status', 'UNKNOWN')))}</h4>"
+            f"<p class='subtle'><strong>Latest module:</strong> {html.escape(str(item.get('latest_module', 'unknown')))}</p>"
+            f"<p class='subtle'><strong>Warnings recorded:</strong> {html.escape(str(item.get('warning_count', 0)))}</p>"
+            "</div>"
+        )
+    gap_items = "".join(
+        "<div class='surface-item'>"
+        "<h4>Missing Dashboard Or Artifact</h4>"
+        f"<p class='subtle'>{html.escape(str(item))}</p>"
+        "</div>"
+        for item in recent_run_gaps
+        if str(item).strip()
+    )
+    gaps_panel = (
+        "<div class='readme-section'>"
+        "<h3>Missing Dashboards Or Artifacts</h3>"
+        "<p class='subtle'>These are recent runs where the cockpit could not find an expected dashboard or artifact reference.</p>"
+        "<div class='missing-list'>"
+        f"{gap_items}"
+        "</div>"
+        "</div>"
+        if gap_items
+        else ""
+    )
+    overview_section = (
+        "<div class='hub-stack'>"
+        "<div class='brief-card'>"
+        f"<p class='hub-kicker'>{html.escape(str(operator_brief.get('title', 'Cockpit Briefing')))}</p>"
+        "<h3>What This Cockpit Helps You Review</h3>"
+        f"<p>{html.escape(str(operator_brief.get('summary', '')))}</p>"
+        "<p><strong>This page is organized into three simple lanes:</strong></p>"
+        f"<div class='brief-lanes'>{brief_lanes}</div>"
+        "</div>"
+        "<div class='hub-grid'>"
+        "<div class='hub-card'><p class='hub-kicker'>Ops Snapshot</p><h3>Recent Runs</h3>"
+        f"{_metric_value(overview.get('recent_run_count', 0))}"
+        "<p class='subtle'>History-backed runs discovered from local cockpit data.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Attention</p><h3>Warning Runs</h3>"
+        f"{_metric_value(overview.get('warning_runs', 0))}"
+        "<p class='subtle'>Runs that ended in warn-level states and likely need review.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Blocking</p><h3>Failed Runs</h3>"
+        f"{_metric_value(overview.get('failed_runs', 0))}"
+        "<p class='subtle'>Runs with fail/error end states in the recent cockpit slice.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Stable</p><h3>Healthy Runs</h3>"
+        f"{_metric_value(overview.get('healthy_runs', 0))}"
+        "<p class='subtle'>Recent runs that currently look safe to treat as pass-level outcomes.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Coverage</p><h3>Pipeline Dashboards</h3>"
+        f"{_metric_value(overview.get('pipeline_dashboards_available', 0))}"
+        "<p class='subtle'>Recent runs that already have a pipeline dashboard artifact available.</p></div>"
+        "<div class='hub-card'><p class='hub-kicker'>Coverage</p><h3>Auto-Heal Dashboards</h3>"
+        f"{_metric_value(overview.get('auto_heal_dashboards_available', 0))}"
+        "<p class='subtle'>Recent runs with an operator-facing remediation dashboard already attached.</p></div>"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>Current Alerts And Blockers</h3>"
+        "<div class='alert-list'>"
+        f"{''.join(blocker_items) if blocker_items else '<p class="empty">No warn/fail runs in the current cockpit slice.</p>'}"
+        "</div>"
+        "</div>"
+        "<div class='overview-split'>"
+        "<div class='overview-column'>"
+        "<div class='readme-section'>"
+        "<h3>Recent Run Dashboards</h3>"
+        "<div class='surface-list'>"
+        f"{''.join(surface_items)}"
+        "</div>"
+        "</div>"
+        "</div>"
+        f"{gaps_panel}"
+        "</div>"
+        "</div>"
+    )
+
+    recent_run_cards: list[str] = []
+    for run in recent_runs:
+        dashboard_ref = run.get("pipeline_dashboard") or run.get("best_dashboard")
+        export_ref = run.get("best_export")
+        recent_run_cards.append(
+            "<div class='resource-card'>"
+            f"<p class='resource-meta'>{html.escape(str(run.get('timestamp') or 'Recent run'))}</p>"
+            f"<h3>{html.escape(str(run.get('run_id', 'unknown')))}</h3>"
+            f"{_status_chip(str(run.get('status', 'unknown')))}"
+            "<div class='module-mini-grid'>"
+            "<div class='module-mini-card'><h3>Status</h3>"
+            f"{_metric_value(_tab_status_label(run.get('status', 'unknown')))}"
+            f"<p class='subtle'>Latest module: {html.escape(str(run.get('latest_module', 'unknown')))}</p></div>"
+            "<div class='module-mini-card'><h3>Health</h3>"
+            f"{_metric_value(run.get('health_score', 'N/A'))}"
+            f"<p class='subtle'>{html.escape(str(run.get('health_status', 'unknown')).upper())}</p></div>"
+            "<div class='module-mini-card'><h3>Warnings</h3>"
+            f"{_metric_value(run.get('warning_count', 0))}"
+            f"<p class='subtle'>Modules observed: {html.escape(str(run.get('module_count', 0)))}</p></div>"
+            "</div>"
+            "<p class='subtle'><strong>Session:</strong> "
+            f"{html.escape(str(run.get('session_id') or 'Unavailable'))}</p>"
+            "<p class='subtle'><strong>Best Dashboard</strong></p>"
+            f"{_render_reference_value(dashboard_ref, empty_label='No dashboard recorded.')}"
+            "<p class='subtle'><strong>Best Export</strong></p>"
+            f"{_render_reference_value(export_ref, empty_label='No export recorded.')}"
+            "</div>"
+        )
+    recent_runs_section = (
+        "<div class='hub-stack'>" + "".join(recent_run_cards) + "</div>"
+        if recent_run_cards
+        else "<p class='empty'>No recent runs were discovered in local history.</p>"
+    )
+
+    grouped_resources: list[str] = []
+    template_items = [item for item in resources if str(item.get("Kind", "")).lower() == "template"]
+    reference_items = [
+        item for item in resources if str(item.get("Kind", "")).lower() != "template"
+    ]
+    for group in resource_groups:
+        group_items = group.get("items", [])
+        if str(group.get("title", "")).lower() == "templates and contracts":
+            group_items = template_items
+        items_html = []
+        for item in group_items:
+            items_html.append(
+                "<div class='resource-inline-item'>"
+                f"<p class='resource-meta'>{html.escape(str(item.get('Kind', 'resource')).replace('_', ' ').title())}</p>"
+                f"<h4>{html.escape(str(item.get('Title', 'Untitled')))}</h4>"
+                f"<p class='subtle'>{html.escape(str(item.get('Detail', '')))}</p>"
+                "<p class='subtle'><strong>Open With</strong></p>"
+                f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
+                "</div>"
+            )
+        grouped_resources.append(
+            "<div class='readme-section'>"
+            f"<h3>{html.escape(str(group.get('title', 'Resources')))}</h3>"
+            f"<p class='subtle'>{html.escape(str(group.get('intro', '')))}</p>"
+            "<div class='resource-inline-list scroll-pane'>"
+            f"{''.join(items_html)}"
+            "</div>"
+            "</div>"
+        )
+    all_resource_refs = "".join(
+        "<div class='resource-inline-item'>"
+        f"<p class='resource-meta'>{html.escape(str(item.get('Kind', 'resource')).replace('_', ' ').title())}</p>"
+        f"<h4>{html.escape(str(item.get('Title', 'Untitled')))}</h4>"
+        f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
+        "</div>"
+        for item in reference_items
+    )
+    resources_panel = (
+        "<div class='readme-grid'>"
+        "<div class='readme-section'>"
+        "<h3>Resources For Reading, Planning, And Setup</h3>"
+        "<p class='subtle'>Use this tab when you want context before you click deeper. The guides explain the toolkit in plain language, the templates give you safe starting points, and the catalog helps when you need the exact setting behind a visible behavior.</p>"
+        "</div>"
+        "<div class='resource-group-grid'>"
+        f"{''.join(grouped_resources)}"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>All References</h3>"
+        "<p class='subtle'>This is the compact shelf of guides, catalogs, and other non-template references linked from the cockpit.</p>"
+        "<div class='resource-inline-list scroll-pane'>"
+        f"{all_resource_refs}"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+    sequence_cards = []
+    for sequence in launch_sequences:
+        steps_html = "".join(
+            f"<li>{html.escape(str(step))}</li>"
+            for step in sequence.get("steps", [])
+            if str(step).strip()
+        )
+        sequence_cards.append(
+            "<div class='sequence-card'>"
+            f"<h3>{html.escape(str(sequence.get('title', 'Workflow')))}</h3>"
+            f"<ol class='sequence-list'>{steps_html}</ol>"
+            "</div>"
+        )
+    launch_cards = []
+    for item in launchpad:
+        launch_cards.append(
+            "<div class='launch-item'>"
+            "<p class='resource-meta'>Open This Next</p>"
+            f"<h3>{html.escape(str(item.get('Action', 'Action')))}</h3>"
+            f"<p class='subtle'>{html.escape(str(item.get('Why', '')))}</p>"
+            f"<p class='subtle'><strong>Tool surface:</strong> {html.escape(str(item.get('Tool', 'tool')))}</p>"
+            "</div>"
+        )
+    launchpad_panel = (
+        "<div class='readme-grid'>"
+        "<div class='readme-section'>"
+        "<h3>Launchpad For Moving From Review To Action</h3>"
+        "<p class='subtle'>Use this tab when you are ready to move from understanding the run to doing something about it. The workflow cards show the common paths people take through the toolkit, and the cards below point to the specific surfaces that support those tasks.</p>"
+        "</div>"
+        "<div class='sequence-grid'>"
+        f"{''.join(sequence_cards)}"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>Things You Can Open Next</h3>"
+        "<div class='launch-list'>"
+        f"{''.join(launch_cards)}"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+    dictionary_tab = (
+        "<div class='readme-grid'>"
+        "<div class='brief-card'>"
+        "<p class='hub-kicker'>Planned Surface</p>"
+        "<h3>Data Dictionary Lane</h3>"
+        f"<p>{html.escape(str(data_dictionary.get('direction', '')))}</p>"
+        "</div>"
+        "<div class='hub-grid'>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Status</p>"
+        "<h3>Data Dictionary</h3>"
+        f"{_status_chip(str(data_dictionary.get('status', 'not_implemented')))}"
+        "<p class='subtle'>Reserve the future prelaunch dictionary and schema-expectation surface in the cockpit.</p>"
+        "<p class='subtle'><strong>Template</strong></p>"
+        f"{_render_reference_value(data_dictionary.get('template_path', ''), empty_label='No template recorded.')}"
+        "<p class='subtle'><strong>Plan</strong></p>"
+        f"{_render_reference_value(data_dictionary.get('implementation_plan', ''), empty_label='No plan recorded.')}"
+        "</div>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Why It Matters</p>"
+        "<h3>Prelaunch Report Space</h3>"
+        "<p class='subtle'>This tab exists so the eventual dictionary does not feel bolted on later. It should sit beside the rest of the operator surfaces, inherit infer_configs evidence, and give users a readable preflight view before the heavier pipeline stages run.</p>"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+
+    tab_buttons = [
+        "<button class='tab-button active' type='button' data-tab-target='cockpit-overview' onclick='window.atkDashboard.openTab(this)'>Overview</button>",
+        "<button class='tab-button' type='button' data-tab-target='cockpit-runs' onclick='window.atkDashboard.openTab(this)'>Recent Runs</button>",
+        "<button class='tab-button' type='button' data-tab-target='cockpit-resources' onclick='window.atkDashboard.openTab(this)'>Resources</button>",
+        "<button class='tab-button' type='button' data-tab-target='cockpit-launchpad' onclick='window.atkDashboard.openTab(this)'>Launchpad</button>",
+        "<button class='tab-button' type='button' data-tab-target='cockpit-dictionary' onclick='window.atkDashboard.openTab(this)'>Data Dictionary</button>",
+    ]
+    tab_panels = [
+        f"<div class='tab-panel active' id='cockpit-overview'>{overview_section}</div>",
+        f"<div class='tab-panel' id='cockpit-runs'>{recent_runs_section}</div>",
+        f"<div class='tab-panel' id='cockpit-resources'>{resources_panel}</div>",
+        f"<div class='tab-panel' id='cockpit-launchpad'>{launchpad_panel}</div>",
+        f"<div class='tab-panel' id='cockpit-dictionary'>{dictionary_tab}</div>",
+    ]
+    sections = [
+        "<div class='tab-shell' data-tab-shell='cockpit'>"
+        f"<div class='tab-nav'>{''.join(tab_buttons)}</div>"
+        f"{''.join(tab_panels)}"
+        "</div>"
+    ]
+    toc: list[tuple[str, str]] = []
+
+    return _assemble_page(
+        module_name="Cockpit Dashboard",
+        run_id=run_id,
+        banner_html=banner,
+        toc_items=toc,
+        sections=sections,
+    )
+
+
 def generate_dashboard_html(
     report_tables: dict[str, Any],
     module_name: str,
@@ -2690,6 +3361,8 @@ def generate_dashboard_html(
         return _render_imputation_dashboard(report_tables, run_id, plot_paths)
     if normalized == "auto heal":
         return _render_auto_heal_dashboard(report_tables, run_id)
+    if normalized == "cockpit dashboard":
+        return _render_cockpit_dashboard(report_tables, run_id)
     if normalized == "pipeline dashboard":
         return _render_pipeline_dashboard(report_tables, run_id)
     return _render_generic_dashboard(report_tables, module_name, run_id, plot_paths)

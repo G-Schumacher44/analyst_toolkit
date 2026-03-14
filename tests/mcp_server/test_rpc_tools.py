@@ -29,6 +29,7 @@ def test_rpc_tools_list(client):
     assert "get_agent_playbook" in tool_names
     assert "get_user_quickstart" in tool_names
     assert "get_capability_catalog" in tool_names
+    assert "get_cockpit_dashboard" in tool_names
     assert "get_pipeline_dashboard" in tool_names
     assert "data_dictionary" in tool_names
     assert "preflight_config" in tool_names
@@ -130,10 +131,15 @@ def test_rpc_user_quickstart_tool(client):
     assert "fuzzy matching" in result["content"]["markdown"].lower()
     assert "plotting" in result["content"]["markdown"].lower()
     assert "auto_heal" in result["content"]["markdown"]
+    assert "cockpit dashboard" in result["content"]["markdown"].lower()
+    assert "local artifact server" in result["content"]["markdown"].lower()
     assert "machine_guide" in result
-    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
-    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == ["gcs_path|session_id"]
+    assert result["machine_guide"]["ordered_steps"][0]["tool"] == "get_cockpit_dashboard"
+    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "diagnostics"
+    assert result["machine_guide"]["ordered_steps"][2]["tool"] == "infer_configs"
+    assert result["machine_guide"]["ordered_steps"][2]["required_inputs"] == ["gcs_path|session_id"]
     assert len(result["quick_actions"]) >= 2
+    assert any(a["tool"] == "get_cockpit_dashboard" for a in result["quick_actions"])
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
     assert any(a["tool"] == "auto_heal" for a in result["quick_actions"])
@@ -154,6 +160,8 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client):
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["status"] == "pass"
+    assert result["ordered_steps"][0]["tool"] == "get_cockpit_dashboard"
+    assert "local artifact server" in " ".join(result["ordered_steps"][0]["notes"]).lower()
     infer_step = next(
         step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
     )
@@ -334,6 +342,65 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
         "exports/reports/pipeline/unsafe_run_pipeline_dashboard.html",
         "Pipeline Dashboard",
         "unsafe_run",
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
+    mocker.patch.object(
+        cockpit_module,
+        "_build_cockpit_dashboard_report",
+        return_value={
+            "overview": {
+                "recent_run_count": 2,
+                "warning_runs": 1,
+                "failed_runs": 1,
+                "pipeline_dashboards_available": 1,
+                "auto_heal_dashboards_available": 1,
+            },
+            "recent_runs": [],
+            "resources": [],
+            "launchpad": [],
+        },
+    )
+    export_html = mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/cockpit_dashboard.html",
+    )
+    deliver = mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "https://example.com/cockpit.html",
+            "local_path": "/tmp/cockpit_dashboard.html",
+            "url": "https://example.com/cockpit.html",
+            "warnings": [],
+            "destinations": {
+                "gcs": {"status": "available", "url": "https://example.com/cockpit.html"}
+            },
+        },
+    )
+
+    result = await cockpit_module._toolkit_get_cockpit_dashboard(limit=5)
+
+    assert result["status"] == "pass"
+    assert result["module"] == "cockpit_dashboard"
+    assert result["dashboard_label"] == "Cockpit dashboard"
+    assert result["artifact_url"] == "https://example.com/cockpit.html"
+    assert result["summary"]["recent_run_count"] == 2
+    export_html.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/cockpit/cockpit_dashboard.html",
+        "Cockpit Dashboard",
+        "cockpit",
+    )
+    deliver.assert_called_once_with(
+        "/tmp/cockpit_dashboard.html",
+        run_id="cockpit_dashboard",
+        module="cockpit_dashboard",
+        config={},
+        session_id=None,
     )
 
 
