@@ -3071,6 +3071,7 @@ def _render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
             f"<p class='subtle'><strong>Warnings recorded:</strong> {html.escape(str(item.get('warning_count', 0)))}</p>"
             "</div>"
         )
+    blocker_fallback_html = "<p class='empty'>No warn/fail runs in the current cockpit slice.</p>"
     gap_items = "".join(
         "<div class='surface-item'>"
         "<h4>Missing Dashboard Or Artifact</h4>"
@@ -3122,7 +3123,7 @@ def _render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
         "<div class='readme-section'>"
         "<h3>Current Alerts And Blockers</h3>"
         "<div class='alert-list'>"
-        f"{''.join(blocker_items) if blocker_items else '<p class="empty">No warn/fail runs in the current cockpit slice.</p>'}"
+        f"{''.join(blocker_items) if blocker_items else blocker_fallback_html}"
         "</div>"
         "</div>"
         "<div class='overview-split'>"
