@@ -3124,7 +3124,7 @@ def _render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
         "<div class='readme-section'>"
         "<h3>Current Alerts And Blockers</h3>"
         "<div class='alert-list'>"
-        f"{''.join(blocker_items) if blocker_items else '<p class="empty">No warn/fail runs in the current cockpit slice.</p>'}"
+        f"{''.join(blocker_items) if blocker_items else '<p class=\"empty\">No warn/fail runs in the current cockpit slice.</p>'}"
         "</div>"
         "</div>"
         "<div class='overview-split'>"
