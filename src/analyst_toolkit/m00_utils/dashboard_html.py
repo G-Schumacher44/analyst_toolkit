@@ -839,6 +839,11 @@ def _assemble_page(
     sections: list[str],
 ) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    page_title = (
+        module_name
+        if module_name.strip().lower().endswith("dashboard")
+        else f"{module_name} Dashboard"
+    )
     toc_html = ""
     if toc_items:
         toc_links = "".join(
@@ -850,11 +855,11 @@ def _assemble_page(
     return (
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
-        f"<title>{html.escape(module_name)} Dashboard - {html.escape(run_id)}</title>"
+        f"<title>{html.escape(page_title)} - {html.escape(run_id)}</title>"
         f"{_DASHBOARD_CSS}{_DASHBOARD_SCRIPT}</head><body><div class='page'>"
         "<div class='hero'>"
         "<div class='hero-kicker'>Analyst Toolkit Export</div>"
-        f"<h1>{html.escape(module_name)} Dashboard</h1>"
+        f"<h1>{html.escape(page_title)}</h1>"
         "<div class='hero-meta'>"
         f"<span><strong>Run ID:</strong> {html.escape(run_id)}</span>"
         f"<span><strong>Generated:</strong> {generated_at}</span>"

@@ -73,6 +73,22 @@ def test_rpc_resources_read_auto_heal_template(client):
     assert "runtime" in contents[0]["text"]
 
 
+def test_rpc_resources_read_data_dictionary_template(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 122,
+        "method": "resources/read",
+        "params": {"uri": "analyst://templates/config/data_dictionary_request_template.yaml"},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    contents = response.json()["result"]["contents"]
+    assert len(contents) == 1
+    assert contents[0]["uri"] == "analyst://templates/config/data_dictionary_request_template.yaml"
+    assert "data_dictionary" in contents[0]["text"]
+    assert "prelaunch_report" in contents[0]["text"]
+
+
 def test_rpc_resources_read_not_found(client):
     """Verify resources/read returns invalid params for unknown resource URI."""
     payload = {
