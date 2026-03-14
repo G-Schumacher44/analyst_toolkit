@@ -61,6 +61,16 @@ def _collect_export_html_flags(
     runtime_flags: list[bool] | None = None,
     module_flags: list[bool] | None = None,
 ) -> tuple[list[bool], list[bool]]:
+    sanctioned_module_suffixes = {
+        ("settings", "export_html"),
+        ("profile", "settings", "export_html"),
+        ("export", "export_html"),
+        ("settings", "export", "export_html"),
+    }
+
+    def _is_sanctioned_module_path(candidate: tuple[object, ...]) -> bool:
+        return any(candidate[-len(suffix) :] == suffix for suffix in sanctioned_module_suffixes)
+
     if runtime_flags is None:
         runtime_flags = []
     if module_flags is None:
@@ -69,11 +79,12 @@ def _collect_export_html_flags(
         for key, value in config.items():
             next_path = path + (key,)
             if key == "export_html":
-                flag = bool(value)
+                if not isinstance(value, bool):
+                    continue
                 if next_path == ("runtime", "artifacts", "export_html"):
-                    runtime_flags.append(flag)
-                else:
-                    module_flags.append(flag)
+                    runtime_flags.append(value)
+                elif _is_sanctioned_module_path(next_path):
+                    module_flags.append(value)
                 continue
             _collect_export_html_flags(
                 value,

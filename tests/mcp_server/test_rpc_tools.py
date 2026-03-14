@@ -268,6 +268,7 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
         "export_html_report",
         return_value="/tmp/run-pipeline-001_pipeline_dashboard.html",
     )
+    append_history = mocker.patch.object(cockpit_module, "append_to_run_history")
     deliver = mocker.patch.object(
         cockpit_module,
         "deliver_artifact",
@@ -306,6 +307,11 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
         config={},
         session_id=None,
     )
+    append_history.assert_called_once_with(
+        "run-pipeline-001",
+        mocker.ANY,
+        session_id=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -321,6 +327,7 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
         "export_html_report",
         return_value="/tmp/pipeline_dashboard.html",
     )
+    mocker.patch.object(cockpit_module, "append_to_run_history")
     mocker.patch.object(
         cockpit_module,
         "deliver_artifact",
@@ -340,6 +347,45 @@ async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path
         "exports/reports/pipeline/unsafe_run_pipeline_dashboard.html",
         "Pipeline Dashboard",
         "unsafe_run",
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_uses_session_specific_artifact_path(mocker):
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=[])
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    export_html = mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/pipeline_dashboard.html",
+    )
+    mocker.patch.object(cockpit_module, "append_to_run_history")
+    mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "",
+            "local_path": "/tmp/pipeline_dashboard.html",
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    await cockpit_module._toolkit_get_pipeline_dashboard(
+        run_id="run-pipeline-001",
+        session_id="session-42",
+    )
+
+    export_html.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/pipeline/run-pipeline-001_session-42_pipeline_dashboard.html",
+        "Pipeline Dashboard",
+        "run-pipeline-001",
     )
 
 
@@ -390,15 +436,15 @@ async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
     assert result["summary"]["recent_run_count"] == 2
     export_html.assert_called_once_with(
         mocker.ANY,
-        "exports/reports/cockpit/cockpit_dashboard.html",
+        "exports/reports/cockpit/cockpit_dashboard_limit_5.html",
         "Cockpit Dashboard",
-        "cockpit",
+        "cockpit_dashboard_limit_5",
     )
     deliver.assert_called_once_with(
         "/tmp/cockpit_dashboard.html",
-        run_id="cockpit_dashboard",
+        run_id="cockpit_dashboard_limit_5",
         module="cockpit_dashboard",
-        config={},
+        config={"upload_artifacts": False},
         session_id=None,
     )
 

@@ -11,6 +11,7 @@ from typing import Any
 
 from analyst_toolkit.m00_utils.export_utils import export_html_report
 from analyst_toolkit.mcp_server.io import (
+    append_to_run_history,
     compact_destination_metadata,
     deliver_artifact,
     empty_delivery_state,
@@ -230,6 +231,18 @@ def _safe_run_id_for_path(run_id: str) -> str:
     return normalized or "pipeline_run"
 
 
+def _pipeline_dashboard_artifact_path(run_id: str, session_id: str | None = None) -> str:
+    safe_run_id = _safe_run_id_for_path(run_id)
+    if session_id:
+        safe_session_id = _safe_run_id_for_path(session_id)
+        return f"exports/reports/pipeline/{safe_run_id}_{safe_session_id}_pipeline_dashboard.html"
+    return f"exports/reports/pipeline/{safe_run_id}_pipeline_dashboard.html"
+
+
+def _cockpit_artifact_key(limit: int) -> str:
+    return f"cockpit_dashboard_limit_{int(limit)}"
+
+
 def _trusted_history_denial() -> dict[str, Any]:
     return {
         "status": "error",
@@ -313,9 +326,11 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
 
         final_audit = latest_by_module.get("final_audit", {})
         auto_heal = latest_by_module.get("auto_heal", {})
-        pipeline_path = (
-            f"exports/reports/pipeline/{_safe_run_id_for_path(run_id)}_pipeline_dashboard.html"
-        )
+        pipeline_entry = latest_by_module.get("pipeline_dashboard", {})
+        pipeline_path = _pipeline_dashboard_artifact_path(run_id, session_id or None)
+        pipeline_dashboard = _dashboard_ref(pipeline_entry)
+        if not pipeline_dashboard and Path(pipeline_path).exists():
+            pipeline_dashboard = pipeline_path
         cards.append(
             {
                 "run_id": run_id,
@@ -332,7 +347,7 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
                 "timestamp": str(last_entry.get("timestamp", "")),
                 "health_score": health.get("health_score", "N/A"),
                 "health_status": health.get("health_status", "unknown"),
-                "pipeline_dashboard": pipeline_path if Path(pipeline_path).exists() else "",
+                "pipeline_dashboard": pipeline_dashboard,
                 "auto_heal_dashboard": _dashboard_ref(auto_heal),
                 "final_audit_dashboard": _dashboard_ref(final_audit),
                 "best_dashboard": _dashboard_ref(final_audit)
@@ -663,7 +678,7 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
         or auto_heal_entry.get("export_url", ""),
     }
 
-    artifact_path = f"exports/reports/pipeline/{safe_run_id}_pipeline_dashboard.html"
+    artifact_path = _pipeline_dashboard_artifact_path(run_id, effective_session_id or None)
     artifact_delivery = empty_delivery_state()
     artifact_url = ""
     output_path = export_html_report(report, artifact_path, "Pipeline Dashboard", safe_run_id)
@@ -700,6 +715,7 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
     res = with_dashboard_artifact(
         res, artifact_path=artifact_path, artifact_url=artifact_url, label="Pipeline dashboard"
     )
+    append_to_run_history(run_id, res, session_id=effective_session_id or None)
     res = with_next_actions(
         res,
         [
@@ -718,14 +734,15 @@ async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
         return _trusted_history_denial()
     limit = max(1, min(int(limit), 50))
     report = _build_cockpit_dashboard_report(limit)
-    artifact_path = "exports/reports/cockpit/cockpit_dashboard.html"
+    artifact_key = _cockpit_artifact_key(limit)
+    artifact_path = f"exports/reports/cockpit/{artifact_key}.html"
     artifact_delivery = empty_delivery_state()
-    output_path = export_html_report(report, artifact_path, "Cockpit Dashboard", "cockpit")
+    output_path = export_html_report(report, artifact_path, "Cockpit Dashboard", artifact_key)
     artifact_delivery = deliver_artifact(
         output_path,
-        run_id="cockpit_dashboard",
+        run_id=artifact_key,
         module="cockpit_dashboard",
-        config={},
+        config={"upload_artifacts": False},
         session_id=None,
     )
     local_path = str(artifact_delivery.get("local_path", output_path))
