@@ -55,6 +55,104 @@ def test_generate_diagnostics_dashboard_embeds_plots(tmp_path):
     assert "window.atkDashboard.openPlot" in contents
 
 
+def test_generate_data_dictionary_dashboard_renders_prelaunch_contract():
+    report = {
+        "overview": pd.DataFrame(
+            [
+                {
+                    "Rows": 10,
+                    "Columns": 3,
+                    "Expected Columns": 4,
+                    "Missing Expected Columns": 1,
+                    "Metadata Gaps": 2,
+                    "Profile Depth": "standard",
+                    "Examples Included": True,
+                    "Prelaunch Report": True,
+                    "Inference Seeded": True,
+                }
+            ]
+        ),
+        "expected_schema": pd.DataFrame(
+            [
+                {
+                    "Column": "customer_id",
+                    "Observed": "Yes",
+                    "Expected Dtype": "",
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                },
+                {
+                    "Column": "status",
+                    "Observed": "Yes",
+                    "Expected Dtype": "",
+                    "Allowed Values Preview": "new, done",
+                    "Numeric Rule": "",
+                },
+                {
+                    "Column": "country",
+                    "Observed": "No",
+                    "Expected Dtype": "",
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                },
+            ]
+        ),
+        "column_dictionary": pd.DataFrame(
+            [
+                {
+                    "Column": "customer_id",
+                    "Observed Dtype": "int64",
+                    "Expected Dtype": "",
+                    "Semantic Type": "identifier",
+                    "Expected In Schema": "Yes",
+                    "Nullable": "No",
+                    "Unique": "Yes",
+                    "Distinct Count": 10,
+                    "Null Count": 0,
+                    "Null %": 0.0,
+                    "Example Values": "1, 2",
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                    "Transformation Notes": "",
+                    "Quality Notes": "OK",
+                }
+            ]
+        ),
+        "prelaunch_readiness": pd.DataFrame(
+            [
+                {
+                    "Severity": "fail",
+                    "Type": "missing_expected_column",
+                    "Column": "country",
+                    "Detail": "Present in inferred validation schema but missing from the current dataset.",
+                }
+            ]
+        ),
+        "profile_snapshot": pd.DataFrame(
+            [
+                {
+                    "Column": "customer_id",
+                    "Dtype": "int64",
+                    "Unique Values": 10,
+                    "Audit Remarks": "OK",
+                    "Missing Count": 0,
+                }
+            ]
+        ),
+        "__dashboard_meta__": {"status": "warn"},
+    }
+
+    html = generate_html_report(report, "Data Dictionary", "dict-001")
+
+    assert "Data Dictionary" in html
+    assert "Dictionary Overview" in html
+    assert "Expected Schema And Contract" in html
+    assert "Column Dictionary" in html
+    assert "Prelaunch Readiness" in html
+    assert "metadata gaps" in html.lower()
+    assert "country" in html
+
+
 def test_generate_validation_dashboard_renders_failure_details():
     results = {
         "schema_conformity": {

@@ -305,8 +305,8 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             {
                 "tool": "data_dictionary",
                 "template_path": "config/data_dictionary_request_template.yaml",
-                "description": "Reserved prelaunch dictionary flow seeded by infer_configs and intended for future cockpit/dashboard attachment.",
-                "outputs": ["not_implemented", "template_path", "implementation_plan"],
+                "description": "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts.",
+                "outputs": ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"],
             },
         ],
         "golden_templates": sorted(golden_configs.keys()),

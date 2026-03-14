@@ -376,6 +376,17 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
     return cards
 
 
+def _latest_recent_module_entry(module_name: str, limit: int) -> dict[str, Any]:
+    for history_file in _iter_recent_history_files(limit):
+        history = _read_history_entries(history_file)
+        if not history:
+            continue
+        for entry in reversed(history):
+            if str(entry.get("module", "")).strip() == module_name:
+                return entry
+    return {}
+
+
 def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
     recent_runs = _build_recent_run_cards(limit)
     warnings = sum(1 for run in recent_runs if str(run.get("status", "")).lower() in {"warn"})
@@ -390,6 +401,7 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
     top_pipeline = next((run for run in recent_runs if run.get("pipeline_dashboard")), {})
     top_auto_heal = next((run for run in recent_runs if run.get("auto_heal_dashboard")), {})
     top_final_audit = next((run for run in recent_runs if run.get("final_audit_dashboard")), {})
+    latest_dictionary = _latest_recent_module_entry("data_dictionary", limit)
     blocker_runs = [
         {
             "run_id": str(run.get("run_id", "")),
@@ -472,7 +484,7 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
         {
             "title": "Templates And Contracts",
             "intro": (
-                "These are the copyable request shapes for runtime overlays, auto-heal, and the reserved "
+                "These are the copyable request shapes for runtime overlays, auto-heal, and the "
                 "data dictionary workflow."
             ),
             "items": [resources[3], resources[4], resources[5]],
@@ -490,7 +502,7 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
         {
             "Action": "Infer Configs",
             "Tool": "infer_configs",
-            "Why": "Seed config review and future prelaunch dictionary work from inferred rules.",
+            "Why": "Seed config review and the data-dictionary prelaunch contract from inferred rules.",
         },
         {
             "Action": "Open Pipeline Dashboard",
@@ -529,8 +541,8 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
             "title": "Prelaunch Dictionary Path",
             "steps": [
                 "Start from infer_configs so the data dictionary inherits inferred types, rules, and high-signal column hints.",
-                "Use the reserved data_dictionary request template to keep the eventual contract consistent.",
-                "Treat the future prelaunch report as a cockpit-linked surface, not a disconnected export.",
+                "Use the data_dictionary request template to keep the prelaunch contract consistent.",
+                "Treat the prelaunch report as a cockpit-linked surface, not a disconnected export.",
             ],
         },
     ]
@@ -588,9 +600,23 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
         "launchpad": launchpad,
         "launch_sequences": launch_sequences,
         "data_dictionary": {
-            "status": "not_implemented",
+            "status": str(latest_dictionary.get("status", "not_implemented") or "not_implemented"),
             "template_path": "config/data_dictionary_request_template.yaml",
             "implementation_plan": "local_plans/DATA_DICTIONARY_IMPLEMENTATION_WAVE_2026-03-14.md",
+            "latest_run_id": str(latest_dictionary.get("run_id", "")),
+            "latest_dashboard": str(
+                latest_dictionary.get("dashboard_url")
+                or latest_dictionary.get("dashboard_path")
+                or latest_dictionary.get("artifact_url")
+                or latest_dictionary.get("artifact_path")
+                or ""
+            ),
+            "latest_export": str(
+                latest_dictionary.get("xlsx_url")
+                or latest_dictionary.get("xlsx_path")
+                or latest_dictionary.get("export_url")
+                or ""
+            ),
             "direction": (
                 "The data dictionary should be generated from infer_configs output and surfaced as a "
                 "prelaunch report inside the cockpit so users can review structure expectations before "

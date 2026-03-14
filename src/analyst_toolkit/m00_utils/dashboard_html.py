@@ -22,6 +22,9 @@ from analyst_toolkit.m00_utils.dashboard_data_prep import (
 from analyst_toolkit.m00_utils.dashboard_diagnostics import (
     render_diagnostics_dashboard,
 )
+from analyst_toolkit.m00_utils.dashboard_dictionary import (
+    render_data_dictionary_dashboard,
+)
 from analyst_toolkit.m00_utils.dashboard_plots import render_plot_grid
 from analyst_toolkit.m00_utils.dashboard_shared import _display_name, _render_section
 from analyst_toolkit.m00_utils.dashboard_tables import _render_df
@@ -88,6 +91,7 @@ def generate_dashboard_html(
         "normalization": render_normalization_dashboard,
         "outlier handling": render_outlier_handling_dashboard,
         "auto heal": render_auto_heal_dashboard,
+        "data dictionary": render_data_dictionary_dashboard,
         "cockpit dashboard": render_cockpit_dashboard,
         "pipeline dashboard": render_pipeline_dashboard,
     }

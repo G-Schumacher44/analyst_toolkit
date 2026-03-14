@@ -278,10 +278,13 @@ def _render_cockpit_launchpad(
 
 
 def _render_cockpit_dictionary(data_dictionary: dict[str, Any]) -> str:
+    latest_run_id = str(data_dictionary.get("latest_run_id", ""))
+    latest_dashboard = data_dictionary.get("latest_dashboard", "")
+    latest_export = data_dictionary.get("latest_export", "")
     return (
         "<div class='readme-grid'>"
         "<div class='brief-card'>"
-        "<p class='hub-kicker'>Planned Surface</p>"
+        "<p class='hub-kicker'>Dictionary Surface</p>"
         "<h3>Data Dictionary Lane</h3>"
         f"<p>{html.escape(str(data_dictionary.get('direction', '')))}</p>"
         "</div>"
@@ -290,16 +293,20 @@ def _render_cockpit_dictionary(data_dictionary: dict[str, Any]) -> str:
         "<p class='hub-kicker'>Status</p>"
         "<h3>Data Dictionary</h3>"
         f"{_status_chip(str(data_dictionary.get('status', 'not_implemented')))}"
-        "<p class='subtle'>Reserve the future prelaunch dictionary and schema-expectation surface in the cockpit.</p>"
+        "<p class='subtle'>Keep the dictionary close to the rest of the cockpit so prelaunch review stays tied to real artifacts and recent run context.</p>"
         "<p class='subtle'><strong>Template</strong></p>"
         f"{_render_reference_value(data_dictionary.get('template_path', ''), empty_label='No template recorded.')}"
         "<p class='subtle'><strong>Plan</strong></p>"
         f"{_render_reference_value(data_dictionary.get('implementation_plan', ''), empty_label='No plan recorded.')}"
         "</div>"
         "<div class='hub-card'>"
-        "<p class='hub-kicker'>Why It Matters</p>"
-        "<h3>Prelaunch Report Space</h3>"
-        "<p class='subtle'>This tab exists so the eventual dictionary does not feel bolted on later. It should sit beside the rest of the operator surfaces, inherit infer_configs evidence, and give users a readable preflight view before the heavier pipeline stages run.</p>"
+        "<p class='hub-kicker'>Latest Surface</p>"
+        "<h3>Recent Dictionary Artifact</h3>"
+        f"<p class='subtle'><strong>Run</strong> {html.escape(latest_run_id or 'Not recorded')}</p>"
+        "<p class='subtle'><strong>Dashboard</strong></p>"
+        f"{_render_reference_value(latest_dashboard, empty_label='No dictionary dashboard recorded yet.')}"
+        "<p class='subtle'><strong>Workbook</strong></p>"
+        f"{_render_reference_value(latest_export, empty_label='No dictionary workbook recorded yet.')}"
         "</div>"
         "</div>"
         "</div>"
