@@ -426,6 +426,18 @@ async def test_toolkit_auto_heal_accepts_runtime_overrides(monkeypatch):
     monkeypatch.setattr(auto_heal_tool, "_toolkit_infer_configs", fake_infer_configs)
     monkeypatch.setattr(auto_heal_tool, "_toolkit_normalization", fake_norm)
     monkeypatch.setattr(auto_heal_tool, "_toolkit_imputation", fake_imp)
+    monkeypatch.setattr(auto_heal_tool, "export_html_report", lambda *args, **kwargs: "auto.html")
+    monkeypatch.setattr(
+        auto_heal_tool,
+        "deliver_artifact",
+        lambda local_path, *args, **kwargs: {
+            "reference": "https://example.com/auto",
+            "local_path": local_path,
+            "url": "https://example.com/auto",
+            "warnings": [],
+            "destinations": {"gcs": {"status": "available", "url": "https://example.com/auto"}},
+        },
+    )
     monkeypatch.setattr(auto_heal_tool, "append_to_run_history", lambda *args, **kwargs: None)
     monkeypatch.setattr(auto_heal_tool, "get_session_metadata", lambda sid: {"row_count": 3})
 
@@ -440,6 +452,9 @@ async def test_toolkit_auto_heal_accepts_runtime_overrides(monkeypatch):
     assert result["run_id"] == "auto_runtime"
     assert infer_calls[0]["gcs_path"] == "gs://bucket/runtime.csv"
     assert infer_calls[0]["run_id"] == "auto_runtime"
+    assert result["dashboard_label"] == "Auto-heal dashboard"
+    assert result["artifact_url"] == "https://example.com/auto"
+    assert result["artifact_matrix"]["html_report"]["status"] == "available"
     assert norm_calls[0]["runtime"]["artifacts"]["export_html"] is False
     assert imp_calls[0]["runtime"]["artifacts"]["export_html"] is False
 

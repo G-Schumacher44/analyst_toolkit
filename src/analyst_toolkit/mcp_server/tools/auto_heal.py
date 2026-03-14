@@ -4,12 +4,22 @@ import asyncio
 
 import yaml
 
+from analyst_toolkit.m00_utils.export_utils import export_html_report
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    build_artifact_contract,
+    compact_destination_metadata,
+    deliver_artifact,
+    fold_status_with_artifacts,
     get_session_metadata,
     resolve_run_context,
 )
 from analyst_toolkit.mcp_server.job_state import JobStore
+from analyst_toolkit.mcp_server.response_utils import (
+    next_action,
+    with_dashboard_artifact,
+    with_next_actions,
+)
 from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
     runtime_to_tool_overrides,
@@ -135,22 +145,101 @@ async def _run_auto_heal_pipeline(
     elif status in {"fail", "error"}:
         message = "Auto-healing completed with failures. Review failed_steps and summaries."
 
+    artifact_path = f"exports/reports/auto_heal/{run_id}_auto_heal_report.html"
+    auto_heal_report = {
+        "status": status,
+        "message": message,
+        "row_count": row_count,
+        "final_session_id": current_session_id,
+        "final_export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
+        "final_dashboard_url": imp_res.get("artifact_url") or norm_res.get("artifact_url", ""),
+        "final_dashboard_path": imp_res.get("artifact_path") or norm_res.get("artifact_path", ""),
+        "inferred_modules": sorted(configs.keys()),
+        "failed_steps": failed_steps,
+        "steps": {
+            "normalization": {
+                "status": norm_res.get("status", "skipped"),
+                "summary": norm_res.get("summary", {}),
+                "artifact_path": norm_res.get("artifact_path", ""),
+                "artifact_url": norm_res.get("artifact_url", ""),
+                "export_url": norm_res.get("export_url", ""),
+            },
+            "imputation": {
+                "status": imp_res.get("status", "skipped"),
+                "summary": imp_res.get("summary", {}),
+                "artifact_path": imp_res.get("artifact_path", ""),
+                "artifact_url": imp_res.get("artifact_url", ""),
+                "export_url": imp_res.get("export_url", ""),
+            },
+        },
+    }
+    export_html_report(auto_heal_report, artifact_path, "Auto Heal", run_id)
+    artifact_delivery = deliver_artifact(
+        artifact_path,
+        run_id=run_id,
+        module="auto_heal",
+        config=runtime_overrides,
+        session_id=current_session_id,
+    )
+    artifact_path = artifact_delivery["local_path"]
+    artifact_url = artifact_delivery["url"]
+
+    warnings = list(lifecycle["warnings"]) + list(runtime_warnings) + artifact_delivery["warnings"]
+    artifact_contract = build_artifact_contract(
+        imp_res.get("export_url") or norm_res.get("export_url", ""),
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        expect_html=True,
+        required_html=True,
+        probe_local_paths=True,
+    )
+    warnings.extend(artifact_contract["artifact_warnings"])
+    status = fold_status_with_artifacts(status, artifact_contract["missing_required_artifacts"])
+
     res = {
         "status": status,
         "module": "auto_heal",
         "run_id": run_id,
         "session_id": current_session_id,
         "summary": {**summary, "row_count": row_count},
-        "artifact_path": imp_res.get("artifact_path") or norm_res.get("artifact_path", ""),
-        "artifact_url": imp_res.get("artifact_url") or norm_res.get("artifact_url", ""),
+        "artifact_path": artifact_path,
+        "artifact_url": artifact_url,
         "export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
         "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
         "failed_steps": failed_steps,
-        "warnings": list(lifecycle["warnings"]) + list(runtime_warnings),
+        "destination_delivery": {
+            "html_report": compact_destination_metadata(artifact_delivery["destinations"]),
+        },
+        "warnings": warnings,
         "lifecycle": {k: v for k, v in lifecycle.items() if k != "warnings"},
         "message": message,
         "runtime_applied": runtime_applied,
+        "artifact_matrix": artifact_contract["artifact_matrix"],
+        "expected_artifacts": artifact_contract["expected_artifacts"],
+        "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
+        "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
+    res = with_dashboard_artifact(
+        res,
+        artifact_path=artifact_path,
+        artifact_url=artifact_url,
+        label="Auto-heal dashboard",
+    )
+    res = with_next_actions(
+        res,
+        [
+            next_action(
+                "get_run_history",
+                "Review the full auto-heal ledger and child tool outputs for this run.",
+                {"run_id": run_id, "session_id": current_session_id},
+            ),
+            next_action(
+                "final_audit",
+                "Run final certification on the healed dataset.",
+                {"session_id": current_session_id, "run_id": run_id},
+            ),
+        ],
+    )
     append_to_run_history(run_id, res, session_id=current_session_id)
     return res
 

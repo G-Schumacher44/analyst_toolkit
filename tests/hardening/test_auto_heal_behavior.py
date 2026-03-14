@@ -46,14 +46,26 @@ async def test_auto_heal_propagates_child_artifacts_and_status(monkeypatch):
     monkeypatch.setattr(auto_heal_module, "_toolkit_infer_configs", fake_infer)
     monkeypatch.setattr(auto_heal_module, "_toolkit_normalization", fake_norm)
     monkeypatch.setattr(auto_heal_module, "_toolkit_imputation", fake_imp)
+    monkeypatch.setattr(auto_heal_module, "export_html_report", lambda *args, **kwargs: "auto.html")
+    monkeypatch.setattr(
+        auto_heal_module,
+        "deliver_artifact",
+        lambda local_path, *args, **kwargs: {
+            "reference": "https://example.com/auto",
+            "local_path": local_path,
+            "url": "https://example.com/auto",
+            "warnings": [],
+            "destinations": {"gcs": {"status": "available", "url": "https://example.com/auto"}},
+        },
+    )
     monkeypatch.setattr(auto_heal_module, "append_to_run_history", lambda *args, **kwargs: None)
     monkeypatch.setattr(auto_heal_module, "get_session_metadata", lambda sid: {"row_count": 3})
 
     res = await auto_heal_module._toolkit_auto_heal(session_id="sess_input", run_id="run_auto")
 
     assert res["status"] == "warn"
-    assert res["artifact_path"] == "imp_report.html"
-    assert res["artifact_url"] == "https://example.com/imp"
+    assert res["artifact_path"].endswith("run_auto_auto_heal_report.html")
+    assert res["artifact_url"] == "https://example.com/auto"
     assert res["export_url"] == "gs://bucket/imp.csv"
     assert res["plot_urls"] == {"imp.png": "https://example.com/imp.png"}
     assert res["failed_steps"] == []
@@ -90,14 +102,26 @@ async def test_auto_heal_skips_imputation_when_no_strategies(monkeypatch):
     monkeypatch.setattr(auto_heal_module, "_toolkit_infer_configs", fake_infer)
     monkeypatch.setattr(auto_heal_module, "_toolkit_normalization", fake_norm)
     monkeypatch.setattr(auto_heal_module, "_toolkit_imputation", fake_imp)
+    monkeypatch.setattr(auto_heal_module, "export_html_report", lambda *args, **kwargs: "auto.html")
+    monkeypatch.setattr(
+        auto_heal_module,
+        "deliver_artifact",
+        lambda local_path, *args, **kwargs: {
+            "reference": "https://example.com/auto",
+            "local_path": local_path,
+            "url": "https://example.com/auto",
+            "warnings": [],
+            "destinations": {"gcs": {"status": "available", "url": "https://example.com/auto"}},
+        },
+    )
     monkeypatch.setattr(auto_heal_module, "append_to_run_history", lambda *args, **kwargs: None)
     monkeypatch.setattr(auto_heal_module, "get_session_metadata", lambda sid: {"row_count": 3})
 
     res = await auto_heal_module._toolkit_auto_heal(session_id="sess_input", run_id="run_auto")
 
     assert res["status"] == "pass"
-    assert res["artifact_path"] == "norm_report.html"
-    assert res["artifact_url"] == "https://example.com/norm"
+    assert res["artifact_path"].endswith("run_auto_auto_heal_report.html")
+    assert res["artifact_url"] == "https://example.com/auto"
     assert res["export_url"] == "gs://bucket/norm.csv"
     assert res["plot_urls"] == {"norm.png": "https://example.com/norm.png"}
     assert res["failed_steps"] == []
@@ -120,6 +144,18 @@ async def test_auto_heal_returns_error_when_step_raises(monkeypatch):
 
     monkeypatch.setattr(auto_heal_module, "_toolkit_infer_configs", fake_infer)
     monkeypatch.setattr(auto_heal_module, "_toolkit_normalization", fake_norm)
+    monkeypatch.setattr(auto_heal_module, "export_html_report", lambda *args, **kwargs: "auto.html")
+    monkeypatch.setattr(
+        auto_heal_module,
+        "deliver_artifact",
+        lambda local_path, *args, **kwargs: {
+            "reference": "https://example.com/auto",
+            "local_path": local_path,
+            "url": "https://example.com/auto",
+            "warnings": [],
+            "destinations": {"gcs": {"status": "available", "url": "https://example.com/auto"}},
+        },
+    )
     monkeypatch.setattr(auto_heal_module, "append_to_run_history", lambda *args, **kwargs: None)
     monkeypatch.setattr(auto_heal_module, "get_session_metadata", lambda sid: {"row_count": 3})
 

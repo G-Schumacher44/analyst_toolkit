@@ -1980,6 +1980,136 @@ def _render_imputation_dashboard(
     )
 
 
+def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
+    cards: list[str] = []
+    for step_name in ("normalization", "imputation"):
+        step = step_results.get(step_name, {})
+        summary = step.get("summary", {}) if isinstance(step, dict) else {}
+        status = str(step.get("status", "skipped")).upper() if isinstance(step, dict) else "SKIPPED"
+        artifact = step.get("artifact_path") or step.get("artifact_url") or "No dashboard"
+        cards.append(
+            "<div class='cert-stat-card'>"
+            f"<h3>{html.escape(step_name.title())}</h3>"
+            f"{_metric_value(status)}"
+            f"<p class='subtle'>Artifact: {html.escape(str(artifact))}</p>"
+            f"<p class='subtle'>Summary: {html.escape(str(summary))}</p>"
+            "</div>"
+        )
+    return "<div class='cert-grid'>" + "".join(cards) + "</div>"
+
+
+def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
+    steps = report.get("steps", {})
+    failed_steps = report.get("failed_steps", [])
+    row_count = report.get("row_count", 0)
+    final_session_id = report.get("final_session_id", "")
+    final_export = report.get("final_export_url") or "Unavailable"
+    final_dashboard = (
+        report.get("final_dashboard_url") or report.get("final_dashboard_path") or "Unavailable"
+    )
+    inferred_modules = report.get("inferred_modules", [])
+
+    status = str(report.get("status", "warn")).lower()
+    banner_class = "ok" if status == "pass" else "warn"
+    banner = (
+        f"<div class='banner {banner_class}'>"
+        "<div class='banner-item'><strong>Stage:</strong> MCP Auto Heal</div>"
+        f"<div class='banner-item'><strong>Status:</strong> {html.escape(status.upper())}</div>"
+        f"<div class='banner-item'><strong>Final Session:</strong> {html.escape(final_session_id or 'Unavailable')}</div>"
+        f"<div class='banner-item'><strong>Failed Steps:</strong> {len(failed_steps)}</div>"
+        "</div>"
+    )
+
+    step_ledger = pd.DataFrame(
+        [
+            {
+                "Step": step_name,
+                "Status": (steps.get(step_name, {}) or {}).get("status", "skipped"),
+                "Artifact": (steps.get(step_name, {}) or {}).get("artifact_url")
+                or (steps.get(step_name, {}) or {}).get("artifact_path", ""),
+                "Summary": str((steps.get(step_name, {}) or {}).get("summary", {})),
+            }
+            for step_name in ("normalization", "imputation")
+        ]
+    )
+    failed_df = pd.DataFrame({"failed_step": failed_steps}) if failed_steps else pd.DataFrame()
+    inferred_df = pd.DataFrame({"module": inferred_modules}) if inferred_modules else pd.DataFrame()
+
+    sections = [
+        _render_section(
+            "Auto Heal Overview",
+            (
+                "<div class='cert-grid'>"
+                "<div class='cert-stat-card'>"
+                "<h3>Final Row Count</h3>"
+                f"{_metric_value(row_count)}"
+                "<p class='subtle'>Rows in the healed session after automation.</p>"
+                "</div>"
+                "<div class='cert-stat-card'>"
+                "<h3>Inferred Modules</h3>"
+                f"{_metric_value(len(inferred_modules))}"
+                "<p class='subtle'>Modules inferred and considered for execution.</p>"
+                "</div>"
+                "<div class='cert-stat-card'>"
+                "<h3>Final Export</h3>"
+                f"{_metric_value(final_export)}"
+                "<p class='subtle'>Resulting data export produced by the pipeline.</p>"
+                "</div>"
+                "<div class='cert-stat-card'>"
+                "<h3>Final Dashboard</h3>"
+                f"{_metric_value(final_dashboard)}"
+                "<p class='subtle'>Last child dashboard surfaced by the automation run.</p>"
+                "</div>"
+                "</div>"
+            ),
+            open_by_default=True,
+        ),
+        _render_section(
+            "Step Outcomes",
+            _render_auto_heal_step_cards(steps),
+            open_by_default=True,
+        ),
+        _render_section(
+            "Execution Ledger",
+            (
+                "<div class='cert-ledger'>"
+                f"<div class='card'><h3>Step Ledger</h3>{_render_df(step_ledger, full_preview=True)}</div>"
+                f"<div class='card'><h3>Inferred Modules</h3>{_render_df(inferred_df, full_preview=True)}</div>"
+                "</div>"
+            ),
+            open_by_default=True,
+        ),
+    ]
+    toc = [
+        ("Auto Heal Overview", "Auto Heal Overview"),
+        ("Step Outcomes", "Step Outcomes"),
+        ("Execution Ledger", "Execution Ledger"),
+    ]
+
+    if not failed_df.empty:
+        sections.append(
+            _render_section(
+                "Failures",
+                (
+                    "<div class='card'>"
+                    "<h3>Failed Steps</h3>"
+                    "<p class='subtle'>These steps ended in fail/error and need operator review.</p>"
+                    f"{_render_df(failed_df, full_preview=True)}</div>"
+                ),
+                open_by_default=True,
+            )
+        )
+        toc.append(("Failures", "Failures"))
+
+    return _assemble_page(
+        module_name="Auto Heal",
+        run_id=run_id,
+        banner_html=banner,
+        toc_items=toc,
+        sections=sections,
+    )
+
+
 def generate_dashboard_html(
     report_tables: dict[str, Any],
     module_name: str,
@@ -2004,4 +2134,6 @@ def generate_dashboard_html(
         return _render_outlier_handling_dashboard(report_tables, run_id)
     if normalized == "imputation":
         return _render_imputation_dashboard(report_tables, run_id, plot_paths)
+    if normalized == "auto heal":
+        return _render_auto_heal_dashboard(report_tables, run_id)
     return _render_generic_dashboard(report_tables, module_name, run_id, plot_paths)
