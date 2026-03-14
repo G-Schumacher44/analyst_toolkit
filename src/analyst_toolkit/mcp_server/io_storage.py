@@ -9,6 +9,8 @@ from uuid import uuid4
 
 import pandas as pd
 
+logger = logging.getLogger(__name__)
+
 _CONTENT_TYPES = {
     ".html": "text/html",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -119,11 +121,26 @@ def _collect_export_html_flags(
 def should_export_html(config: dict) -> bool:
     runtime_flags, module_flags, malformed_flags = _collect_export_html_flags(config)
     if malformed_flags:
+        logger.warning(
+            "Malformed export_html configuration detected on sanctioned paths; "
+            "disabling HTML export."
+        )
         return False
     if runtime_flags:
+        if len(runtime_flags) > 1:
+            logger.warning(
+                "Multiple runtime.artifacts.export_html values detected: %s; using last value.",
+                runtime_flags,
+            )
         return runtime_flags[-1]
     if module_flags:
-        return len(set(module_flags)) == 1 and module_flags[0]
+        if len(set(module_flags)) != 1:
+            logger.warning(
+                "Conflicting module export_html flags detected: %s; disabling HTML export.",
+                module_flags,
+            )
+            return False
+        return module_flags[0]
     return bool(os.environ.get("ANALYST_REPORT_BUCKET", "").strip())
 
 

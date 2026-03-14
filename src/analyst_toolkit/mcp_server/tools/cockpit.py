@@ -256,8 +256,14 @@ def _trusted_history_denial() -> dict[str, Any]:
 
 
 def _history_sort_value(path: Path) -> float:
-    fallback = path.stat().st_mtime
-    history = _read_history_entries(path)
+    try:
+        fallback = path.stat().st_mtime
+    except OSError:
+        return 0.0
+    try:
+        history = _read_history_entries(path)
+    except OSError:
+        return fallback
     newest = ""
     for entry in history:
         timestamp = str(entry.get("timestamp", "") or "")
@@ -740,53 +746,74 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
 async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
     if not TRUSTED_HISTORY_ENABLED:
         return _trusted_history_denial()
-    limit = max(1, min(int(limit), 50))
-    report = _build_cockpit_dashboard_report(limit)
-    artifact_key = _cockpit_artifact_key(limit)
-    artifact_path = f"exports/reports/cockpit/{artifact_key}.html"
-    artifact_delivery = empty_delivery_state()
-    output_path = export_html_report(report, artifact_path, "Cockpit Dashboard", artifact_key)
-    artifact_delivery = deliver_artifact(
-        output_path,
-        run_id=artifact_key,
-        module="cockpit_dashboard",
-        config={"upload_artifacts": False},
-        session_id=None,
-    )
-    local_path = str(artifact_delivery.get("local_path", output_path))
-    artifact_url = str(artifact_delivery.get("url", ""))
-    res = {
-        "status": "pass",
-        "module": "cockpit_dashboard",
-        "summary": report["overview"],
-        "artifact_path": local_path,
-        "artifact_url": artifact_url,
-        "destination_delivery": {
-            "html_report": compact_destination_metadata(artifact_delivery["destinations"])
-        },
-        "warnings": list(artifact_delivery.get("warnings", [])),
-    }
-    res = with_dashboard_artifact(
-        res,
-        artifact_path=local_path,
-        artifact_url=artifact_url,
-        label="Cockpit dashboard",
-    )
-    return with_next_actions(
-        res,
-        [
-            next_action(
-                "get_capability_catalog",
-                "Open the cockpit capability catalog to inspect editable knobs, templates, and workflow surfaces.",
-                {},
-            ),
-            next_action(
-                "get_user_quickstart",
-                "Open the quickstart guide for the operator/resource hub content surfaced in the cockpit dashboard.",
-                {},
-            ),
-        ],
-    )
+    try:
+        limit = max(1, min(int(limit), 50))
+        report = _build_cockpit_dashboard_report(limit)
+        artifact_key = _cockpit_artifact_key(limit)
+        artifact_path = f"exports/reports/cockpit/{artifact_key}.html"
+        artifact_delivery = empty_delivery_state()
+        output_path = export_html_report(report, artifact_path, "Cockpit Dashboard", artifact_key)
+        artifact_delivery = deliver_artifact(
+            output_path,
+            run_id=artifact_key,
+            module="cockpit_dashboard",
+            config={"upload_artifacts": False},
+            session_id=None,
+        )
+        local_path = str(artifact_delivery.get("local_path", output_path))
+        artifact_url = str(artifact_delivery.get("url", ""))
+        res = {
+            "status": "pass",
+            "module": "cockpit_dashboard",
+            "summary": report["overview"],
+            "artifact_path": local_path,
+            "artifact_url": artifact_url,
+            "destination_delivery": {
+                "html_report": compact_destination_metadata(artifact_delivery["destinations"])
+            },
+            "warnings": list(artifact_delivery.get("warnings", [])),
+        }
+        res = with_dashboard_artifact(
+            res,
+            artifact_path=local_path,
+            artifact_url=artifact_url,
+            label="Cockpit dashboard",
+        )
+        return with_next_actions(
+            res,
+            [
+                next_action(
+                    "get_capability_catalog",
+                    "Open the cockpit capability catalog to inspect editable knobs, templates, and workflow surfaces.",
+                    {},
+                ),
+                next_action(
+                    "get_user_quickstart",
+                    "Open the quickstart guide for the operator/resource hub content surfaced in the cockpit dashboard.",
+                    {},
+                ),
+            ],
+        )
+    except Exception:
+        logger.exception("Failed to build cockpit dashboard")
+        failure = {
+            "status": "fail",
+            "module": "cockpit_dashboard",
+            "summary": {"code": "COCKPIT_BUILD_FAILED"},
+            "artifact_path": "",
+            "artifact_url": "",
+            "destination_delivery": {
+                "html_report": compact_destination_metadata(empty_delivery_state()["destinations"])
+            },
+            "warnings": ["COCKPIT_BUILD_FAILED"],
+        }
+        failure = with_dashboard_artifact(
+            failure,
+            artifact_path="",
+            artifact_url="",
+            label="",
+        )
+        return with_next_actions(failure, [])
 
 
 register_tool(
