@@ -238,6 +238,11 @@ def test_generate_outlier_dashboard_renders_summary_and_plots(tmp_path):
 
     assert "M05 Outlier Detection" in html
     assert "Detection Overview" in html
+    assert "Primary Hotspot" in html
+    assert "Outlier Detection Log" in html
+    assert "Affected Row Samples" in html
+    assert "data:image/png;base64," in html
+    assert "body_mass_g" in html
 
 
 def test_generate_auto_heal_dashboard_renders_drilldowns_and_sanitized_errors():

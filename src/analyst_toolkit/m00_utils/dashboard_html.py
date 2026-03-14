@@ -2006,10 +2006,16 @@ def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
     cards: list[str] = []
     for step_name in ("normalization", "imputation"):
         step = step_results.get(step_name, {})
-        summary = step.get("summary", {}) if isinstance(step, dict) else {}
-        status = str(step.get("status", "skipped")).upper() if isinstance(step, dict) else "SKIPPED"
-        artifact = step.get("artifact_url") or step.get("artifact_path") or "No dashboard"
-        export_ref = step.get("export_url") or "No export"
+        if isinstance(step, dict):
+            summary = step.get("summary", {})
+            status = str(step.get("status", "skipped")).upper()
+            artifact = step.get("artifact_url") or step.get("artifact_path") or "No dashboard"
+            export_ref = step.get("export_url") or "No export"
+        else:
+            summary = {}
+            status = "SKIPPED"
+            artifact = "No dashboard"
+            export_ref = "No export"
         cards.append(
             "<div class='cert-stat-card'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
@@ -2026,10 +2032,16 @@ def _render_auto_heal_step_drilldowns(step_results: dict[str, Any]) -> str:
     blocks: list[str] = []
     for step_name in ("normalization", "imputation"):
         step = step_results.get(step_name, {})
-        status = str(step.get("status", "skipped")).lower() if isinstance(step, dict) else "skipped"
-        summary = step.get("summary", {}) if isinstance(step, dict) else {}
-        artifact_ref = step.get("artifact_url") or step.get("artifact_path")
-        export_ref = step.get("export_url")
+        if isinstance(step, dict):
+            status = str(step.get("status", "skipped")).lower()
+            summary = step.get("summary", {})
+            artifact_ref = step.get("artifact_url") or step.get("artifact_path")
+            export_ref = step.get("export_url")
+        else:
+            status = "skipped"
+            summary = {}
+            artifact_ref = None
+            export_ref = None
         blocks.append(
             "<div class='card'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
