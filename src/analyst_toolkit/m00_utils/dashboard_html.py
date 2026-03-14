@@ -1980,6 +1980,28 @@ def _render_imputation_dashboard(
     )
 
 
+def _render_reference_value(value: Any, *, empty_label: str) -> str:
+    if not value:
+        return f"<p class='empty'>{html.escape(empty_label)}</p>"
+
+    rendered = html.escape(str(value))
+    if isinstance(value, str) and value.startswith(("http://", "https://")):
+        return (
+            "<p class='subtle'><a href='"
+            f"{rendered}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
+        )
+    return f"<p class='subtle'><code>{rendered}</code></p>"
+
+
+def _render_auto_heal_summary_table(summary: Any) -> str:
+    if not isinstance(summary, dict) or not summary:
+        return "<p class='empty'>No step summary available.</p>"
+    rows = [
+        {"Field": _display_name(str(key)), "Value": str(value)} for key, value in summary.items()
+    ]
+    return _render_df(pd.DataFrame(rows), full_preview=True)
+
+
 def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
     cards: list[str] = []
     for step_name in ("normalization", "imputation"):
@@ -1987,15 +2009,50 @@ def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
         summary = step.get("summary", {}) if isinstance(step, dict) else {}
         status = str(step.get("status", "skipped")).upper() if isinstance(step, dict) else "SKIPPED"
         artifact = step.get("artifact_url") or step.get("artifact_path") or "No dashboard"
+        export_ref = step.get("export_url") or "No export"
         cards.append(
             "<div class='cert-stat-card'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
             f"{_metric_value(status)}"
-            f"<p class='subtle'>Artifact: {html.escape(str(artifact))}</p>"
-            f"<p class='subtle'>Summary: {html.escape(str(summary))}</p>"
+            f"<p class='subtle'><strong>Dashboard:</strong> {html.escape(str(artifact))}</p>"
+            f"<p class='subtle'><strong>Export:</strong> {html.escape(str(export_ref))}</p>"
+            f"<p class='subtle'><strong>Summary Keys:</strong> {html.escape(', '.join(summary.keys()) if isinstance(summary, dict) and summary else 'None')}</p>"
             "</div>"
         )
     return "<div class='cert-grid'>" + "".join(cards) + "</div>"
+
+
+def _render_auto_heal_step_drilldowns(step_results: dict[str, Any]) -> str:
+    blocks: list[str] = []
+    for step_name in ("normalization", "imputation"):
+        step = step_results.get(step_name, {})
+        status = str(step.get("status", "skipped")).lower() if isinstance(step, dict) else "skipped"
+        summary = step.get("summary", {}) if isinstance(step, dict) else {}
+        artifact_ref = step.get("artifact_url") or step.get("artifact_path")
+        export_ref = step.get("export_url")
+        blocks.append(
+            "<div class='card'>"
+            f"<h3>{html.escape(step_name.title())}</h3>"
+            "<div class='cert-grid'>"
+            "<div class='cert-stat-card'>"
+            "<h3>Status</h3>"
+            f"{_metric_value(status.upper())}"
+            "<p class='subtle'>Outcome recorded for this repair stage.</p>"
+            "</div>"
+            "<div class='cert-stat-card'>"
+            "<h3>Dashboard Reference</h3>"
+            f"{_render_reference_value(artifact_ref, empty_label='No dashboard generated.')}"
+            "</div>"
+            "<div class='cert-stat-card'>"
+            "<h3>Data Export</h3>"
+            f"{_render_reference_value(export_ref, empty_label='No export recorded.')}"
+            "</div>"
+            "</div>"
+            "<h4>Step Evidence</h4>"
+            f"{_render_auto_heal_summary_table(summary)}"
+            "</div>"
+        )
+    return "<div class='stack'>" + "".join(blocks) + "</div>"
 
 
 def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
@@ -2008,13 +2065,20 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
         report.get("final_dashboard_url") or report.get("final_dashboard_path") or "Unavailable"
     )
     inferred_modules = report.get("inferred_modules", [])
+    message = str(report.get("message", ""))
 
     status = str(report.get("status", "warn")).lower()
-    banner_class = "ok" if status == "pass" else "warn"
+    banner_class = "ok" if status == "pass" and not failed_steps else "warn"
+    readiness = (
+        "Ready For Final Audit"
+        if status == "pass" and not failed_steps
+        else "Needs Operator Review"
+    )
     banner = (
         f"<div class='banner {banner_class}'>"
         "<div class='banner-item'><strong>Stage:</strong> MCP Auto Heal</div>"
         f"<div class='banner-item'><strong>Status:</strong> {html.escape(status.upper())}</div>"
+        f"<div class='banner-item'><strong>Readiness:</strong> {html.escape(readiness)}</div>"
         f"<div class='banner-item'><strong>Final Session:</strong> {html.escape(final_session_id or 'Unavailable')}</div>"
         f"<div class='banner-item'><strong>Failed Steps:</strong> {len(failed_steps)}</div>"
         "</div>"
@@ -2025,6 +2089,7 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
             {
                 "Step": step_name,
                 "Status": (steps.get(step_name, {}) or {}).get("status", "skipped"),
+                "Export": (steps.get(step_name, {}) or {}).get("export_url", ""),
                 "Artifact": (steps.get(step_name, {}) or {}).get("artifact_url")
                 or (steps.get(step_name, {}) or {}).get("artifact_path", ""),
                 "Summary": str((steps.get(step_name, {}) or {}).get("summary", {})),
@@ -2034,10 +2099,18 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
     )
     failed_df = pd.DataFrame({"failed_step": failed_steps}) if failed_steps else pd.DataFrame()
     inferred_df = pd.DataFrame({"module": inferred_modules}) if inferred_modules else pd.DataFrame()
+    outcome_df = pd.DataFrame(
+        [
+            {"Field": "Run Status", "Value": status.upper()},
+            {"Field": "Readiness", "Value": readiness},
+            {"Field": "Operator Message", "Value": message or "No operator message recorded."},
+            {"Field": "Final Session", "Value": final_session_id or "Unavailable"},
+        ]
+    )
 
     sections = [
         _render_section(
-            "Auto Heal Overview",
+            "Outcome Summary",
             (
                 "<div class='cert-grid'>"
                 "<div class='cert-stat-card'>"
@@ -2051,14 +2124,24 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
                 "<p class='subtle'>Modules inferred and considered for execution.</p>"
                 "</div>"
                 "<div class='cert-stat-card'>"
-                "<h3>Final Export</h3>"
-                f"{_metric_value(final_export)}"
-                "<p class='subtle'>Resulting data export produced by the pipeline.</p>"
+                "<h3>Readiness</h3>"
+                f"{_metric_value(readiness)}"
+                "<p class='subtle'>Whether the healed result is ready for final certification.</p>"
                 "</div>"
                 "<div class='cert-stat-card'>"
-                "<h3>Final Dashboard</h3>"
-                f"{_metric_value(final_dashboard)}"
-                "<p class='subtle'>Last child dashboard surfaced by the automation run.</p>"
+                "<h3>Failed Steps</h3>"
+                f"{_metric_value(len(failed_steps))}"
+                "<p class='subtle'>Repair stages that still require intervention.</p>"
+                "</div>"
+                "</div>"
+                "<div class='cert-ledger'>"
+                f"<div class='card'><h3>Outcome Ledger</h3>{_render_df(outcome_df, full_preview=True)}</div>"
+                "<div class='card'>"
+                "<h3>Terminal References</h3>"
+                "<p class='subtle'><strong>Final Export</strong></p>"
+                f"{_render_reference_value(final_export, empty_label='No final export recorded.')}"
+                "<p class='subtle'><strong>Final Dashboard</strong></p>"
+                f"{_render_reference_value(final_dashboard, empty_label='No child dashboard recorded.')}"
                 "</div>"
                 "</div>"
             ),
@@ -2079,11 +2162,17 @@ def _render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
             ),
             open_by_default=True,
         ),
+        _render_section(
+            "Step Drilldowns",
+            _render_auto_heal_step_drilldowns(steps),
+            open_by_default=True,
+        ),
     ]
     toc = [
-        ("Auto Heal Overview", "Auto Heal Overview"),
+        ("Outcome Summary", "Outcome Summary"),
         ("Step Outcomes", "Step Outcomes"),
         ("Execution Ledger", "Execution Ledger"),
+        ("Step Drilldowns", "Step Drilldowns"),
     ]
 
     if not failed_df.empty:
