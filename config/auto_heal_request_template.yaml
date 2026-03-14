@@ -1,0 +1,23 @@
+runtime:
+  run:
+    run_id: "auto_heal_run_001"
+    input_path: "gs://bucket/path/to/input.csv"
+  artifacts:
+    export_html: true
+    plotting: false
+  destinations:
+    gcs:
+      enabled: false
+      bucket_uri: "gs://bucket/path/to/reviews"
+      prefix: "auto_heal"
+  execution:
+    upload_artifacts: true
+
+auto_heal:
+  session_id: ""
+  gcs_path: ""
+  mode: "sync"
+  notes:
+    - "Provide either runtime.run.input_path, gcs_path, or session_id."
+    - "Use auto_heal for one-shot remediation only when the user explicitly requests automation."
+    - "Treat dashboard_url or dashboard_path as the main operator review surface after execution."

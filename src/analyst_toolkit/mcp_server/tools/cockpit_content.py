@@ -24,6 +24,7 @@ def user_quickstart_payload() -> dict:
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
+- `auto_heal` returns its own standalone dashboard artifact and should be surfaced the same way.
 
 ## Runtime Overlay
 - Use `runtime` for run-scoped execution policy.
@@ -35,6 +36,12 @@ def user_quickstart_payload() -> dict:
   - `runtime.destinations.gcs.*`
 - Keep module `config` for business logic like normalization rules, validation rules, imputation strategies, and outlier detection settings.
 - Prefer `runtime` over editing every module config when the change is cross-cutting.
+
+## Auto Heal
+- Use `auto_heal` only when the user explicitly wants one-shot remediation.
+- Start from `config/auto_heal_request_template.yaml` for agent-authored requests.
+- Prefer `runtime` for `run_id`, `input_path`, HTML export, and destination controls.
+- After the call, surface `dashboard_url` first and `dashboard_path` only as fallback.
 
 ## Key Example: Fuzzy Matching
 In normalization config:
@@ -101,6 +108,19 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "tool": "infer_configs",
                 "arguments": {"session_id": "<session_id_from_diagnostics>"},
             },
+            {
+                "tool": "auto_heal",
+                "arguments": {
+                    "runtime": {
+                        "run": {
+                            "input_path": "gs://bucket/data.csv",
+                            "run_id": "auto_heal_run_001",
+                        },
+                        "artifacts": {"export_html": True, "plotting": False},
+                    },
+                    "mode": "sync",
+                },
+            },
         ],
     }
     return {
@@ -126,6 +146,13 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "label": "Open capabilities",
                 "tool": "get_capability_catalog",
                 "arguments_schema_hint": {"required": []},
+            },
+            {
+                "label": "Run auto-heal",
+                "tool": "auto_heal",
+                "arguments_schema_hint": {
+                    "required": ["gcs_path|session_id|runtime.run.input_path"]
+                },
             },
         ],
     }
@@ -200,6 +227,20 @@ def agent_playbook_payload() -> dict:
             },
             {
                 "step": 6,
+                "tool": "auto_heal",
+                "required_inputs": [
+                    "gcs_path|session_id|runtime.run.input_path",
+                    "run_id|runtime.run.run_id",
+                ],
+                "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
+                "notes": [
+                    "Use only when the user explicitly wants one-shot automation.",
+                    "Open or link the auto-heal dashboard artifact for review.",
+                ],
+                "next": [7],
+            },
+            {
+                "step": 7,
                 "tool_chain": [
                     "normalization",
                     "duplicates",
@@ -214,10 +255,10 @@ def agent_playbook_payload() -> dict:
                     "Prefer the standalone dashboard artifact as the main review surface.",
                     "Use runtime instead of editing every module config when the override is cross-cutting.",
                 ],
-                "next": [7],
+                "next": [8],
             },
             {
-                "step": 7,
+                "step": 8,
                 "tool_chain": ["final_audit", "get_run_history"],
                 "required_inputs": ["session_id", "run_id"],
                 "outputs": ["final certificate artifacts", "healing ledger"],

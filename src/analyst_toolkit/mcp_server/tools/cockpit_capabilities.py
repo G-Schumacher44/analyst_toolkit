@@ -180,6 +180,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             "manual_override_recommended": True,
             "runtime_overlay_available": True,
             "runtime_template_path": "config/runtime_overlay_template.yaml",
+            "auto_heal_template_path": "config/auto_heal_request_template.yaml",
         },
         "global_controls": [
             {
@@ -245,6 +246,16 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
         ],
         "highlight_examples": [
             {
+                "feature": "Auto-heal one-shot remediation",
+                "paths": [
+                    "config/auto_heal_request_template.yaml",
+                    "runtime.run.run_id",
+                    "runtime.run.input_path",
+                    "runtime.artifacts.export_html",
+                    "runtime.destinations.gcs.enabled",
+                ],
+            },
+            {
                 "feature": "Runtime overlay controls",
                 "paths": [
                     "runtime.run.run_id",
@@ -272,6 +283,14 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                     "imputation.settings.plotting.run",
                 ],
             },
+        ],
+        "workflow_templates": [
+            {
+                "tool": "auto_heal",
+                "template_path": "config/auto_heal_request_template.yaml",
+                "description": "One-shot automated cleaning request with runtime-scoped controls and dashboard output.",
+                "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
+            }
         ],
         "golden_templates": sorted(golden_configs.keys()),
         "modules": modules,
