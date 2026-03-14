@@ -60,7 +60,8 @@ def _collect_export_html_flags(
     path: tuple[object, ...] = (),
     runtime_flags: list[bool] | None = None,
     module_flags: list[bool] | None = None,
-) -> tuple[list[bool], list[bool]]:
+    malformed_flags: list[bool] | None = None,
+) -> tuple[list[bool], list[bool], list[bool]]:
     sanctioned_module_suffixes = {
         ("settings", "export_html"),
         ("profile", "settings", "export_html"),
@@ -77,11 +78,19 @@ def _collect_export_html_flags(
         runtime_flags = []
     if module_flags is None:
         module_flags = []
+    if malformed_flags is None:
+        malformed_flags = []
     if isinstance(config, dict):
         for key, value in config.items():
             next_path = path + (key,)
             if key == "export_html":
                 if not isinstance(value, bool):
+                    if next_path == (
+                        "runtime",
+                        "artifacts",
+                        "export_html",
+                    ) or _is_sanctioned_module_path(next_path):
+                        malformed_flags.append(True)
                     continue
                 if next_path == ("runtime", "artifacts", "export_html"):
                     runtime_flags.append(value)
@@ -93,6 +102,7 @@ def _collect_export_html_flags(
                 path=next_path,
                 runtime_flags=runtime_flags,
                 module_flags=module_flags,
+                malformed_flags=malformed_flags,
             )
     elif isinstance(config, list):
         for idx, value in enumerate(config):
@@ -101,12 +111,15 @@ def _collect_export_html_flags(
                 path=path + (idx,),
                 runtime_flags=runtime_flags,
                 module_flags=module_flags,
+                malformed_flags=malformed_flags,
             )
-    return runtime_flags, module_flags
+    return runtime_flags, module_flags, malformed_flags
 
 
 def should_export_html(config: dict) -> bool:
-    runtime_flags, module_flags = _collect_export_html_flags(config)
+    runtime_flags, module_flags, malformed_flags = _collect_export_html_flags(config)
+    if malformed_flags:
+        return False
     if runtime_flags:
         return runtime_flags[-1]
     if module_flags:

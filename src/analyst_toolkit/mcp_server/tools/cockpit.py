@@ -327,6 +327,14 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
         final_audit = latest_by_module.get("final_audit", {})
         auto_heal = latest_by_module.get("auto_heal", {})
         pipeline_entry = latest_by_module.get("pipeline_dashboard", {})
+        latest_non_synthetic = next(
+            (
+                entry
+                for entry in reversed(history)
+                if str(entry.get("module", "")).strip() != "pipeline_dashboard"
+            ),
+            last_entry,
+        )
         pipeline_path = _pipeline_dashboard_artifact_path(run_id, session_id or None)
         pipeline_dashboard = _dashboard_ref(pipeline_entry)
         if not pipeline_dashboard and Path(pipeline_path).exists():
@@ -340,11 +348,11 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
                 "status": str(
                     final_audit.get("status")
                     or auto_heal.get("status")
-                    or last_entry.get("status")
+                    or latest_non_synthetic.get("status")
                     or "unknown"
                 ),
-                "latest_module": str(last_entry.get("module", "unknown")),
-                "timestamp": str(last_entry.get("timestamp", "")),
+                "latest_module": str(latest_non_synthetic.get("module", "unknown")),
+                "timestamp": str(latest_non_synthetic.get("timestamp", "")),
                 "health_score": health.get("health_score", "N/A"),
                 "health_status": health.get("health_status", "unknown"),
                 "pipeline_dashboard": pipeline_dashboard,
@@ -352,10 +360,10 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
                 "final_audit_dashboard": _dashboard_ref(final_audit),
                 "best_dashboard": _dashboard_ref(final_audit)
                 or _dashboard_ref(auto_heal)
-                or _dashboard_ref(last_entry),
+                or _dashboard_ref(latest_non_synthetic),
                 "best_export": _export_ref(final_audit)
                 or _export_ref(auto_heal)
-                or _export_ref(last_entry),
+                or _export_ref(latest_non_synthetic),
                 "warning_count": sum(len(entry.get("warnings", [])) for entry in history),
             }
         )

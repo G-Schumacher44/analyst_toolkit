@@ -231,6 +231,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
 
 def agent_playbook_payload() -> dict:
     trusted_history = _trusted_history_enabled()
+    offset = 1 if trusted_history else 0
     return {
         "status": "pass",
         "version": "1.0",
@@ -253,7 +254,7 @@ def agent_playbook_payload() -> dict:
                         "Return the cockpit dashboard link to the user as the human-facing landing page before deeper tool work.",
                         "If local HTML artifacts are not being served yet, prompt the user to start the local artifact server.",
                     ],
-                    "next": [1],
+                    "next": [offset],
                 },
             ]
             if trusted_history
@@ -261,7 +262,7 @@ def agent_playbook_payload() -> dict:
         )
         + [
             {
-                "step": 1 if trusted_history else 0,
+                "step": offset,
                 "tool": "diagnostics",
                 "required_inputs": [
                     "gcs_path|session_id|runtime.run.input_path",
@@ -274,31 +275,31 @@ def agent_playbook_payload() -> dict:
                     "artifact_url?",
                     "plot_urls?",
                 ],
-                "next": [2],
+                "next": [offset + 1],
             },
             {
-                "step": 2 if trusted_history else 1,
+                "step": offset + 1,
                 "tool": "get_data_health_report",
                 "required_inputs": ["run_id", "session_id?"],
                 "outputs": ["health_score", "breakdown"],
-                "next": [3],
+                "next": [offset + 2],
             },
             {
-                "step": 3 if trusted_history else 2,
+                "step": offset + 2,
                 "tool": "infer_configs",
                 "required_inputs": ["gcs_path|session_id"],
                 "outputs": ["configs (YAML strings by module)"],
-                "next": [4],
+                "next": [offset + 3],
             },
             {
-                "step": 4 if trusted_history else 3,
+                "step": offset + 3,
                 "tool": "get_capability_catalog",
                 "required_inputs": [],
                 "outputs": ["editable knobs + defaults + example paths"],
-                "next": [5],
+                "next": [offset + 4],
             },
             {
-                "step": 5,
+                "step": offset + 4,
                 "tool": "manual config + runtime review",
                 "required_inputs": [
                     "inferred configs",
@@ -313,10 +314,10 @@ def agent_playbook_payload() -> dict:
                     "Use runtime for paths, run_id, export_html, plotting, and destination overrides.",
                     "Use module config for business logic and per-module rules.",
                 ],
-                "next": [6],
+                "next": [offset + 5],
             },
             {
-                "step": 6,
+                "step": offset + 5,
                 "tool": "auto_heal",
                 "required_inputs": [
                     "gcs_path|session_id|runtime.run.input_path",
@@ -327,10 +328,10 @@ def agent_playbook_payload() -> dict:
                     "Use only when the user explicitly wants one-shot automation.",
                     "Open or link the auto-heal dashboard artifact for review.",
                 ],
-                "next": [7],
+                "next": [offset + 6],
             },
             {
-                "step": 7,
+                "step": offset + 6,
                 "tool_chain": [
                     "normalization",
                     "duplicates",
@@ -345,10 +346,10 @@ def agent_playbook_payload() -> dict:
                     "Prefer the standalone dashboard artifact as the main review surface.",
                     "Use runtime instead of editing every module config when the override is cross-cutting.",
                 ],
-                "next": [8],
+                "next": [offset + 7],
             },
             {
-                "step": 8,
+                "step": offset + 7,
                 "tool_chain": ["final_audit", "get_run_history"],
                 "required_inputs": ["session_id", "run_id"],
                 "outputs": ["final certificate artifacts", "healing ledger"],

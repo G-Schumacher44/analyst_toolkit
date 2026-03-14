@@ -80,7 +80,8 @@ def test_check_upload_accumulates_multiple_warnings():
     assert len(warnings) == 2
 
 
-def test_should_export_html_honors_nested_module_config():
+def test_should_export_html_honors_nested_module_config(monkeypatch):
+    monkeypatch.setenv("ANALYST_REPORT_BUCKET", "")
     assert (
         should_export_html({"normalization": {"settings": {"export": True, "export_html": True}}})
         is True

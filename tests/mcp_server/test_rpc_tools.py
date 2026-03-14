@@ -114,8 +114,10 @@ def test_rpc_capability_catalog_filters_and_compact(client):
     )
 
 
-def test_rpc_user_quickstart_tool(client):
+def test_rpc_user_quickstart_tool(client, monkeypatch):
     """Verify user quickstart tool returns human-readable guide text."""
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL", "false")
+    monkeypatch.setenv("ANALYST_MCP_STDIO", "false")
     payload = {
         "jsonrpc": "2.0",
         "id": 25,
@@ -148,7 +150,9 @@ def test_rpc_user_quickstart_tool(client):
     assert result["trace_id"]
 
 
-def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client):
+def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL", "false")
+    monkeypatch.setenv("ANALYST_MCP_STDIO", "false")
     payload = {
         "jsonrpc": "2.0",
         "id": 31,

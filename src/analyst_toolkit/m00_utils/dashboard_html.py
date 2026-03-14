@@ -2525,16 +2525,14 @@ def _render_reference_value(value: Any, *, empty_label: str) -> str:
 
 
 def _embed_reference_src(path_value: Any, url_value: Any) -> str:
-    preferred = path_value or url_value
-    if not preferred:
-        return ""
-    text = _normalize_reference_text(preferred)
-    if not text:
-        return ""
-    if text.startswith(("http://", "https://")):
-        return text
-    if text.startswith("/exports/"):
-        return text
+    normalized_url = _normalize_reference_text(url_value)
+    normalized_path = _normalize_reference_text(path_value)
+    if normalized_url.startswith(("http://", "https://")):
+        return normalized_url
+    if normalized_path.startswith("/exports/") or normalized_path.startswith(
+        ("http://", "https://")
+    ):
+        return normalized_path
     return ""
 
 
