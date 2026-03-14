@@ -62,7 +62,6 @@ def _collect_export_html_flags(
     module_flags: list[bool] | None = None,
 ) -> tuple[list[bool], list[bool]]:
     sanctioned_module_suffixes = {
-        ("export_html",),
         ("settings", "export_html"),
         ("profile", "settings", "export_html"),
         ("export", "export_html"),
@@ -70,6 +69,8 @@ def _collect_export_html_flags(
     }
 
     def _is_sanctioned_module_path(candidate: tuple[object, ...]) -> bool:
+        if candidate == ("export_html",):
+            return True
         return any(candidate[-len(suffix) :] == suffix for suffix in sanctioned_module_suffixes)
 
     if runtime_flags is None:
