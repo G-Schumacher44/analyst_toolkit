@@ -17,6 +17,7 @@ from analyst_toolkit.mcp_server.io import (
 )
 from analyst_toolkit.mcp_server.job_state import JobStore
 from analyst_toolkit.mcp_server.response_utils import (
+    new_trace_id,
     next_action,
     with_dashboard_artifact,
     with_next_actions,
@@ -34,6 +35,18 @@ logger = logging.getLogger("analyst_toolkit.mcp_server.auto_heal")
 
 def _is_terminal_failure(status: str | None) -> bool:
     return status in {"error", "fail"}
+
+
+def _sanitize_dashboard_step_summary(summary: dict | None) -> dict:
+    """Remove raw exception text from child summaries before HTML export."""
+    if not isinstance(summary, dict):
+        return {}
+
+    sanitized = {k: v for k, v in summary.items() if k != "error"}
+    if "error" in summary:
+        sanitized["error_code"] = "AUTO_HEAL_STEP_FAILED"
+        sanitized["trace_id"] = new_trace_id()
+    return sanitized
 
 
 async def _run_auto_heal_pipeline(
@@ -166,14 +179,14 @@ async def _run_auto_heal_pipeline(
         "steps": {
             "normalization": {
                 "status": norm_res.get("status", "skipped"),
-                "summary": norm_res.get("summary", {}),
+                "summary": _sanitize_dashboard_step_summary(norm_res.get("summary")),
                 "artifact_path": norm_res.get("artifact_path", ""),
                 "artifact_url": norm_res.get("artifact_url", ""),
                 "export_url": norm_res.get("export_url", ""),
             },
             "imputation": {
                 "status": imp_res.get("status", "skipped"),
-                "summary": imp_res.get("summary", {}),
+                "summary": _sanitize_dashboard_step_summary(imp_res.get("summary")),
                 "artifact_path": imp_res.get("artifact_path", ""),
                 "artifact_url": imp_res.get("artifact_url", ""),
                 "export_url": imp_res.get("export_url", ""),
@@ -189,9 +202,13 @@ async def _run_auto_heal_pipeline(
     }
     artifact_url = ""
     warnings = list(lifecycle["warnings"]) + list(runtime_warnings)
+    rendered_artifact_path = ""
     if export_html:
         try:
-            artifact_path = export_html_report(auto_heal_report, artifact_path, "Auto Heal", run_id)
+            rendered_artifact_path = export_html_report(
+                auto_heal_report, artifact_path, "Auto Heal", run_id
+            )
+            artifact_path = rendered_artifact_path
             artifact_delivery = deliver_artifact(
                 artifact_path,
                 run_id=run_id,
@@ -207,7 +224,9 @@ async def _run_auto_heal_pipeline(
                 "Auto-heal dashboard export failed for run_id=%s", run_id, exc_info=exc
             )
             warnings.append("AUTO_HEAL_EXPORT_FAILED")
-            artifact_path = ""
+            artifact_url = ""
+            if not rendered_artifact_path:
+                artifact_path = ""
     else:
         artifact_path = ""
 
@@ -251,21 +270,22 @@ async def _run_auto_heal_pipeline(
         artifact_url=artifact_url,
         label="Auto-heal dashboard",
     )
-    res = with_next_actions(
-        res,
-        [
-            next_action(
-                "get_run_history",
-                "Review the full auto-heal ledger and child tool outputs for this run.",
-                {"run_id": run_id, "session_id": current_session_id},
-            ),
+    actions = [
+        next_action(
+            "get_run_history",
+            "Review the full auto-heal ledger and child tool outputs for this run.",
+            {"run_id": run_id, "session_id": current_session_id},
+        )
+    ]
+    if status not in {"error", "fail"} and not failed_steps and current_session_id:
+        actions.append(
             next_action(
                 "final_audit",
                 "Run final certification on the healed dataset.",
                 {"session_id": current_session_id, "run_id": run_id},
-            ),
-        ],
-    )
+            )
+        )
+    res = with_next_actions(res, actions)
     append_to_run_history(run_id, res, session_id=current_session_id)
     return res
 
