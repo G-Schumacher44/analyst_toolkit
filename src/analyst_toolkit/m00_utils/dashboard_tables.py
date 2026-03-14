@@ -43,22 +43,13 @@ def _render_df(
         return "<p class='empty'>No data available.</p>"
 
     total_rows = len(df)
-    if full_preview:
-        working = _normalize_df_for_display(df)
-        if isinstance(working.columns, pd.MultiIndex):
-            working.columns = [
-                "__".join(str(part) for part in column if str(part)).strip("_")
-                for column in working.columns
-            ]
-        preview = working.copy()
-    else:
-        preview = _normalize_df_for_display(df.head(max_rows))
-        if isinstance(preview.columns, pd.MultiIndex):
-            preview.columns = [
-                "__".join(str(part) for part in column if str(part)).strip("_")
-                for column in preview.columns
-            ]
-        preview = preview.copy()
+    source = df if full_preview else df.head(max_rows)
+    preview = _normalize_df_for_display(source)
+    if isinstance(preview.columns, pd.MultiIndex):
+        preview.columns = [
+            "__".join(str(part) for part in column if str(part)).strip("_")
+            for column in preview.columns
+        ]
     safe_html_cols = allow_html_cols or set()
     for column in preview.columns:
         if str(column) in safe_html_cols:

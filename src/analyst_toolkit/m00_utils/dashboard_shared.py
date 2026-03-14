@@ -5,6 +5,22 @@ from __future__ import annotations
 import html
 from typing import Any
 
+STATUS_PASS_SET = frozenset(
+    {
+        "pass",
+        "passed",
+        "ok",
+        "available",
+        "ready",
+        "ready for final audit",
+        "healthy",
+        "certified",
+        "proceed",
+    }
+)
+STATUS_FAIL_SET = frozenset({"fail", "failed", "error", "blocked", "rejected", "repair"})
+STATUS_WARN_SET = frozenset({"warn", "warning", "missing", "disabled", "not_run"})
+
 
 def _slugify(value: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "-" for ch in value).strip("-")
@@ -22,26 +38,9 @@ def _metric_value(value: Any) -> str:
 
 def _status_tone_class(value: Any) -> str:
     normalized = str(value or "").strip().lower()
-    if normalized in {
-        "pass",
-        "passed",
-        "ok",
-        "available",
-        "ready",
-        "ready for final audit",
-        "healthy",
-        "certified",
-        "proceed",
-    }:
+    if normalized in STATUS_PASS_SET:
         return "pass"
-    if normalized in {
-        "fail",
-        "failed",
-        "error",
-        "blocked",
-        "rejected",
-        "repair",
-    }:
+    if normalized in STATUS_FAIL_SET:
         return "fail"
     if normalized:
         return "warn"
@@ -96,18 +95,16 @@ def _embed_reference_src(path_value: Any, url_value: Any) -> str:
     normalized_path = _normalize_reference_text(path_value)
     if normalized_url.startswith(("http://", "https://")):
         return normalized_url
-    if normalized_path.startswith("/exports/") or normalized_path.startswith(
-        ("http://", "https://")
-    ):
+    if normalized_path.startswith(("/exports/", "http://", "https://")):
         return normalized_path
     return ""
 
 
 def _module_badge(status: str) -> str:
     normalized = str(status or "unknown").lower()
-    if normalized in {"pass", "ok", "available"}:
+    if normalized in STATUS_PASS_SET:
         return f"<span class='badge-ok'>{html.escape(normalized.upper())}</span>"
-    if normalized in {"warn", "warning", "missing", "disabled", "not_run"}:
+    if normalized in STATUS_WARN_SET:
         return f"<span class='badge-warn'>{html.escape(normalized.upper())}</span>"
     return f"<span class='pill warn'>{html.escape(normalized.upper())}</span>"
 
@@ -123,9 +120,9 @@ def _status_chip(status: str) -> str:
     normalized = _tab_status_label(status).lower()
     chip_class = (
         "ok"
-        if normalized in {"pass", "available"}
+        if normalized in STATUS_PASS_SET
         else "fail"
-        if normalized in {"fail", "error"}
+        if normalized in STATUS_FAIL_SET
         else "warn"
     )
     return f"<span class='status-chip {chip_class}'>{html.escape(normalized.upper())}</span>"

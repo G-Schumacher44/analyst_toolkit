@@ -1016,7 +1016,8 @@ def _assemble_page(
     toc_html = ""
     if toc_items:
         toc_links = "".join(
-            f"<a href='#{_slugify(anchor)}'>{html.escape(label)}</a>" for anchor, label in toc_items
+            f"<a href='#{html.escape(_slugify(anchor), quote=True)}'>{html.escape(label)}</a>"
+            for anchor, label in toc_items
         )
         toc_html = f"<div class='toc'><strong>Sections:</strong> {toc_links}</div>"
 
@@ -1024,6 +1025,7 @@ def _assemble_page(
     return (
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{html.escape(page_title)} - {html.escape(run_id)}</title>"
         f"{_DASHBOARD_CSS}{_DASHBOARD_SCRIPT}</head><body><div class='page'>"
         "<div class='hero'>"

@@ -40,6 +40,7 @@ from analyst_toolkit.m00_utils.dashboard_views import (
 _MAX_PREVIEW_ROWS = 50
 _SIZE_WARNING_THRESHOLD_MB = 25
 
+
 def _flatten_plot_paths(plot_paths: dict[str, Any] | None) -> list[tuple[str, str]]:
     items: list[tuple[str, str]] = []
     if not plot_paths:

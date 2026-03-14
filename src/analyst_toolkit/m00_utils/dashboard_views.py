@@ -24,6 +24,21 @@ from analyst_toolkit.m00_utils.dashboard_tables import (
 )
 
 
+def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = True) -> str:
+    detail_html = (
+        f"<p class='subtle'>{html.escape(str(item.get('Detail', '')))}</p>" if show_detail else ""
+    )
+    return (
+        "<div class='resource-inline-item'>"
+        f"<p class='resource-meta'>{html.escape(str(item.get('Kind', 'resource')).replace('_', ' ').title())}</p>"
+        f"<h4>{html.escape(str(item.get('Title', 'Untitled')))}</h4>"
+        f"{detail_html}"
+        "<p class='subtle'><strong>Open With</strong></p>"
+        f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
+        "</div>"
+    )
+
+
 def _render_terminal_references(
     *,
     final_dashboard: Any,
@@ -202,6 +217,14 @@ def render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
     modules = report.get("modules", {})
     final_dashboard = report.get("final_dashboard_url") or report.get("final_dashboard_path")
     final_export = report.get("final_export_url")
+    module_ledger_rows = []
+    for name in module_order:
+        status = (modules.get(name) or {}).get("status", "unknown")
+        status_label = _tab_status_label(status)
+        module_ledger_rows.append(
+            {"Module": name, "Status": status_label, "Badge": _module_badge(status_label)}
+        )
+    module_ledger_df = pd.DataFrame(module_ledger_rows)
 
     banner_class = "ok" if failed_modules == 0 else "warn"
     banner = (
@@ -234,7 +257,7 @@ def render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
         "<div class='card'><h3>Final References</h3>"
         f"{_render_terminal_references(final_dashboard=final_dashboard, final_export=final_export, final_status=final_status, failed_modules=failed_modules, modules=modules, module_order=module_order)}"
         "</div>"
-        f"<div class='card'><h3>Module Status Ledger</h3>{_render_df(pd.DataFrame([{'Module': name, 'Status': _tab_status_label((modules.get(name) or {}).get('status', 'unknown')), 'Badge': _module_badge(_tab_status_label((modules.get(name) or {}).get('status', 'unknown')))} for name in module_order]), full_preview=True, allow_html_cols={'Badge'})}</div>"
+        f"<div class='card'><h3>Module Status Ledger</h3>{_render_df(module_ledger_df, full_preview=True, allow_html_cols={'Badge'})}</div>"
         "</div>"
         "</div>"
     )
@@ -444,15 +467,7 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
             group_items = template_items
         items_html = []
         for item in group_items:
-            items_html.append(
-                "<div class='resource-inline-item'>"
-                f"<p class='resource-meta'>{html.escape(str(item.get('Kind', 'resource')).replace('_', ' ').title())}</p>"
-                f"<h4>{html.escape(str(item.get('Title', 'Untitled')))}</h4>"
-                f"<p class='subtle'>{html.escape(str(item.get('Detail', '')))}</p>"
-                "<p class='subtle'><strong>Open With</strong></p>"
-                f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
-                "</div>"
-            )
+            items_html.append(_render_resource_inline_item(item, show_detail=True))
         grouped_resources.append(
             "<div class='readme-section'>"
             f"<h3>{html.escape(str(group.get('title', 'Resources')))}</h3>"
@@ -463,12 +478,7 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
             "</div>"
         )
     all_resource_refs = "".join(
-        "<div class='resource-inline-item'>"
-        f"<p class='resource-meta'>{html.escape(str(item.get('Kind', 'resource')).replace('_', ' ').title())}</p>"
-        f"<h4>{html.escape(str(item.get('Title', 'Untitled')))}</h4>"
-        f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
-        "</div>"
-        for item in reference_items
+        _render_resource_inline_item(item, show_detail=False) for item in reference_items
     )
     resources_panel = (
         "<div class='readme-grid'>"
