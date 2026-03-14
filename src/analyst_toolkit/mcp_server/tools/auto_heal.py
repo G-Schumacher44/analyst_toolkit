@@ -1,6 +1,7 @@
 """MCP tool: toolkit_auto_heal — infer and apply cleaning rules in one go."""
 
 import asyncio
+import logging
 
 import yaml
 
@@ -27,6 +28,8 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
 from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
 from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_configs
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
+
+logger = logging.getLogger("analyst_toolkit.mcp_server.auto_heal")
 
 
 def _is_terminal_failure(status: str | None) -> bool:
@@ -196,11 +199,12 @@ async def _run_auto_heal_pipeline(
                 config=runtime_overrides,
                 session_id=current_session_id,
             )
-            artifact_path = artifact_delivery["local_path"]
-            artifact_url = artifact_delivery["url"]
+            artifact_path = str(artifact_delivery.get("local_path", ""))
+            artifact_url = str(artifact_delivery.get("url", ""))
             warnings.extend(artifact_delivery["warnings"])
         except Exception as exc:
-            warnings.append(f"Auto-heal dashboard export failed: {exc}")
+            logger.exception("Auto-heal dashboard export failed for run_id=%s", run_id, exc_info=exc)
+            warnings.append("AUTO_HEAL_EXPORT_FAILED")
             artifact_path = ""
     else:
         artifact_path = ""
