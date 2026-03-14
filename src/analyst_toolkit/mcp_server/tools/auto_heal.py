@@ -203,7 +203,9 @@ async def _run_auto_heal_pipeline(
             artifact_url = str(artifact_delivery.get("url", ""))
             warnings.extend(artifact_delivery["warnings"])
         except Exception as exc:
-            logger.exception("Auto-heal dashboard export failed for run_id=%s", run_id, exc_info=exc)
+            logger.exception(
+                "Auto-heal dashboard export failed for run_id=%s", run_id, exc_info=exc
+            )
             warnings.append("AUTO_HEAL_EXPORT_FAILED")
             artifact_path = ""
     else:
