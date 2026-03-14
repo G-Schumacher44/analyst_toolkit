@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 from typing import Any
 
 from analyst_toolkit.m00_utils.export_utils import export_html_report
@@ -40,6 +41,7 @@ from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
 )
 
 logger = logging.getLogger("analyst_toolkit.mcp_server.cockpit")
+_SAFE_RUN_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def _env_float(name: str, default: float) -> float:
@@ -215,6 +217,11 @@ def _module_display_name(module: str) -> str:
     return mapping.get(module, module.replace("_", " ").title())
 
 
+def _safe_run_id_for_path(run_id: str) -> str:
+    normalized = _SAFE_RUN_ID_RE.sub("_", str(run_id).strip()).strip("._-")
+    return normalized or "pipeline_run"
+
+
 async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = None) -> dict:
     history = get_run_history(run_id, session_id=session_id)
     history_meta = get_last_history_read_meta(run_id, session_id=session_id)
@@ -271,14 +278,14 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
     final_audit_entry = latest_by_module.get("final_audit", {})
     auto_heal_entry = latest_by_module.get("auto_heal", {})
     final_status = str(
-        final_audit_entry.get("status")
-        or auto_heal_entry.get("status")
-        or (history[-1].get("status") if history else "unknown")
+        final_audit_entry.get("status") or auto_heal_entry.get("status") or "unknown"
     )
+    effective_session_id = session_id or ""
+    safe_run_id = _safe_run_id_for_path(run_id)
 
     report = {
         "run_id": run_id,
-        "session_id": session_id or str((history[-1].get("session_id") if history else "") or ""),
+        "session_id": effective_session_id,
         "final_status": final_status,
         "health_score": health.get("health_score", "N/A"),
         "health_status": health.get("health_status", "unknown"),
@@ -307,16 +314,16 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
         or auto_heal_entry.get("export_url", ""),
     }
 
-    artifact_path = f"exports/reports/pipeline/{run_id}_pipeline_dashboard.html"
+    artifact_path = f"exports/reports/pipeline/{safe_run_id}_pipeline_dashboard.html"
     artifact_delivery = empty_delivery_state()
     artifact_url = ""
-    output_path = export_html_report(report, artifact_path, "Pipeline Dashboard", run_id)
+    output_path = export_html_report(report, artifact_path, "Pipeline Dashboard", safe_run_id)
     artifact_delivery = deliver_artifact(
         output_path,
         run_id=run_id,
         module="pipeline_dashboard",
         config={},
-        session_id=report["session_id"] or None,
+        session_id=effective_session_id or None,
     )
     artifact_path = str(artifact_delivery.get("local_path", output_path))
     artifact_url = str(artifact_delivery.get("url", ""))
@@ -325,7 +332,7 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
         "status": "pass",
         "module": "pipeline_dashboard",
         "run_id": run_id,
-        "session_id": report["session_id"],
+        "session_id": effective_session_id,
         "summary": {
             "health_score": report["health_score"],
             "health_status": report["health_status"],

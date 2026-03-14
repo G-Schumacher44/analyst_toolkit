@@ -2171,12 +2171,12 @@ def _embed_reference_src(path_value: Any, url_value: Any) -> str:
     text = str(preferred).strip()
     if not text:
         return ""
+    if text.startswith(("http://", "https://")):
+        return text
     if "/exports/" in text:
         return "/" + text[text.index("exports/") :]
     if text.startswith("exports/"):
         return "/" + text
-    if text.startswith(("http://", "https://")):
-        return text
     return ""
 
 
