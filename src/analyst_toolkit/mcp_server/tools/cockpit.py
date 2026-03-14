@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 from analyst_toolkit.m00_utils.export_utils import export_html_report
@@ -248,16 +247,17 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
     ready_modules = warned_modules = failed_modules = not_run_modules = 0
     for module in module_order:
         entry = latest_by_module.get(module, {})
-        status = str(entry.get("status", "unknown")).lower()
         if not entry:
             status = "not_run"
             not_run_modules += 1
-        elif status in {"pass", "available"}:
-            ready_modules += 1
-        elif status in {"fail", "error"}:
-            failed_modules += 1
         else:
-            warned_modules += 1
+            status = str(entry.get("status", "unknown")).lower()
+            if status in {"pass", "available"}:
+                ready_modules += 1
+            elif status in {"fail", "error"}:
+                failed_modules += 1
+            else:
+                warned_modules += 1
         modules[_module_display_name(module)] = {
             "status": "not_run" if not entry else entry.get("status", "unknown"),
             "summary": entry.get("summary", {}),
