@@ -991,6 +991,16 @@ _DASHBOARD_SCRIPT = """
   };
 
   document.addEventListener("click", (event) => {
+    const trigger = event.target.closest(".plot-trigger");
+    if (trigger) {
+      window.atkDashboard.openPlot(trigger);
+      return;
+    }
+    const closeButton = event.target.closest(".plot-modal-close");
+    if (closeButton) {
+      window.atkDashboard.closePlot();
+      return;
+    }
     const modal = document.getElementById("plot-modal");
     if (!modal || event.target !== modal) return;
     window.atkDashboard.closePlot();
@@ -1040,7 +1050,7 @@ def _assemble_page(
         "<div class='plot-modal-card'>"
         "<div class='plot-modal-header'>"
         "<h3 id='plot-modal-title'>Plot</h3>"
-        "<button class='plot-modal-close' type='button' onclick='window.atkDashboard.closePlot()' aria-label='Close expanded plot'>&times;</button>"
+        "<button class='plot-modal-close' type='button' aria-label='Close expanded plot'>&times;</button>"
         "</div>"
         "<div class='plot-modal-body'>"
         "<img id='plot-modal-image' src='' alt='Expanded plot'>"

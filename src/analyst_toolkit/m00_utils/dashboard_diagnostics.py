@@ -24,12 +24,20 @@ def render_diagnostics_dashboard(
     duplicated_rows_df = report_tables.get("duplicated_rows", pd.DataFrame())
     sample_head_df = report_tables.get("sample_head", pd.DataFrame())
 
-    dup_count = int(dup_df.iloc[0]["Duplicate Rows"]) if not dup_df.empty else 0
+    dup_count = (
+        int(dup_df.iloc[0]["Duplicate Rows"])
+        if not dup_df.empty and "Duplicate Rows" in dup_df.columns
+        else 0
+    )
     missing_cols = (
         int((schema_df["Missing Count"] > 0).sum()) if "Missing Count" in schema_df.columns else 0
     )
-    rows = int(shape_df.iloc[0]["Rows"]) if not shape_df.empty else 0
-    cols = int(shape_df.iloc[0]["Columns"]) if not shape_df.empty else 0
+    rows = int(shape_df.iloc[0]["Rows"]) if not shape_df.empty and "Rows" in shape_df.columns else 0
+    cols = (
+        int(shape_df.iloc[0]["Columns"])
+        if not shape_df.empty and "Columns" in shape_df.columns
+        else 0
+    )
 
     banner = (
         "<div class='banner'>"

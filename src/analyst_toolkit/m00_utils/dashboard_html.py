@@ -76,29 +76,27 @@ def generate_dashboard_html(
 ) -> str:
     """Render a standalone HTML dashboard for the provided module payload."""
     normalized = module_name.strip().lower().replace("_", " ")
-    if normalized == "diagnostics":
-        return render_diagnostics_dashboard(report_tables, run_id, plot_paths)
-    if normalized == "validation":
-        return render_validation_dashboard(report_tables, run_id)
-    if normalized == "final audit":
-        return render_final_audit_dashboard(report_tables, run_id)
-    if normalized == "normalization":
-        return render_normalization_dashboard(report_tables, run_id)
-    if normalized == "duplicates":
-        return render_duplicates_dashboard(report_tables, run_id, plot_paths)
-    if normalized == "outlier detection":
-        return render_outlier_detection_dashboard(report_tables, run_id, plot_paths)
-    if normalized == "outlier handling":
-        return render_outlier_handling_dashboard(report_tables, run_id)
-    if normalized == "imputation":
-        return render_imputation_dashboard(report_tables, run_id, plot_paths)
-    if normalized == "auto heal":
-        return render_auto_heal_dashboard(report_tables, run_id)
-    if normalized == "cockpit dashboard":
-        return render_cockpit_dashboard(report_tables, run_id)
-    if normalized == "pipeline dashboard":
-        return render_pipeline_dashboard(report_tables, run_id)
+    renderers_with_plots = {
+        "diagnostics": render_diagnostics_dashboard,
+        "duplicates": render_duplicates_dashboard,
+        "outlier detection": render_outlier_detection_dashboard,
+        "imputation": render_imputation_dashboard,
+    }
+    renderers_without_plots = {
+        "validation": render_validation_dashboard,
+        "final audit": render_final_audit_dashboard,
+        "normalization": render_normalization_dashboard,
+        "outlier handling": render_outlier_handling_dashboard,
+        "auto heal": render_auto_heal_dashboard,
+        "cockpit dashboard": render_cockpit_dashboard,
+        "pipeline dashboard": render_pipeline_dashboard,
+    }
+    if normalized in renderers_with_plots:
+        return renderers_with_plots[normalized](report_tables, run_id, plot_paths)
+    if normalized in renderers_without_plots:
+        return renderers_without_plots[normalized](report_tables, run_id)
     return _render_generic_dashboard(report_tables, module_name, run_id, plot_paths)
 
 
+# Backward-compatible alias for older report/export call sites.
 generate_html_report = generate_dashboard_html

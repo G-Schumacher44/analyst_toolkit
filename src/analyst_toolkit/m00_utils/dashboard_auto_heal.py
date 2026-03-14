@@ -21,20 +21,30 @@ from analyst_toolkit.m00_utils.dashboard_tables import (
 )
 
 
+def _extract_step_fields(step: Any) -> dict[str, Any]:
+    if isinstance(step, dict):
+        return {
+            "status": str(step.get("status", "skipped")),
+            "summary": step.get("summary", {}),
+            "artifact_ref": step.get("artifact_url") or step.get("artifact_path"),
+            "export_ref": step.get("export_url"),
+        }
+    return {
+        "status": "skipped",
+        "summary": {},
+        "artifact_ref": None,
+        "export_ref": None,
+    }
+
+
 def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
     cards: list[str] = []
     for step_name in ("normalization", "imputation"):
-        step = step_results.get(step_name, {})
-        if isinstance(step, dict):
-            summary = step.get("summary", {})
-            status = str(step.get("status", "skipped")).upper()
-            artifact = step.get("artifact_url") or step.get("artifact_path") or "No dashboard"
-            export_ref = step.get("export_url") or "No export"
-        else:
-            summary = {}
-            status = "SKIPPED"
-            artifact = "No dashboard"
-            export_ref = "No export"
+        fields = _extract_step_fields(step_results.get(step_name, {}))
+        summary = fields["summary"]
+        status = str(fields["status"]).upper()
+        artifact = fields["artifact_ref"] or "No dashboard"
+        export_ref = fields["export_ref"] or "No export"
         tone = _status_tone_class(status)
         cards.append(
             f"<div class='cert-stat-card {tone}'>"
@@ -51,17 +61,11 @@ def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
 def _render_auto_heal_step_drilldowns(step_results: dict[str, Any]) -> str:
     blocks: list[str] = []
     for step_name in ("normalization", "imputation"):
-        step = step_results.get(step_name, {})
-        if isinstance(step, dict):
-            status = str(step.get("status", "skipped")).lower()
-            summary = step.get("summary", {})
-            artifact_ref = step.get("artifact_url") or step.get("artifact_path")
-            export_ref = step.get("export_url")
-        else:
-            status = "skipped"
-            summary = {}
-            artifact_ref = None
-            export_ref = None
+        fields = _extract_step_fields(step_results.get(step_name, {}))
+        status = str(fields["status"]).lower()
+        summary = fields["summary"]
+        artifact_ref = fields["artifact_ref"]
+        export_ref = fields["export_ref"]
         blocks.append(
             "<div class='card'>"
             f"<h3>{html.escape(step_name.title())}</h3>"
@@ -92,9 +96,9 @@ def render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
     failed_steps = report.get("failed_steps", [])
     row_count = report.get("row_count", 0)
     final_session_id = report.get("final_session_id", "")
-    final_export = report.get("final_export_url") or "Unavailable"
+    final_export = report.get("final_export_url") or None
     final_dashboard = (
-        report.get("final_dashboard_url") or report.get("final_dashboard_path") or "Unavailable"
+        report.get("final_dashboard_url") or report.get("final_dashboard_path") or None
     )
     inferred_modules = report.get("inferred_modules", [])
     message = str(report.get("message", ""))
@@ -106,6 +110,7 @@ def render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
         if status == "pass" and not failed_steps
         else "Needs Operator Review"
     )
+    readiness_tone = "pass" if status == "pass" and not failed_steps else "warn"
     banner = (
         f"<div class='banner {banner_class}'>"
         "<div class='banner-item'><strong>Stage:</strong> MCP Auto Heal</div>"
@@ -142,12 +147,12 @@ def render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
                 f"{_metric_value(len(inferred_modules))}"
                 "<p class='subtle'>Modules inferred and considered for execution.</p>"
                 "</div>"
-                f"<div class='cert-stat-card {_status_tone_class(readiness)}'>"
+                f"<div class='cert-stat-card {_status_tone_class(readiness_tone)}'>"
                 "<h3>Readiness</h3>"
                 f"{_metric_value(readiness)}"
                 "<p class='subtle'>Whether the healed result is ready for final certification.</p>"
                 "</div>"
-                f"<div class='cert-stat-card {'pass' if len(failed_steps) == 0 else 'warn'}'>"
+                f"<div class='cert-stat-card {_status_tone_class(readiness_tone)}'>"
                 "<h3>Failed Steps</h3>"
                 f"{_metric_value(len(failed_steps))}"
                 "<p class='subtle'>Repair stages that still require intervention.</p>"

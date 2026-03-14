@@ -18,11 +18,28 @@ from analyst_toolkit.m00_utils.dashboard_tables import _render_df
 
 
 def _safe_metric_value(summary_df: pd.DataFrame, metric_name: str) -> int:
+    if not isinstance(summary_df, pd.DataFrame):
+        return 0
+    if "Metric" not in summary_df.columns or "Value" not in summary_df.columns:
+        return 0
     try:
         series = summary_df.loc[summary_df["Metric"] == metric_name, "Value"]
         return int(series.iloc[0]) if not series.empty else 0
-    except Exception:
+    except (IndexError, KeyError, TypeError, ValueError):
         return 0
+
+
+def _format_top_row(
+    df: pd.DataFrame,
+    *,
+    sort_col: str,
+    label_col: str,
+    default: str = "None",
+) -> str:
+    if df.empty or sort_col not in df.columns or label_col not in df.columns:
+        return default
+    top_row = df.sort_values(sort_col, ascending=False).iloc[0]
+    return f"{top_row.get(label_col, default)} ({int(top_row.get(sort_col, 0))})"
 
 
 def _render_duplicates_key_clusters(
@@ -55,7 +72,7 @@ def render_duplicates_dashboard(
     duplicate_clusters_df = report.get("duplicate_clusters", pd.DataFrame())
     all_duplicate_instances_df = report.get("all_duplicate_instances", pd.DataFrame())
     dropped_rows_df = report.get("dropped_rows", pd.DataFrame())
-    metadata = report.get("__dashboard_meta__", {}) if isinstance(report, dict) else {}
+    metadata = report.get("__dashboard_meta__", {})
     subset_cols = metadata.get("subset_columns") or []
 
     is_remove_mode = (
@@ -266,10 +283,7 @@ def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:
         if not column_changes_df.empty and "column" in column_changes_df.columns
         else 0
     )
-    top_change = "None"
-    if not column_changes_df.empty and "change_count" in column_changes_df.columns:
-        top_row = column_changes_df.sort_values("change_count", ascending=False).iloc[0]
-        top_change = f"{top_row['column']} ({int(top_row['change_count'])})"
+    top_change = _format_top_row(column_changes_df, sort_col="change_count", label_col="column")
 
     action_count = 0
     if isinstance(changelog, dict):
@@ -390,10 +404,7 @@ def render_outlier_detection_dashboard(
         if not log_df.empty and "method" in log_df.columns
         else "None"
     )
-    hottest_column = "None"
-    if not log_df.empty and "outlier_count" in log_df.columns:
-        top_row = log_df.sort_values("outlier_count", ascending=False).iloc[0]
-        hottest_column = f"{top_row['column']} ({int(top_row['outlier_count'])})"
+    hottest_column = _format_top_row(log_df, sort_col="outlier_count", label_col="column")
 
     banner_class = "warn" if total_outliers > 0 else "ok"
     banner = (
@@ -636,6 +647,8 @@ def _render_imputation_categorical_shift(shift_report: dict[str, Any]) -> str:
     for column, audit_df in shift_report.items():
         if not isinstance(audit_df, pd.DataFrame) or audit_df.empty:
             continue
+        if not {"Imputed Count", "Value"}.issubset(audit_df.columns):
+            continue
         normalized_values = audit_df[audit_df["Imputed Count"] > 0][["Value", "Imputed Count"]]
         blocks.append(
             "<div class='card drilldown'>"
@@ -667,10 +680,7 @@ def render_imputation_dashboard(
     remaining_null_columns = (
         len(remaining_nulls_df) if isinstance(remaining_nulls_df, pd.DataFrame) else 0
     )
-    top_fill_target = "None"
-    if not actions_df.empty and "Nulls Filled" in actions_df.columns:
-        top_row = actions_df.sort_values("Nulls Filled", ascending=False).iloc[0]
-        top_fill_target = f"{top_row['Column']} ({int(top_row['Nulls Filled'])})"
+    top_fill_target = _format_top_row(actions_df, sort_col="Nulls Filled", label_col="Column")
 
     banner_class = "warn" if remaining_null_columns > 0 else "ok"
     banner = (

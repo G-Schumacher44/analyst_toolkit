@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -35,17 +36,21 @@ def render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
     for name, path_str in _flatten_plot_paths(plot_paths):
         path = Path(path_str)
         if not path.exists():
+            logging.debug("Plot file not found, skipping %s (%s)", name, path)
             continue
         file_bytes = path.read_bytes()
         total_bytes += len(file_bytes)
         encoded = base64.b64encode(file_bytes).decode("utf-8")
-        image_src = f"data:image/png;base64,{encoded}"
+        mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
+        if not mime_type.startswith("image/"):
+            mime_type = "image/png"
+        image_src = f"data:{mime_type};base64,{encoded}"
         escaped_title = html.escape(_display_name(name))
         escaped_name = html.escape(name)
         cards.append(
             "<div class='card plot-card'>"
             f"<h3>{escaped_title}</h3>"
-            f"<button class='plot-trigger' type='button' onclick='window.atkDashboard.openPlot(this)' data-plot-title='{escaped_title}'>"
+            f"<button class='plot-trigger' type='button' data-plot-title='{escaped_title}' data-plot-src='{image_src}'>"
             f"<img src='{image_src}' alt='{escaped_name}'>"
             "</button>"
             "<p class='plot-caption'>Click to expand</p>"

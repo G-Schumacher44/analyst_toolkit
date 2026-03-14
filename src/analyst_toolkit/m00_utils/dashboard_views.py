@@ -41,7 +41,6 @@ def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = Tr
 
 def _render_cockpit_overview(
     overview: dict[str, Any],
-    operating_posture: dict[str, Any],
     operator_brief: dict[str, Any],
     best_surfaces: dict[str, Any],
     blockers: list[dict[str, Any]],
@@ -591,7 +590,6 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
 
     overview_section = _render_cockpit_overview(
         overview,
-        operating_posture,
         operator_brief,
         best_surfaces,
         blockers,
