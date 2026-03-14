@@ -50,7 +50,7 @@ def render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
         cards.append(
             "<div class='card plot-card'>"
             f"<h3>{escaped_title}</h3>"
-            f"<button class='plot-trigger' type='button' data-plot-title='{escaped_title}' data-plot-src='{image_src}'>"
+            f"<button class='plot-trigger' type='button' data-plot-title='{escaped_title}'>"
             f"<img src='{image_src}' alt='{escaped_name}'>"
             "</button>"
             "<p class='plot-caption'>Click to expand</p>"
@@ -58,9 +58,11 @@ def render_plot_grid(plot_paths: dict[str, Any] | None) -> str:
         )
     if not cards:
         return "<p class='empty'>No plots were generated for this run.</p>"
-    if total_bytes > _SIZE_WARNING_THRESHOLD_MB * 1024 * 1024:
+    estimated_embedded_bytes = (total_bytes * 4) // 3
+    if estimated_embedded_bytes > _SIZE_WARNING_THRESHOLD_MB * 1024 * 1024:
         logging.warning(
-            "Embedded plot data exceeds %s MB. Consider reducing plot count or resolution.",
+            "Embedded plot payload is about %s bytes and exceeds %s MB. Consider reducing plot count or resolution.",
+            estimated_embedded_bytes,
             _SIZE_WARNING_THRESHOLD_MB,
         )
     return (

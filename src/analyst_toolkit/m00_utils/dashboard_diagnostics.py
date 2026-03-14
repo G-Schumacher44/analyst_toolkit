@@ -12,6 +12,12 @@ from analyst_toolkit.m00_utils.dashboard_shared import _render_section
 from analyst_toolkit.m00_utils.dashboard_tables import _render_df
 
 
+def _safe_scalar(df: pd.DataFrame, column: str, *, row: int = 0, default: int = 0) -> int:
+    if df.empty or column not in df.columns:
+        return default
+    return int(df.iloc[row][column])
+
+
 def render_diagnostics_dashboard(
     report_tables: dict[str, Any], run_id: str, plot_paths: dict[str, Any] | None
 ) -> str:
@@ -24,20 +30,12 @@ def render_diagnostics_dashboard(
     duplicated_rows_df = report_tables.get("duplicated_rows", pd.DataFrame())
     sample_head_df = report_tables.get("sample_head", pd.DataFrame())
 
-    dup_count = (
-        int(dup_df.iloc[0]["Duplicate Rows"])
-        if not dup_df.empty and "Duplicate Rows" in dup_df.columns
-        else 0
-    )
+    dup_count = _safe_scalar(dup_df, "Duplicate Rows")
     missing_cols = (
         int((schema_df["Missing Count"] > 0).sum()) if "Missing Count" in schema_df.columns else 0
     )
-    rows = int(shape_df.iloc[0]["Rows"]) if not shape_df.empty and "Rows" in shape_df.columns else 0
-    cols = (
-        int(shape_df.iloc[0]["Columns"])
-        if not shape_df.empty and "Columns" in shape_df.columns
-        else 0
-    )
+    rows = _safe_scalar(shape_df, "Rows")
+    cols = _safe_scalar(shape_df, "Columns")
 
     banner = (
         "<div class='banner'>"

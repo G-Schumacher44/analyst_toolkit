@@ -23,6 +23,8 @@ from analyst_toolkit.m00_utils.dashboard_tables import (
     _render_df,
 )
 
+_TEMPLATES_GROUP_TITLE = "templates and contracts"
+
 
 def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = True) -> str:
     detail_html = (
@@ -193,7 +195,7 @@ def _render_cockpit_resources(
     ]
     for group in resource_groups:
         group_items = group.get("items", [])
-        if str(group.get("title", "")).lower() == "templates and contracts":
+        if str(group.get("title", "")).lower() == _TEMPLATES_GROUP_TITLE:
             group_items = template_items
         items_html = []
         for item in group_items:

@@ -20,6 +20,8 @@ from analyst_toolkit.m00_utils.dashboard_tables import (
     _render_df,
 )
 
+_AUTO_HEAL_STEPS = ("normalization", "imputation")
+
 
 def _extract_step_fields(step: Any) -> dict[str, Any]:
     if isinstance(step, dict):
@@ -39,7 +41,7 @@ def _extract_step_fields(step: Any) -> dict[str, Any]:
 
 def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
     cards: list[str] = []
-    for step_name in ("normalization", "imputation"):
+    for step_name in _AUTO_HEAL_STEPS:
         fields = _extract_step_fields(step_results.get(step_name, {}))
         summary = fields["summary"]
         status = str(fields["status"]).upper()
@@ -60,7 +62,7 @@ def _render_auto_heal_step_cards(step_results: dict[str, Any]) -> str:
 
 def _render_auto_heal_step_drilldowns(step_results: dict[str, Any]) -> str:
     blocks: list[str] = []
-    for step_name in ("normalization", "imputation"):
+    for step_name in _AUTO_HEAL_STEPS:
         fields = _extract_step_fields(step_results.get(step_name, {}))
         status = str(fields["status"]).lower()
         summary = fields["summary"]
@@ -104,13 +106,10 @@ def render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
     message = str(report.get("message", ""))
 
     status = str(report.get("status", "warn")).lower()
-    banner_class = "ok" if status == "pass" and not failed_steps else "warn"
-    readiness = (
-        "Ready For Final Audit"
-        if status == "pass" and not failed_steps
-        else "Needs Operator Review"
-    )
-    readiness_tone = "pass" if status == "pass" and not failed_steps else "warn"
+    is_ready = status == "pass" and not failed_steps
+    banner_class = "ok" if is_ready else "warn"
+    readiness = "Ready For Final Audit" if is_ready else "Needs Operator Review"
+    readiness_tone = "pass" if is_ready else "warn"
     banner = (
         f"<div class='banner {banner_class}'>"
         "<div class='banner-item'><strong>Stage:</strong> MCP Auto Heal</div>"
@@ -121,7 +120,6 @@ def render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
         "</div>"
     )
 
-    failed_df = pd.DataFrame({"failed_step": failed_steps}) if failed_steps else pd.DataFrame()
     inferred_df = pd.DataFrame({"module": inferred_modules}) if inferred_modules else pd.DataFrame()
     outcome_df = pd.DataFrame(
         [
@@ -189,7 +187,8 @@ def render_auto_heal_dashboard(report: dict[str, Any], run_id: str) -> str:
         ("Step Drilldowns", "Step Drilldowns"),
     ]
 
-    if not failed_df.empty:
+    if failed_steps:
+        failed_df = pd.DataFrame({"failed_step": failed_steps})
         sections.append(
             _render_section(
                 "Failures",

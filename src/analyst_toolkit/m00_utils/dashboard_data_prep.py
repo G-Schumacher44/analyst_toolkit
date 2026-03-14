@@ -42,6 +42,17 @@ def _format_top_row(
     return f"{top_row.get(label_col, default)} ({int(top_row.get(sort_col, 0))})"
 
 
+def _safe_row_summary_value(
+    row_summary_df: pd.DataFrame,
+    column: str,
+    *,
+    default: int | float,
+) -> int | float:
+    if row_summary_df.empty or column not in row_summary_df.columns:
+        return default
+    return row_summary_df.iloc[0][column]
+
+
 def _render_duplicates_key_clusters(
     clusters_df: pd.DataFrame, subset_cols: list[str]
 ) -> tuple[str, str]:
@@ -273,10 +284,10 @@ def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:
     changelog_summary_df = report.get("changelog_summary", pd.DataFrame())
     meta_df = report.get("meta_info", pd.DataFrame())
 
-    rows_total = int(row_summary_df.iloc[0]["rows_total"]) if not row_summary_df.empty else 0
-    rows_changed = int(row_summary_df.iloc[0]["rows_changed"]) if not row_summary_df.empty else 0
-    rows_changed_pct = (
-        float(row_summary_df.iloc[0]["rows_changed_percent"]) if not row_summary_df.empty else 0.0
+    rows_total = int(_safe_row_summary_value(row_summary_df, "rows_total", default=0))
+    rows_changed = int(_safe_row_summary_value(row_summary_df, "rows_changed", default=0))
+    rows_changed_pct = float(
+        _safe_row_summary_value(row_summary_df, "rows_changed_percent", default=0.0)
     )
     columns_changed = (
         int(column_changes_df["column"].nunique())
