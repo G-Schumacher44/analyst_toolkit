@@ -317,6 +317,15 @@ def compact_destination_metadata(destinations: dict[str, Any]) -> dict[str, Any]
     return _compact_destination_metadata(destinations)
 
 
+def empty_delivery_state() -> dict[str, Any]:
+    return {
+        "local_path": "",
+        "url": "",
+        "warnings": [],
+        "destinations": {},
+    }
+
+
 def check_upload(url: str, label: str, warnings: list) -> str:
     """Append a warning if the upload failed (url is empty). Returns url unchanged."""
     if not url:

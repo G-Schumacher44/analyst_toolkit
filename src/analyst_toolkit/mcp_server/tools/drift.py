@@ -1,15 +1,21 @@
 """MCP tool: toolkit_drift_detection — compare two datasets for schema or distribution changes."""
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
+    build_artifact_contract,
+    compact_destination_metadata,
     default_run_id,
+    deliver_artifact,
+    fold_status_with_artifacts,
     generate_default_export_path,
     load_input,
     save_output,
-    upload_artifact,
+    split_artifact_reference,
 )
 
 
@@ -83,12 +89,39 @@ async def _toolkit_drift_detection(
         run_id, "drift_detection"
     )
     export_url = save_output(drift_df, export_path)
+    export_local_path, export_remote_url = split_artifact_reference(export_url)
+    export_delivery: dict[str, Any] = {
+        "reference": export_url,
+        "local_path": export_local_path,
+        "url": export_remote_url,
+        "warnings": [],
+        "destinations": {},
+    }
+    if export_local_path:
+        export_delivery = deliver_artifact(
+            export_local_path,
+            run_id,
+            "drift_detection/data",
+            config=kwargs,
+            session_id=None,
+        )
+        export_url = str(export_delivery["reference"])
 
-    # Upload as artifact if GCS is configured
-    artifact_url = upload_artifact(export_path, run_id, "drift_detection", config=kwargs)
+    artifact_contract = build_artifact_contract(
+        export_url,
+        export_path=str(export_delivery["local_path"]),
+        expect_html=False,
+        expect_xlsx=False,
+        probe_local_paths=True,
+    )
+    warnings = list(export_delivery["warnings"]) + artifact_contract["artifact_warnings"]
+    base_status = "warn" if summary["drift_detected"] else ("warn" if warnings else "pass")
+    status = fold_status_with_artifacts(
+        base_status, artifact_contract["missing_required_artifacts"]
+    )
 
     res = {
-        "status": "warn" if summary["drift_detected"] else "pass",
+        "status": status,
         "module": "drift_detection",
         "run_id": run_id,
         "summary": summary,
@@ -96,8 +129,15 @@ async def _toolkit_drift_detection(
         "removed_columns": removed_cols,
         "dtype_changes": dtype_changes,
         "numeric_drift": drift_metrics,
-        "artifact_url": artifact_url,
         "export_url": export_url,
+        "destination_delivery": {
+            "data_export": compact_destination_metadata(export_delivery["destinations"]),
+        },
+        "warnings": warnings,
+        "artifact_matrix": artifact_contract["artifact_matrix"],
+        "expected_artifacts": artifact_contract["expected_artifacts"],
+        "uploaded_artifacts": artifact_contract["uploaded_artifacts"],
+        "missing_required_artifacts": artifact_contract["missing_required_artifacts"],
     }
     append_to_run_history(run_id, res)
     return res
