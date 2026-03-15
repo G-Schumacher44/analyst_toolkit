@@ -6,19 +6,24 @@ from typing import Any
 import pandas as pd
 
 
-def _lookup_original_column_name(changelog: dict[str, Any], normalized_col: str) -> str:
+def _resolve_preview_column_pair(changelog: dict[str, Any], preview_column: str) -> tuple[str, str]:
     renamed_columns = changelog.get("renamed_columns")
     if (
         isinstance(renamed_columns, pd.DataFrame)
         and not renamed_columns.empty
         and {"Original Name", "New Name"}.issubset(renamed_columns.columns)
     ):
-        matched = renamed_columns.loc[
-            renamed_columns["New Name"] == normalized_col, "Original Name"
+        matched_new = renamed_columns.loc[
+            renamed_columns["New Name"] == preview_column, "Original Name"
         ]
-        if not matched.empty:
-            return str(matched.iloc[0])
-    return normalized_col
+        if not matched_new.empty:
+            return str(matched_new.iloc[0]), preview_column
+        matched_original = renamed_columns.loc[
+            renamed_columns["Original Name"] == preview_column, "New Name"
+        ]
+        if not matched_original.empty:
+            return preview_column, str(matched_original.iloc[0])
+    return preview_column, preview_column
 
 
 def _build_column_value_analysis(
@@ -29,12 +34,12 @@ def _build_column_value_analysis(
 ) -> dict[str, dict[str, pd.DataFrame]]:
     analysis: dict[str, dict[str, pd.DataFrame]] = {}
     for column in preview_columns:
-        original_col = _lookup_original_column_name(changelog, column)
-        if original_col not in df_original.columns or column not in df_transformed.columns:
+        original_col, transformed_col = _resolve_preview_column_pair(changelog, column)
+        if original_col not in df_original.columns or transformed_col not in df_transformed.columns:
             continue
 
         before_counts = df_original[original_col].value_counts(dropna=False)
-        after_counts = df_transformed[column].value_counts(dropna=False)
+        after_counts = df_transformed[transformed_col].value_counts(dropna=False)
         normalized_values = (
             pd.DataFrame({"Value": after_counts.index, "Count": after_counts.values})
             .sort_values(by="Count", ascending=False)
@@ -52,7 +57,7 @@ def _build_column_value_analysis(
             .sort_values(by=["Original Count", "Normalized Count"], ascending=False)
             .reset_index(drop=True)
         )
-        analysis[column] = {
+        analysis[transformed_col] = {
             "normalized_values": normalized_values,
             "value_audit": audit_df,
         }

@@ -318,6 +318,51 @@ def test_generate_normalization_dashboard_renders_transform_story():
     assert "MALE" in html
 
 
+def test_generate_normalization_dashboard_renders_column_value_analysis_without_summary_table():
+    report = {
+        "row_change_summary": pd.DataFrame(
+            [
+                {
+                    "rows_total": 3,
+                    "rows_changed": 1,
+                    "rows_unchanged": 2,
+                    "rows_changed_percent": 33.33,
+                }
+            ]
+        ),
+        "column_changes_summary": pd.DataFrame(),
+        "changed_rows_preview": pd.DataFrame(),
+        "column_value_analysis": {
+            "gender": {
+                "normalized_values": pd.DataFrame([{"Value": "MALE", "Count": 1}]),
+                "value_audit": pd.DataFrame(
+                    [{"Value": "male", "Original Count": 1, "Normalized Count": 0}]
+                ),
+            }
+        },
+        "changelog": {
+            "values_mapped": pd.DataFrame([{"Column": "gender", "Mappings Applied": 1}]),
+        },
+        "meta_info": pd.DataFrame(
+            [
+                {
+                    "module": "normalization",
+                    "run_id": "run-norm-002",
+                    "timestamp": "2026-03-15T00:00:00+00:00",
+                    "original_shape": "(3, 2)",
+                    "transformed_shape": "(3, 2)",
+                }
+            ]
+        ),
+    }
+
+    html = generate_html_report(report, "Normalization", "run-norm-002")
+
+    assert "Column Value Analysis" in html
+    assert "Column Value Audit: gender" in html
+    assert "Column Change Summary" not in html
+
+
 def test_generate_duplicates_dashboard_renders_mode_criteria_and_plots(tmp_path):
     plot_path = tmp_path / "duplicates.png"
     plot_path.write_bytes(_ONE_PIXEL_PNG)
