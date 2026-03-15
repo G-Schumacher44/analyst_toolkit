@@ -316,6 +316,11 @@ def write_changelog(entry: str, *, version: str | None) -> None:
     )
 
     if version:
+        version_re = re.compile(
+            rf"\n## \[{re.escape(version)}\] - .*?(?=\n## \[|\Z)",
+            re.DOTALL,
+        )
+        text = version_re.sub("", text)
         replacement = empty_unreleased + entry + "\n"
     else:
         replacement = entry + "\n"
