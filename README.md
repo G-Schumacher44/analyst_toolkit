@@ -117,7 +117,7 @@ make install-dev       # editable install + dev tooling + notebook extras
 **With MCP server deps**
 
 ```bash
-pip install "analyst_toolkit[mcp] @ git+https://github.com/G-Schumacher44/analyst_toolkit.git"
+pip install -e ".[mcp]"
 ```
 
 **With notebook extras**

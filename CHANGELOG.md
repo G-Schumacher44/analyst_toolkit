@@ -25,6 +25,7 @@ Format:
 
 - Updated MCP runtime installation to pull `analyst_toolkit_deploy` from its pinned source repository instead of a tracked in-repo wheel.
 - Simplified local development dependency management by standardizing on `pyproject.toml` extras instead of separate tracked dev requirements files.
+- Moved MCP runtime dependency truth into `pyproject.toml` and reduced `requirements-mcp.txt` to a thin compatibility shim.
 
 ### Fixed
 

@@ -45,8 +45,7 @@ install:
 	pip install -e .
 
 install-mcp:
-	pip install -r requirements-mcp.txt
-	pip install -e .
+	pip install -e ".[mcp]"
 
 install-notebook:
 	pip install -e ".[notebook]"
