@@ -26,6 +26,6 @@ gcsfs>=2024.2.0
 # Pydantic (FastAPI dep, pinned for stability)
 pydantic>=2.0
 
-# analyst_toolkit_deploy — installed from vendor/ wheel in Dockerfile.mcp
-# To update: bump version in analyst_toolkit_deployment_utility, build wheel,
-# copy to vendor/, and update the pip install line in Dockerfile.mcp
+# analyst_toolkit_deploy — pinned directly from the deployment utility source repo
+# To update: bump the tag below and validate the MCP Docker build + infer_configs flow.
+analyst_toolkit_deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git@v0.2.6

@@ -23,7 +23,7 @@ Format:
 
 ### Changed
 
-- None.
+- Updated MCP runtime installation to pull `analyst_toolkit_deploy` from its pinned source repository instead of a tracked in-repo wheel.
 
 ### Fixed
 
@@ -35,7 +35,7 @@ Format:
 
 ### Removed
 
-- None.
+- Removed the tracked `vendor/analyst_toolkit_deploy-0.2.6-py3-none-any.whl` build artifact from the repository.
 
 ### Security
 

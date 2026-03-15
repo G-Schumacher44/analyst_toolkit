@@ -57,7 +57,7 @@ async def _toolkit_infer_configs(
             "status": "error",
             "error": (
                 f"Deployment utility not found ({str(exc)}). "
-                "Ensure analyst-toolkit-deploy is in requirements-mcp.txt and rebuild."
+                "Ensure analyst_toolkit_deploy is installed from requirements-mcp.txt and rebuild."
             ),
             "config_yaml": "",
         }
