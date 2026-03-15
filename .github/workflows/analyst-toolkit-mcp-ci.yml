@@ -2,10 +2,10 @@ name: Analyst Toolkit MCP CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [dev, main, master]
     tags: ["v*"]
   pull_request:
-    branches: [main, master]
+    branches: [dev, main, master]
 
 jobs:
   secret-scan:
