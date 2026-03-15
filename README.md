@@ -19,12 +19,12 @@ Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline
 
 ## 🆕 Version 0.4.3: Operability + Hardening
 
-This major update transforms the toolkit from a collection of utilities into a cohesive, autonomous auditing engine.
+The current release line turns the toolkit from a collection of utilities into a cohesive, artifact-first auditing engine.
 
 1. **Listen (Inference):** Predict data needs automatically using `infer_configs`.
 2. **Diagnose (Validation):** Detect holes (nulls) and bumps (outliers) with a single score.
 3. **Heal (Auto-Apply):** Automatically repair data based on inferred rules using `auto_heal`.
-4. **Certify (Audit):** Generate a tamper-proof health report and sequence ledger.
+4. **Certify (Audit):** Generate reviewable dashboards, exports, and a final sequence ledger.
 
 ---
 
@@ -33,10 +33,11 @@ This major update transforms the toolkit from a collection of utilities into a c
 Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or any JSON-RPC 2.0 client.
 
 - **⛓️ Pipeline Mode:** Chain multiple tools in memory using `session_id` — no intermediate saves.
-- **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score** and a detailed **Healing Ledger**.
+- **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score**, artifact links, and a detailed **Healing Ledger**.
 - **📀 Golden Templates:** Example templates tuned for typical fraud/migration/compliance patterns.
 - **📚 Template Resources:** MCP `resources/list` + `resources/read` expose standard and golden YAML templates directly to clients/agents.
 - **🤖 Auto-Heal:** One-click inference and repair — from raw data to certified output in a single tool call.
+- **🧭 Artifact Server:** Optional local dashboard serving lets cockpit and module outputs open as stable browser links instead of raw file paths.
 - [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — full setup, tool reference, and host integrations
 
 ---
@@ -49,6 +50,7 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - YAML-configurable logic per module
 - Checkpointing and joblib persistence
 - MCP server — expose all toolkit modules as tools to any MCP-compatible host
+- Cockpit, diagnostics, final audit, and data dictionary dashboards as standalone HTML artifacts
 - 🐧 Built using synthetic data from the [dirty_birds_data_generator](https://github.com/G-Schumacher44/dirty_birds_data_generator)
 - 📂 [Sample output](exports/sample/) (HTML dashboards, reports, plots, cleaned dataset)
 
@@ -68,6 +70,8 @@ Sample report entry points:
 - [Cockpit dashboard](exports/sample/reports/cockpit_dashboard.html)
 - [Diagnostics dashboard](exports/sample/reports/diagnostics_report.html)
 - [Final audit dashboard](exports/sample/reports/final_audit_report.html)
+
+These HTML exports are tracked sample artifacts. GitHub will link to them directly, but it will not render them inline inside the README.
 
 ---
 
@@ -90,17 +94,19 @@ Sample report entry points:
 <div align="center">
   <table>
     <tr>
-      <td><img src="repo_files/db_screen_00.png" alt="Diagnostics dashboard" width="400"/></td>
-      <td><img src="repo_files/db_screen_1.png" alt="Validation dashboard" width="400"/></td>
-    </tr>
-    <tr>
-      <td><img src="repo_files/db_screen_2.png" alt="Outlier detection dashboard" width="400"/></td>
-      <td><img src="repo_files/db_screen_3.png" alt="Imputation dashboard" width="400"/></td>
+      <td><img src="repo_files/sample_cockpit_dashboard.png" alt="Cockpit dashboard" width="400"/></td>
+      <td><img src="repo_files/sample_diagnostics_dashboard.png" alt="Diagnostics dashboard" width="400"/></td>
+      <td><img src="repo_files/sample_final_audit_dashboard.png" alt="Final audit dashboard" width="400"/></td>
     </tr>
   </table>
 </div>
 
-<p align="center"><em>Inline dashboards rendered per-module — diagnostics, validation, outlier detection, and imputation.</em></p>
+<p align="center"><em>Fresh screenshots captured from the tracked sample HTML exports for cockpit, diagnostics, and final audit.</em></p>
+
+For full HTML examples instead of screenshots:
+- [Open the sample cockpit dashboard](exports/sample/reports/cockpit_dashboard.html)
+- [Open the sample diagnostics dashboard](exports/sample/reports/diagnostics_report.html)
+- [Open the sample final audit dashboard](exports/sample/reports/final_audit_report.html)
 
 ---
 
@@ -138,6 +144,12 @@ pip install git+https://github.com/G-Schumacher44/analyst_toolkit.git
 
 The toolkit ships with a built-in MCP server that exposes every module as a tool callable by any MCP-compatible host — Claude Desktop, FridAI, VS Code, or any JSON-RPC 2.0 client.
 
+Recent MCP-facing additions include:
+- real MCP resources for quickstart, agent playbook, and capability catalog
+- explicit module/workflow/runtime template exposure
+- standalone data dictionary generation
+- optional local artifact serving for cockpit and dashboard links
+
 **Pull from GHCR:**
 
 ```bash
@@ -168,6 +180,7 @@ Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an op
 If template/resource reads are timing out under load, tune `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` and `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`.
 For structured request lifecycle logs, set `ANALYST_MCP_STRUCTURED_LOGS=true`.
 For token auth in networked deployments, set `ANALYST_MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>`.
+To enable local browser-openable artifact links from cockpit and dashboard responses, enable the local artifact server in trusted/local mode.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
@@ -294,7 +307,7 @@ I built the Analyst Toolkit to eliminate the most frustrating part of the analyt
 - Total modularity — run stage by stage or all at once
 - YAML-driven control over everything from null handling to audit thresholds
 
-Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don't just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. This is **auditable automation** — the insights are always there when you need them.
+Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don't just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. This is **auditable automation** — and the current dashboard set is meant to be reviewed, not just generated.
 
 It is overbuilt in the ways that matter: transparency, reproducibility, trust. It's designed for team collaboration, for portfolio projects, for production QA. It's for your current self — and your future self — when you need to revisit a workflow six months from now.
 
@@ -318,6 +331,12 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 
 <details>
 <summary><strong>🫆 Version Release Notes</strong></summary>
+
+**Current `dev` branch**
+- **Dashboard Surfaces:** Cockpit, diagnostics, final audit, data dictionary, and normalized module dashboards are now treated as first-class standalone HTML artifacts.
+- **Artifact Serving:** Optional local artifact server turns cockpit/module artifact references into browser-openable links.
+- **Template Exposure:** MCP resources now expose quickstart, playbook, capability catalog, and explicit template inventory surfaces.
+- **Repo Cleanup:** Packaging and environment definitions are being aligned around `pyproject.toml` and a cleaner public-facing `dev` branch.
 
 **v0.4.0 — The Cockpit Upgrade**
 - **State Management:** Introduced `StateStore` for in-memory DataFrame persistence between tool calls via `session_id`.
