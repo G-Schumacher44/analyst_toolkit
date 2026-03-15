@@ -963,15 +963,15 @@ async def _toolkit_ensure_artifact_server() -> dict:
     payload = {
         "status": status,
         "module": "artifact_server",
-            "summary": {
-                "running": bool(result.get("running")),
-                "enabled": bool(result.get("enabled")),
-                "already_running": bool(result.get("already_running")),
-            },
-            "base_url": str(result.get("base_url", "")),
-            "root": _artifact_root_label(result.get("root", "")),
-            "warnings": [] if result.get("running") else ([message] if message else []),
-        }
+        "summary": {
+            "running": bool(result.get("running")),
+            "enabled": bool(result.get("enabled")),
+            "already_running": bool(result.get("already_running")),
+        },
+        "base_url": str(result.get("base_url", "")),
+        "root": _artifact_root_label(result.get("root", "")),
+        "warnings": [] if result.get("running") else ([message] if message else []),
+    }
     if result.get("error_code"):
         payload["code"] = str(result["error_code"])
     return with_next_actions(
