@@ -2,7 +2,7 @@
         lint format format-check yaml-lint typecheck test precommit check \
         mcp-up mcp-down mcp-logs mcp-health \
         docker-build docker-pull \
-        pipeline clean
+        pipeline changelog clean
 
 # ─── Default ───────────────────────────────────────────────────────────────────
 help:
@@ -35,6 +35,9 @@ help:
 	@echo ""
 	@echo "  Pipeline (CLI)"
 	@echo "    pipeline         Run full toolkit pipeline (set CONFIG= to override)"
+	@echo ""
+	@echo "  Release"
+	@echo "    changelog        Preview changelog entry (set FROM=, TO=, VERSION=)"
 	@echo ""
 	@echo "  Misc"
 	@echo "    clean            Remove build artifacts and caches"
@@ -104,6 +107,25 @@ CONFIG ?= config/run_toolkit_config.yaml
 
 pipeline:
 	python -m analyst_toolkit.run_toolkit_pipeline --config $(CONFIG)
+
+# ─── Release ──────────────────────────────────────────────────────────────────
+FROM ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~20")
+TO ?= HEAD
+VERSION ?=
+
+changelog:
+ifdef VERSION
+	python scripts/generate_changelog.py $(FROM) $(TO) --version $(VERSION)
+else
+	python scripts/generate_changelog.py $(FROM) $(TO)
+endif
+
+changelog-write:
+ifdef VERSION
+	python scripts/generate_changelog.py $(FROM) $(TO) --version $(VERSION) --write
+else
+	python scripts/generate_changelog.py $(FROM) $(TO) --write
+endif
 
 # ─── Misc ──────────────────────────────────────────────────────────────────────
 clean:

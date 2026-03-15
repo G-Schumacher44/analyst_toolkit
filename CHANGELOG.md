@@ -23,9 +23,7 @@ Format:
 
 ### Changed
 
-- Updated MCP runtime installation to pull `analyst_toolkit_deploy` from its pinned source repository instead of a tracked in-repo wheel.
-- Simplified local development dependency management by standardizing on `pyproject.toml` extras instead of separate tracked dev requirements files.
-- Moved MCP runtime dependency truth into `pyproject.toml` and reduced `requirements-mcp.txt` to a thin compatibility shim.
+- None.
 
 ### Fixed
 
@@ -37,11 +35,121 @@ Format:
 
 ### Removed
 
-- Removed the tracked `vendor/analyst_toolkit_deploy-0.2.6-py3-none-any.whl` build artifact from the repository.
+- None.
 
 ### Security
 
 - None.
+
+## [0.4.4] - 2026-03-15
+
+### Added
+
+- Add standalone dashboard HTML exports
+- Add expandable diagnostics plot modal
+- Roll out polished module dashboards
+- Surface dashboard artifacts in MCP responses
+- Add runtime overlay merge foundation
+- Wire runtime overlays into core MCP tools
+- Extend runtime overlays across remaining MCP tools
+- Add first-wave artifact destination routing
+- Roll out runtime overlays across remaining MCP tools
+- Finish artifact delivery rollout
+- Add auto-heal dashboard export
+- Polish auto-heal dashboard
+- Add tabbed pipeline dashboard shell
+- Reserve data dictionary MCP surface
+- Add cockpit dashboard hub
+- Implement data dictionary artifacts
+- Wire data dictionary into cockpit
+- Expose cockpit docs as MCP resources
+- Add local artifact server support
+
+### Changed
+
+- Untrack monolith decomposition plan and ignore locally
+- Tighten CI and review workflow
+- Split stable and local agent guidance
+- Expose runtime overlays to agents
+- Share empty delivery state helper
+- Expose auto-heal agent templates
+- Extract shared dashboard helpers
+- Extract dashboard page shell
+- Split dashboard view renderers
+- Extract certification dashboards
+- Tighten shared dashboard renderers
+- Extract module dashboard renderers
+- Split dashboard modules by domain
+- Decompose cockpit dashboard view
+- Centralize template inventory
+- Update repo workflow guidance
+- Remove tracked deployment wheel
+- Clean up public repo surfaces
+- Remove unused dev requirements files
+- Centralize MCP dependency metadata
+- Polish MCP docker surfaces
+- Refresh conda environment definition
+- Refresh dashboard screenshots
+- Update release notes to 0.4.4
+
+### Fixed
+
+- Correct yamllint command references
+- Polish diagnostics dashboard export
+- Harden dashboard table rendering
+- Tighten diagnostics export defaults
+- Stabilize imputation plot wiring test
+- Refine dashboard export ergonomics
+- Normalize export artifact file names
+- Tighten export run id detection
+- Avoid duplicate normalization work
+- Harden runtime overlay and destination routing
+- Stabilize runtime config default factories
+- Tighten runtime routing follow-ups
+- Tighten runtime overlay rollout follow-ups
+- Harden auto-heal dashboard export
+- Sanitize auto-heal export warnings
+- Harden auto-heal artifact fallback
+- Tighten auto-heal dashboard rendering
+- Clean up pipeline dashboard cockpit wiring
+- Harden pipeline dashboard artifact handling
+- Avoid duplicate dashboard titles
+- Harden cockpit history access
+- Harden cockpit artifact contracts
+- Honor runtime export html overlay
+- Narrow export html overlay path
+- Escape cockpit blocker fallback html
+- Harden cockpit dashboard contracts
+- Harden cockpit error handling
+- Avoid pre312 f-string parse error
+- Harden modular dashboard renderers
+- Tighten dashboard renderer helpers
+- Harden data dictionary config parsing
+- Harden MCP resource contracts
+- Tighten MCP resource error handling
+- Expose MCP docker server on all interfaces
+- Type artifact server metadata
+- Clean up artifact server lifecycle
+- Render cockpit artifact links correctly
+- Tighten artifact server review followups
+- Harden local artifact server controls
+- Improve normalization dashboard detail
+- Tighten artifact server error handling
+- Harden normalization dashboard inputs
+- Preserve normalization preview audits
+
+### Deprecated
+
+- None.
+
+### Removed
+
+- None.
+
+### Security
+
+- None.
+
 
 ## [0.4.3] - 2026-02-27
 

@@ -28,7 +28,7 @@ Security fixes are prioritized for:
 
 - the latest released version,
 - the current `dev` branch,
-- and `main` when a fix has been promoted for release.
+- `main` when a fix has been promoted for release
 
 Older versions may not receive patches.
 
