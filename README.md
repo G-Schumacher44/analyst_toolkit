@@ -147,7 +147,7 @@ docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
 **Or build and start locally:**
 
 ```bash
-make mcp-up        # docker-compose up --build -d
+make mcp-up        # docker compose up --build -d
 make mcp-health    # curl /health and pretty-print response
 make mcp-logs      # tail logs
 make mcp-down      # stop

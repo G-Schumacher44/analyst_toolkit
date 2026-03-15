@@ -26,7 +26,7 @@ help:
 	@echo "    check            Full local quality gate"
 	@echo ""
 	@echo "  MCP server (Docker)"
-	@echo "    mcp-up           Start MCP server via docker-compose"
+	@echo "    mcp-up           Start MCP server via docker compose"
 	@echo "    mcp-down         Stop MCP server"
 	@echo "    mcp-logs         Tail MCP server logs"
 	@echo "    mcp-health       Hit /health endpoint"
@@ -82,13 +82,13 @@ check: lint format-check yaml-lint typecheck test precommit
 # ─── MCP server ────────────────────────────────────────────────────────────────
 mcp-up:
 	@if [ -z "$$GCP_CREDS_PATH" ]; then echo "⚠️  GCP_CREDS_PATH not set — starting without GCS support (local files only)"; fi
-	docker-compose -f docker-compose.mcp.yml up --build -d
+	docker compose -f docker-compose.mcp.yml up --build -d
 
 mcp-down:
-	docker-compose -f docker-compose.mcp.yml down
+	docker compose -f docker-compose.mcp.yml down
 
 mcp-logs:
-	docker-compose -f docker-compose.mcp.yml logs -f
+	docker compose -f docker-compose.mcp.yml logs -f
 
 mcp-health:
 	curl -s http://localhost:8001/health | python3 -m json.tool

@@ -49,7 +49,7 @@ git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
 
 # Start the server
-docker-compose -f docker-compose.mcp.yml up --build
+docker compose -f docker-compose.mcp.yml up --build
 ```
 
 Or pull from GHCR and run directly:

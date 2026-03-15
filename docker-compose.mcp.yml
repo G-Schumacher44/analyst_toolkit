@@ -1,7 +1,7 @@
 # docker-compose.mcp.yml — analyst_toolkit MCP Server
 #
 # Usage:
-#   docker-compose -f docker-compose.mcp.yml up --build
+#   docker compose -f docker-compose.mcp.yml up --build
 #
 # Environment:
 #   ANALYST_MCP_PORT               — override default port 8001 (optional)
@@ -28,7 +28,8 @@ services:
     ports:
       - "${ANALYST_MCP_PORT:-8001}:8001"
     environment:
-      - ANALYST_MCP_PORT=8001
+      - ANALYST_MCP_PORT=${ANALYST_MCP_PORT:-8001}
+      - ANALYST_MCP_HOST=0.0.0.0
       # GCS auth — only set if GCP_CREDS_PATH is provided
       - GOOGLE_APPLICATION_CREDENTIALS=${GCP_CREDS_PATH:+/run/secrets/gcp_creds}
       # Report upload — set ANALYST_REPORT_BUCKET to enable GCS upload of HTML reports
