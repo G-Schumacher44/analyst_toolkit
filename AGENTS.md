@@ -23,17 +23,23 @@ Optimize for:
 
 ## Branch And PR SOP
 
-Use short-lived branches from `main`.
+### Git **Flow**
 
-Preferred branch prefixes:
-- `feat/<scope>`
-- `fix/<scope>`
-- `refactor/<scope>`
-- `docs/<scope>`
-- `chore/<scope>`
+```text
+main  (stable, public-facing — never commit directly)
+  └── dev  (active working branch — integration point)
+        └── feat/<scope>  (scoped PR branch — one concern per branch)
+        └── fix/<scope>
+        └── refactor/<scope>
+        └── docs/<scope>
+        └── chore/<scope>
+```
 
 Rules:
-- one branch should represent one reviewable unit of change
+- `main` is never touched directly — it receives PRs from `dev` only when stable
+- `dev` is the integration branch — all scoped PR branches merge here first
+- scoped branches cut from `dev`, not from `main`
+- one branch = one reviewable unit of change
 - keep PRs scoped to a single concern or a single reviewable slice
 - prefer a sequence of small PRs over one large umbrella PR
 - if behavior changes, tests must land in the same PR
@@ -43,6 +49,16 @@ Merge policy:
 - avoid merge commits
 - use `squash merge` only as an exception
 - keep commit messages intentional enough that rebased history remains useful
+
+### CodeRabbit Review Workflow
+
+When CodeRabbit reviews a PR, triage its feedback in this order:
+
+1. **Accept and fix** — issues that are within the PR's scope, valid, and actionable. Fix in the current PR before merge.
+2. **Log as GitHub issue** — issues that are valid but out of scope for the current PR. Open a GitHub issue so they are tracked and not lost. Do not let valid findings disappear because they were inconvenient to fix right now.
+3. **Discard** — issues that CodeRabbit has invalidated, misunderstood, or that are not applicable to this codebase. Dismiss with a brief explanation in the PR comment so reviewers know it was considered.
+
+Do not merge with unresolved category-1 findings. Categories 2 and 3 must be explicitly triaged before merge — no silently ignoring feedback.
 
 ## Local Quality Gate
 
