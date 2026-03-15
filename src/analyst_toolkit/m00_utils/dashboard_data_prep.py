@@ -399,16 +399,23 @@ def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:
         )
         toc.append(("Scalar Changelog Notes", "Scalar Changelog Notes"))
 
-    if isinstance(column_changes_df, pd.DataFrame) and not column_changes_df.empty:
+    has_column_changes = isinstance(column_changes_df, pd.DataFrame) and not column_changes_df.empty
+    has_column_value_analysis = isinstance(column_value_analysis, dict) and bool(column_value_analysis)
+    if has_column_changes or has_column_value_analysis:
+        column_change_summary_html = (
+            "<div class='card wide'>"
+            "<h3>Column Change Summary</h3>"
+            "<p class='subtle'>This shows which columns absorbed the most normalization changes in this run.</p>"
+            f"{_render_df(column_changes_df, full_preview=True, wide_layout=True)}"
+            "</div>"
+            if has_column_changes
+            else ""
+        )
         sections.append(
             _render_section(
                 "Column Value Analysis",
                 (
-                    "<div class='card wide'>"
-                    "<h3>Column Change Summary</h3>"
-                    "<p class='subtle'>This shows which columns absorbed the most normalization changes in this run.</p>"
-                    f"{_render_df(column_changes_df, full_preview=True, wide_layout=True)}"
-                    "</div>"
+                    f"{column_change_summary_html}"
                     f"{_render_normalization_column_value_analysis(column_value_analysis)}"
                 ),
                 open_by_default=True,
