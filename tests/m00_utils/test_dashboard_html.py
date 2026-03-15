@@ -648,7 +648,7 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
             {
                 "Title": "Quickstart",
                 "Kind": "guide",
-                "Reference": "tool:get_user_quickstart",
+                "Reference": "analyst://docs/quickstart",
                 "Detail": "Human-oriented operating guide.",
             }
         ],
@@ -715,7 +715,7 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "region" in html
     assert "run_001" in html
     assert "dictionary_001" in html
-    assert "tool:get_user_quickstart" in html
+    assert "analyst://docs/quickstart" in html
     assert "infer_configs" in html
     assert "config/data_dictionary_request_template.yaml" in html
 

@@ -17,6 +17,9 @@ def test_rpc_resources_list(client):
     uris = [r["uri"] for r in result["resources"]]
     assert any(uri.startswith("analyst://templates/golden/") for uri in uris)
     assert any(uri.startswith("analyst://templates/config/") for uri in uris)
+    assert "analyst://docs/quickstart" in uris
+    assert "analyst://docs/agent-playbook" in uris
+    assert "analyst://catalog/capabilities" in uris
 
 
 def test_rpc_resource_templates_list(client):
@@ -71,6 +74,39 @@ def test_rpc_resources_read_auto_heal_template(client):
     assert contents[0]["uri"] == "analyst://templates/config/auto_heal_request_template.yaml"
     assert "auto_heal" in contents[0]["text"]
     assert "runtime" in contents[0]["text"]
+
+
+def test_rpc_resources_read_quickstart_doc(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 123,
+        "method": "resources/read",
+        "params": {"uri": "analyst://docs/quickstart"},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    contents = response.json()["result"]["contents"]
+    assert len(contents) == 1
+    assert contents[0]["uri"] == "analyst://docs/quickstart"
+    assert contents[0]["mimeType"] == "text/markdown"
+    assert "Analyst Toolkit Quickstart" in contents[0]["text"]
+
+
+def test_rpc_resources_read_capability_catalog(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 124,
+        "method": "resources/read",
+        "params": {"uri": "analyst://catalog/capabilities"},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    contents = response.json()["result"]["contents"]
+    assert len(contents) == 1
+    assert contents[0]["uri"] == "analyst://catalog/capabilities"
+    assert contents[0]["mimeType"] == "application/json"
+    assert '"workflow_templates"' in contents[0]["text"]
+    assert '"modules"' in contents[0]["text"]
 
 
 def test_rpc_resources_read_data_dictionary_template(client):
@@ -129,7 +165,7 @@ def test_rpc_resources_read_timeout(client, mocker):
     """Verify resources/read surfaces timeout as a non-hanging RPC error."""
     mocker.patch.object(
         server_module,
-        "_read_template_with_timeout",
+        "_read_resource_with_timeout",
         mocker.AsyncMock(side_effect=asyncio.TimeoutError),
     )
     payload = {

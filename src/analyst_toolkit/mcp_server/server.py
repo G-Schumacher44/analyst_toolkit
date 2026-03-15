@@ -36,9 +36,9 @@ from mcp.server.stdio import stdio_server
 from analyst_toolkit.mcp_server.auth import is_authorized
 from analyst_toolkit.mcp_server.observability import RuntimeMetrics, log_rpc_event
 from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
+from analyst_toolkit.mcp_server.resources import list_mcp_resources, read_mcp_resource
 from analyst_toolkit.mcp_server.response_utils import new_trace_id
 from analyst_toolkit.mcp_server.rpc_dispatch import dispatch_rpc_method, rpc_error
-from analyst_toolkit.mcp_server.templates import list_template_resources, read_template_resource
 
 # Get package version dynamically
 try:
@@ -143,7 +143,7 @@ def _resource_models() -> list[types.Resource]:
             description=item["description"],
             mimeType=item["mimeType"],
         )
-        for item in list_template_resources()
+        for item in list_mcp_resources()
     ]
 
 
@@ -164,9 +164,9 @@ def _resource_template_models() -> list[types.ResourceTemplate]:
     ]
 
 
-async def _read_template_with_timeout(uri: str) -> str:
+async def _read_resource_with_timeout(uri: str) -> tuple[str, str]:
     return await asyncio.wait_for(
-        asyncio.to_thread(read_template_resource, uri),
+        asyncio.to_thread(read_mcp_resource, uri),
         timeout=RESOURCE_IO_TIMEOUT_SEC,
     )
 
@@ -196,8 +196,8 @@ async def list_resource_templates() -> list[types.ResourceTemplate]:
 async def read_resource(uri: Any) -> list[ReadResourceContents]:
     """Standard MCP resources/read handler."""
     uri_text = str(uri)
-    text = await _read_template_with_timeout(uri_text)
-    return [ReadResourceContents(content=text, mime_type="application/x-yaml")]
+    text, mime_type = await _read_resource_with_timeout(uri_text)
+    return [ReadResourceContents(content=text, mime_type=mime_type)]
 
 
 # --- HTTP /rpc JSON-RPC Handlers (FridAI Legacy/Native) ---
@@ -289,7 +289,7 @@ async def rpc_handler(request: Request) -> JSONResponse:
         resource_io_timeout_sec=RESOURCE_IO_TIMEOUT_SEC,
         resource_models_with_timeout=_resource_models_with_timeout,
         resource_template_models=_resource_template_models,
-        read_template_with_timeout=_read_template_with_timeout,
+        read_resource_with_timeout=_read_resource_with_timeout,
         trace_id=trace_id,
         logger=logger,
     )

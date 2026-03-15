@@ -45,7 +45,7 @@ async def dispatch_rpc_method(
     resource_io_timeout_sec: float,
     resource_models_with_timeout: Callable[[], Awaitable[list[types.Resource]]],
     resource_template_models: Callable[[], list[types.ResourceTemplate]],
-    read_template_with_timeout: Callable[[str], Awaitable[str]],
+    read_resource_with_timeout: Callable[[str], Awaitable[tuple[str, str]]],
     trace_id: str,
     logger: logging.Logger,
 ) -> RpcDispatchResult:
@@ -187,7 +187,7 @@ async def dispatch_rpc_method(
                 error_code=-32602,
             )
         try:
-            text = await read_template_with_timeout(uri)
+            text, mime_type = await read_resource_with_timeout(uri)
         except FileNotFoundError as exc:
             return RpcDispatchResult(
                 payload=rpc_error(
@@ -198,7 +198,7 @@ async def dispatch_rpc_method(
                         "error": build_error_envelope(
                             category="io",
                             code="resource_not_found",
-                            message=f"Template resource not found for URI: {uri}",
+                            message=f"Resource not found for URI: {uri}",
                             remediation="Refresh resources/list and retry with an existing URI.",
                             retryable=False,
                             trace_id=trace_id,
@@ -222,7 +222,7 @@ async def dispatch_rpc_method(
                         "error": build_error_envelope(
                             category="transport",
                             code="resource_read_timeout",
-                            message=f"Template read timed out for URI: {uri}",
+                            message=f"Resource read timed out for URI: {uri}",
                             remediation=(
                                 "Retry once. If repeated, increase ANALYST_MCP_RESOURCE_TIMEOUT_SEC "
                                 "and validate storage responsiveness."
@@ -268,7 +268,7 @@ async def dispatch_rpc_method(
                     "contents": [
                         {
                             "uri": uri,
-                            "mimeType": "application/x-yaml",
+                            "mimeType": mime_type,
                             "text": text,
                         }
                     ]
