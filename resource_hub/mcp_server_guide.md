@@ -18,7 +18,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 ## 🆕 Version 0.4.3 Highlights
 
 - **Pipeline Mode:** In-memory state management via `session_id` allows chaining multiple tools without manual file saving.
-- **Client Cockpit:** Tools for executive reporting, including a 0-100 Data Health Score, a "Healing Ledger" history, and an agent flight checklist.
+- **Client Cockpit:** Tools for executive reporting, including a 0-100 Data Health Score, a "Healing Ledger" history, and operator guidance via cockpit/playbook surfaces.
 - **Golden Templates:** Example templates tuned for typical fraud/migration/compliance patterns.
 - **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
 - **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.

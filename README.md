@@ -50,7 +50,7 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - Checkpointing and joblib persistence
 - MCP server — expose all toolkit modules as tools to any MCP-compatible host
 - 🐧 Built using synthetic data from the [dirty_birds_data_generator](https://github.com/G-Schumacher44/dirty_birds_data_generator)
-- 📂 [Sample output](exports/sample/) (plots, reports, cleaned dataset)
+- 📂 [Sample output](exports/sample/) (HTML dashboards, reports, plots, cleaned dataset)
 
 ---
 
@@ -63,6 +63,11 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - [📗 Notebook Usage Guide](resource_hub/notebook_usage_guide.md) — Full breakdown of how each module is used in notebooks
 - [🤝 Contributing Guide](CONTRIBUTING.md) — Development workflow, quality gates, and PR expectations
 - [📝 Changelog](CHANGELOG.md) — Versioned, deterministic release notes
+
+Sample report entry points:
+- [Cockpit dashboard](exports/sample/reports/cockpit_dashboard.html)
+- [Diagnostics dashboard](exports/sample/reports/diagnostics_report.html)
+- [Final audit dashboard](exports/sample/reports/final_audit_report.html)
 
 ---
 
@@ -400,7 +405,7 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 │   └── features/                          # Optional engineered features
 │
 ├── 📤 exports/
-│   └── sample/                            # Sample media from a QA run
+│   └── sample/                            # Sample HTML dashboards, reports, plots, and cleaned output
 │
 ├── tests/                                 # Pytest test suite (MCP smoke, unit tests)
 ├── resource_hub/                          # Reference, guidebooks, documentation

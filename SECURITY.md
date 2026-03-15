@@ -27,7 +27,8 @@ This project includes:
 Security fixes are prioritized for:
 
 - the latest released version,
-- and the current `main` branch.
+- the current `dev` branch,
+- and `main` when a fix has been promoted for release.
 
 Older versions may not receive patches.
 
@@ -44,4 +45,3 @@ Contributors should:
 - keep dependencies current,
 - run CI checks before merge,
 - avoid introducing unvetted third-party code without review.
-

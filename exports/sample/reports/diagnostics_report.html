@@ -1,0 +1,1441 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>Diagnostics Dashboard - fresh_full_stack_complete_20260314_local</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --paper: #fffdf8;
+    --ink: #1f2933;
+    --muted: #52606d;
+    --line: #d9d3c7;
+    --accent: #1f4b4a;
+    --accent-soft: #dceae7;
+    --warn: #9a3412;
+    --warn-soft: #fef0e8;
+    --ok: #14532d;
+    --ok-soft: #e8f5ec;
+    --shadow: 0 14px 30px rgba(31, 41, 51, 0.08);
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    background:
+      radial-gradient(circle at top left, rgba(31, 75, 74, 0.10), transparent 28%),
+      linear-gradient(180deg, #f7f2ea 0%, #f1ece2 100%);
+    color: var(--ink);
+  }
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 20px 64px;
+  }
+  .hero {
+    background: linear-gradient(135deg, rgba(31, 75, 74, 0.98), rgba(50, 82, 117, 0.92));
+    color: #f9f6ef;
+    border-radius: 28px;
+    padding: 28px;
+    box-shadow: var(--shadow);
+    margin-bottom: 24px;
+  }
+  .hero-kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.76rem;
+    opacity: 0.82;
+    margin-bottom: 10px;
+  }
+  .hero h1 {
+    margin: 0 0 10px;
+    font-size: 2.2rem;
+    line-height: 1.1;
+  }
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    color: rgba(249, 246, 239, 0.88);
+    font-size: 0.95rem;
+  }
+  .banner {
+    background: var(--accent-soft);
+    border: 1px solid rgba(31, 75, 74, 0.15);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    box-shadow: var(--shadow);
+  }
+  .banner.warn {
+    background: #fbe4df;
+    border-color: rgba(153, 27, 27, 0.22);
+  }
+  .banner.ok {
+    background: var(--ok-soft);
+    border-color: rgba(20, 83, 45, 0.18);
+  }
+  .banner-item {
+    font-size: 0.96rem;
+  }
+  .toc {
+    background: rgba(255, 253, 248, 0.72);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+  }
+  .toc strong { color: #334155; }
+  .toc a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  details.section {
+    background: var(--paper);
+    border: 1px solid rgba(31, 41, 51, 0.08);
+    border-radius: 22px;
+    padding: 0 18px 18px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+  details.section[open] {
+    animation: fade-in 160ms ease-out;
+  }
+  summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 18px 0 14px;
+    font-weight: 700;
+    font-size: 1.12rem;
+    color: #22303a;
+  }
+  summary::-webkit-details-marker { display: none; }
+  .section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: #fcfaf5;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 14px;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card.wide {
+    grid-column: span 2;
+  }
+  .card h3 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+    color: #22303a;
+  }
+  .key {
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .key ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .stack > * + * {
+    margin-top: 14px;
+  }
+  .ledger-stack {
+    width: 100%;
+  }
+  .ledger-stack .card {
+    width: 100%;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    background: #fff;
+    border-radius: 12px;
+    table-layout: fixed;
+    min-width: 100%;
+  }
+  th, td {
+    padding: 8px 10px;
+    border: 1px solid #e7dfd1;
+    text-align: left;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  th {
+    background: #f1ece2;
+    color: #23303b;
+    font-weight: 700;
+  }
+  td {
+    color: #334155;
+  }
+  tr:nth-child(even) td {
+    background: #fdfaf3;
+  }
+  .subtle {
+    color: var(--muted);
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: min(360px, 68vh);
+    border-radius: 12px;
+    border: 1px solid #e7dfd1;
+    background: #fff;
+  }
+  .empty {
+    color: var(--muted);
+    font-style: italic;
+    margin: 0;
+  }
+  .plot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .plot-intro {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .plot-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: #fff;
+    cursor: zoom-in;
+  }
+  .plot-card h3 {
+    margin: 0 0 10px;
+  }
+  .plot-trigger {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    cursor: zoom-in;
+  }
+  .plot-trigger:focus-visible {
+    outline: 3px solid rgba(31, 75, 74, 0.35);
+    outline-offset: 6px;
+    border-radius: 16px;
+  }
+  .plot-caption {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+  .plot-modal {
+    border: 0;
+    padding: 0;
+    width: min(92vw, 1280px);
+    max-height: 92vh;
+    background: transparent;
+  }
+  .plot-modal::backdrop {
+    background: rgba(17, 24, 39, 0.74);
+    backdrop-filter: blur(4px);
+  }
+  .plot-modal-card {
+    background: var(--paper);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
+  }
+  .plot-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px 0;
+  }
+  .plot-modal-header h3 {
+    margin: 0;
+    font-size: 1.08rem;
+    color: #22303a;
+  }
+  .plot-modal-close {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: #22303a;
+    border-radius: 999px;
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .plot-modal-body {
+    padding: 14px 20px 20px;
+    overflow: auto;
+    max-height: calc(92vh - 72px);
+  }
+  .plot-modal-body img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fff;
+  }
+  .badge-ok {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--ok-soft);
+    color: var(--ok);
+    font-weight: 700;
+    font-size: 0.82rem;
+  }
+  .badge-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-weight: 700;
+    font-size: 0.82rem;
+  }
+  .drilldown {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .drilldown h4 {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+  }
+  .failure-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .metric-stat {
+    font-size: clamp(1.15rem, 2.1vw, 2rem);
+    line-height: 1.08;
+    font-weight: 700;
+    color: #22303a;
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-wrap: balance;
+  }
+  .metric-stat.compact {
+    font-size: clamp(1rem, 1.65vw, 1.42rem);
+    line-height: 1.15;
+  }
+  .pill-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #f3ede2;
+    color: #334155;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .pill.warn {
+    background: #fbe4df;
+    color: #9f1239;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .status-pill.pass {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+  .status-pill.fail {
+    background: #fbe4df;
+    color: #9f1239;
+  }
+  .cert-hero {
+    border-radius: 28px;
+    padding: 24px 26px;
+    margin-bottom: 22px;
+    color: #f8fafc;
+    box-shadow: var(--shadow);
+  }
+  .cert-hero.pass {
+    background: linear-gradient(135deg, #123c2b, #1f6f54);
+  }
+  .cert-hero.fail {
+    background: linear-gradient(135deg, #5f1726, #9f1239);
+  }
+  .cert-kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.74rem;
+    opacity: 0.82;
+    margin-bottom: 10px;
+  }
+  .cert-title {
+    margin: 0 0 10px;
+    font-size: 2rem;
+    line-height: 1.08;
+  }
+  .cert-copy {
+    margin: 0;
+    max-width: 760px;
+    color: rgba(248, 250, 252, 0.92);
+    font-size: 0.98rem;
+    line-height: 1.55;
+  }
+  .cert-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .cert-stat-card {
+    background: #fcfaf5;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+  .cert-stat-card h3 {
+    margin: 0 0 6px;
+    font-size: 0.96rem;
+    color: #22303a;
+  }
+  .cert-stat-card .metric-stat {
+    margin-bottom: 6px;
+  }
+  .cert-stat-card p,
+  .cert-stat-card code,
+  .cert-stat-card a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .cert-stat-card.pass {
+    background: var(--ok-soft);
+    border-color: rgba(20, 83, 45, 0.22);
+  }
+  .cert-stat-card.pass .metric-stat {
+    color: var(--ok);
+  }
+  .cert-stat-card.warn {
+    background: var(--warn-soft);
+    border-color: rgba(154, 52, 18, 0.22);
+  }
+  .cert-stat-card.warn .metric-stat {
+    color: var(--warn);
+  }
+  .cert-stat-card.fail {
+    background: #fbe4df;
+    border-color: rgba(159, 18, 57, 0.24);
+  }
+  .cert-stat-card.fail .metric-stat {
+    color: #9f1239;
+  }
+  .cert-ledger {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 16px;
+  }
+  .tab-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    position: sticky;
+    top: 10px;
+    z-index: 3;
+    padding: 10px 12px;
+    border: 1px solid rgba(91, 106, 115, 0.18);
+    border-radius: 20px;
+    background: rgba(252, 250, 245, 0.94);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+  }
+  .tab-shell[data-tab-shell='cockpit'] .tab-nav {
+    position: static;
+    top: auto;
+  }
+  .tab-button {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    color: #22303a;
+    border-radius: 999px;
+    padding: 10px 14px;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .tab-button.active {
+    background: var(--accent);
+    color: #f8fafc;
+    border-color: rgba(31, 75, 74, 0.75);
+  }
+  .tab-button .tab-status {
+    display: inline-flex;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(34, 48, 58, 0.1);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+  }
+  .tab-button.active .tab-status {
+    background: rgba(248, 250, 252, 0.18);
+  }
+  .tab-panel {
+    display: none;
+  }
+  .tab-panel.active {
+    display: block;
+    animation: fade-in 160ms ease-out;
+  }
+  .module-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .module-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .module-mini-card {
+    background: #fcfaf5;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .module-mini-card.pass {
+    background: var(--ok-soft);
+    border-color: rgba(20, 83, 45, 0.22);
+  }
+  .module-mini-card.pass .metric-stat {
+    color: var(--ok);
+  }
+  .module-mini-card.warn {
+    background: var(--warn-soft);
+    border-color: rgba(154, 52, 18, 0.22);
+  }
+  .module-mini-card.warn .metric-stat {
+    color: var(--warn);
+  }
+  .module-mini-card.fail {
+    background: #fbe4df;
+    border-color: rgba(159, 18, 57, 0.24);
+  }
+  .module-mini-card.fail .metric-stat {
+    color: #9f1239;
+  }
+  .module-mini-card h3 {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
+    color: #22303a;
+  }
+  .module-callout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 16px 18px;
+    border: 1px dashed rgba(91, 106, 115, 0.35);
+    border-radius: 18px;
+    background: rgba(244, 239, 226, 0.62);
+  }
+  .module-callout p {
+    margin: 0;
+  }
+  .terminal-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .terminal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .terminal-slot {
+    background: #fcfaf5;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .terminal-slot h4 {
+    margin: 0 0 8px;
+    font-size: 0.88rem;
+    color: #22303a;
+  }
+  .terminal-art {
+    min-height: 150px;
+    border: 1px dashed rgba(91, 106, 115, 0.35);
+    border-radius: 18px;
+    padding: 18px;
+    background:
+      radial-gradient(circle at top left, rgba(190, 149, 67, 0.12), transparent 40%),
+      linear-gradient(135deg, rgba(244, 239, 226, 0.9), rgba(252, 250, 245, 0.98));
+  }
+  .terminal-art h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+  }
+  .terminal-art p {
+    margin: 0;
+  }
+  .hub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .hub-card {
+    background: linear-gradient(180deg, #fcfaf5 0%, #f4efe2 100%);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .hub-card h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    color: #22303a;
+  }
+  .hub-kicker {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5f6b6f;
+  }
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+  .status-chip.ok {
+    background: rgba(37, 99, 78, 0.14);
+    color: #1f5e4a;
+  }
+  .status-chip.warn {
+    background: rgba(190, 149, 67, 0.18);
+    color: #8a5b12;
+  }
+  .status-chip.fail {
+    background: rgba(140, 34, 34, 0.14);
+    color: #8b1e1e;
+  }
+  .resource-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .resource-card p {
+    margin: 0;
+  }
+  .resource-meta {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6c5f45;
+  }
+  .launch-list {
+    display: grid;
+    gap: 14px;
+  }
+  .launch-item {
+    padding: 16px 18px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .launch-item h3,
+  .launch-item p {
+    margin: 0;
+  }
+  .launch-item h3 {
+    margin-bottom: 8px;
+  }
+  .hub-stack {
+    display: grid;
+    gap: 16px;
+  }
+  .brief-card {
+    padding: 24px;
+    border-radius: 22px;
+    border: 1px solid rgba(91, 106, 115, 0.22);
+    background:
+      radial-gradient(circle at top right, rgba(190, 149, 67, 0.14), transparent 30%),
+      linear-gradient(135deg, #22303a 0%, #324754 100%);
+    color: #f8fafc;
+    box-shadow: 0 20px 40px rgba(34, 48, 58, 0.18);
+  }
+  .brief-card h3,
+  .brief-card p,
+  .brief-card li {
+    color: #f8fafc;
+  }
+  .brief-card h3 {
+    margin: 0 0 10px;
+    font-size: 1.25rem;
+  }
+  .brief-card p {
+    margin: 0 0 10px;
+  }
+  .brief-lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .brief-lane {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.08);
+    border: 1px solid rgba(248, 250, 252, 0.12);
+  }
+  .brief-lane h4,
+  .brief-lane p {
+    margin: 0;
+    color: #f8fafc;
+  }
+  .brief-lane h4 {
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+  }
+  .brief-lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .brief-lane {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.08);
+    border: 1px solid rgba(248, 250, 252, 0.12);
+  }
+  .brief-lane h4,
+  .brief-lane p {
+    margin: 0;
+    color: #f8fafc;
+  }
+  .brief-lane h4 {
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+  }
+  .brief-list,
+  .sequence-list {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 8px;
+  }
+  .readme-grid {
+    display: grid;
+    gap: 18px;
+  }
+  .readme-section {
+    padding: 22px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .readme-section h3 {
+    margin: 0 0 8px;
+    color: #22303a;
+  }
+  .readme-section p {
+    margin: 0 0 12px;
+  }
+  .resource-group-grid,
+  .sequence-grid {
+    display: grid;
+    gap: 16px;
+  }
+  .resource-inline-list {
+    display: grid;
+    gap: 12px;
+  }
+  .resource-inline-list.scroll-pane {
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+  .resource-inline-item {
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: rgba(244, 239, 226, 0.54);
+  }
+  .resource-inline-item h4 {
+    margin: 0 0 6px;
+    color: #22303a;
+  }
+  .sequence-card {
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+    box-shadow: var(--shadow);
+  }
+  .sequence-card h3 {
+    margin: 0 0 10px;
+    color: #22303a;
+  }
+  .overview-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .overview-column {
+    display: grid;
+    gap: 18px;
+  }
+  .alert-list {
+    display: grid;
+    gap: 12px;
+  }
+  .alert-card {
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: #fcfaf5;
+  }
+  .alert-card h4,
+  .alert-card p {
+    margin: 0;
+  }
+  .alert-card h4 {
+    margin-bottom: 6px;
+    color: #22303a;
+  }
+  .surface-list,
+  .missing-list {
+    display: grid;
+    gap: 12px;
+  }
+  .surface-item,
+  .missing-item {
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: rgba(244, 239, 226, 0.54);
+  }
+  .surface-item h4,
+  .missing-item h4,
+  .surface-item p,
+  .missing-item p {
+    margin: 0;
+  }
+  .surface-item h4,
+  .missing-item h4 {
+    margin-bottom: 6px;
+    color: #22303a;
+  }
+  .action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 180px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #f8fafc;
+    text-decoration: none;
+    font-weight: 700;
+  }
+  .action-link.secondary {
+    background: #fcfaf5;
+    color: #22303a;
+    border: 1px solid var(--line);
+  }
+  .tab-embed {
+    width: 100%;
+    min-height: 920px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: var(--shadow);
+  }
+  @media (max-width: 920px) {
+    .cert-ledger {
+      grid-template-columns: 1fr;
+    }
+    .module-callout {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .overview-split {
+      grid-template-columns: 1fr;
+    }
+    .tab-embed {
+      min-height: 760px;
+    }
+  }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.84rem;
+    background: #fbf7ef;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px;
+    margin: 0;
+  }
+  @media (max-width: 720px) {
+    .page { padding: 20px 12px 44px; }
+    .hero { padding: 22px 18px; }
+    .hero h1 { font-size: 1.8rem; }
+    .card.wide { grid-column: auto; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<script>
+  window.atkDashboard = {
+    openPlot(button) {
+      const modal = document.getElementById("plot-modal");
+      const image = document.getElementById("plot-modal-image");
+      const title = document.getElementById("plot-modal-title");
+      if (!modal || !image || !title) return;
+      const thumbnail = button.querySelector("img");
+      const plotSrc = button.dataset.plotSrc || thumbnail?.src || "";
+      const plotTitle = button.dataset.plotTitle || "Plot";
+      image.src = plotSrc;
+      image.alt = plotTitle;
+      title.textContent = plotTitle;
+      if (typeof modal.showModal === "function") {
+        modal.showModal();
+      }
+    },
+    closePlot() {
+      const modal = document.getElementById("plot-modal");
+      const image = document.getElementById("plot-modal-image");
+      if (!modal) return;
+      modal.close();
+      if (image) image.src = "";
+    },
+    openTab(button) {
+      const shell = button.closest("[data-tab-shell]");
+      if (!shell) return;
+      const target = button.dataset.tabTarget || "";
+      shell.querySelectorAll(".tab-button").forEach((node) => {
+        node.classList.toggle("active", node === button);
+      });
+      shell.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.classList.toggle("active", panel.id === target);
+      });
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const modal = document.getElementById("plot-modal");
+    if (!modal || event.target !== modal) return;
+    window.atkDashboard.closePlot();
+  });
+</script>
+</head><body><div class='page'><div class='hero'><div class='hero-kicker'>Analyst Toolkit Export</div><h1>Diagnostics Dashboard</h1><div class='hero-meta'><span><strong>Run ID:</strong> fresh_full_stack_complete_20260314_local</span><span><strong>Generated:</strong> 2026-03-14 15:24:39 UTC</span></div></div><div class='banner'><div class='banner-item'><strong>Stage:</strong> M01 Data Diagnostics</div><div class='banner-item'><strong>Columns with Nulls:</strong> 15</div><div class='banner-item'><strong>Duplicate Rows:</strong> 1</div><div class='banner-item'><strong>Shape:</strong> 5541 rows x 15 columns</div></div><div class='toc'><strong>Sections:</strong> <a href='#key-metrics'>Key Metrics</a><a href='#full-profile-and-cardinality'>Full Profile &amp; Cardinality</a><a href='#quantitative-summary'>Quantitative Summary</a><a href='#preview-of-duplicated-rows'>Preview Of Duplicated Rows</a><a href='#first-rows-preview'>First Rows Preview</a></div><details class='section' open id='key-metrics'><summary>Key Metrics</summary><div class='section-grid'><div class='card'><h3>Shape</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Rows</th>
+      <th>Columns</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>5541</td>
+      <td>15</td>
+    </tr>
+  </tbody>
+</table></div></div><div class='card'><h3>Memory Usage</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Memory Usage</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>3.26 MB</td>
+    </tr>
+  </tbody>
+</table></div></div><div class='card'><h3>Duplicate Summary</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Duplicate Rows</th>
+      <th>Duplicate %</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>0.02</td>
+    </tr>
+  </tbody>
+</table></div></div></div></details><details class='section' open id='full-profile-and-cardinality'><summary>Full Profile And Cardinality</summary><div class='section-grid'><div class='card'><h3>High Cardinality</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Column</th>
+      <th>Unique Values</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>tag_id</td>
+      <td>2678</td>
+    </tr>
+    <tr>
+      <td>capture_date</td>
+      <td>1917</td>
+    </tr>
+    <tr>
+      <td>date_egg</td>
+      <td>1656</td>
+    </tr>
+    <tr>
+      <td>colony_id</td>
+      <td>19</td>
+    </tr>
+    <tr>
+      <td>study_name</td>
+      <td>12</td>
+    </tr>
+    <tr>
+      <td>island</td>
+      <td>11</td>
+    </tr>
+  </tbody>
+</table></div><div class='key'><strong>Audit Remarks Key</strong><ul><li><strong>OK:</strong> Passed all configured quality checks.</li><li><strong>High Skew:</strong> Skewness exceeded the configured threshold.</li><li><strong>Unexpected Type:</strong> Data type did not match the expected type.</li></ul></div></div><div class='card wide'><h3>Full Data Profile</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Column</th>
+      <th>Dtype</th>
+      <th>Unique Values</th>
+      <th>Audit Remarks</th>
+      <th>Missing Count</th>
+      <th>Missing %</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>tag_id</td>
+      <td>object</td>
+      <td>2678</td>
+      <td>OK</td>
+      <td>2242</td>
+      <td>40.46</td>
+    </tr>
+    <tr>
+      <td>species</td>
+      <td>object</td>
+      <td>5</td>
+      <td>OK</td>
+      <td>166</td>
+      <td>3.00</td>
+    </tr>
+    <tr>
+      <td>bill length (mm)</td>
+      <td>float64</td>
+      <td>1984</td>
+      <td>OK</td>
+      <td>429</td>
+      <td>7.74</td>
+    </tr>
+    <tr>
+      <td>bill depth (mm)</td>
+      <td>float64</td>
+      <td>862</td>
+      <td>OK</td>
+      <td>417</td>
+      <td>7.53</td>
+    </tr>
+    <tr>
+      <td>flipper_length_mm</td>
+      <td>float64</td>
+      <td>1466</td>
+      <td>OK</td>
+      <td>451</td>
+      <td>8.14</td>
+    </tr>
+    <tr>
+      <td>body_mass_g</td>
+      <td>float64</td>
+      <td>3328</td>
+      <td>OK</td>
+      <td>406</td>
+      <td>7.33</td>
+    </tr>
+    <tr>
+      <td>age_group</td>
+      <td>object</td>
+      <td>7</td>
+      <td>OK</td>
+      <td>121</td>
+      <td>2.18</td>
+    </tr>
+    <tr>
+      <td>sex</td>
+      <td>object</td>
+      <td>6</td>
+      <td>OK</td>
+      <td>2739</td>
+      <td>49.43</td>
+    </tr>
+    <tr>
+      <td>colony_id</td>
+      <td>object</td>
+      <td>19</td>
+      <td>OK</td>
+      <td>405</td>
+      <td>7.31</td>
+    </tr>
+    <tr>
+      <td>island</td>
+      <td>object</td>
+      <td>11</td>
+      <td>OK</td>
+      <td>584</td>
+      <td>10.54</td>
+    </tr>
+    <tr>
+      <td>capture_date</td>
+      <td>object</td>
+      <td>1917</td>
+      <td>OK</td>
+      <td>534</td>
+      <td>9.64</td>
+    </tr>
+    <tr>
+      <td>health_status</td>
+      <td>object</td>
+      <td>9</td>
+      <td>OK</td>
+      <td>554</td>
+      <td>10.00</td>
+    </tr>
+    <tr>
+      <td>study_name</td>
+      <td>object</td>
+      <td>12</td>
+      <td>OK</td>
+      <td>563</td>
+      <td>10.16</td>
+    </tr>
+    <tr>
+      <td>clutch_completion</td>
+      <td>object</td>
+      <td>2</td>
+      <td>OK</td>
+      <td>463</td>
+      <td>8.36</td>
+    </tr>
+    <tr>
+      <td>date_egg</td>
+      <td>object</td>
+      <td>1656</td>
+      <td>OK</td>
+      <td>836</td>
+      <td>15.09</td>
+    </tr>
+  </tbody>
+</table></div></div></div></details><details class='section' open id='quantitative-summary'><summary>Quantitative Summary</summary><div class='card'><h3>Descriptive Statistics</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Metric</th>
+      <th>count</th>
+      <th>mean</th>
+      <th>std</th>
+      <th>min</th>
+      <th>25%</th>
+      <th>50%</th>
+      <th>75%</th>
+      <th>max</th>
+      <th>skew</th>
+      <th>kurtosis</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>bill length (mm)</td>
+      <td>5112.0</td>
+      <td>45.166682</td>
+      <td>5.666410</td>
+      <td>30.63</td>
+      <td>40.51</td>
+      <td>45.950</td>
+      <td>49.360</td>
+      <td>62.64</td>
+      <td>-0.145952</td>
+      <td>-0.606829</td>
+    </tr>
+    <tr>
+      <td>bill depth (mm)</td>
+      <td>5124.0</td>
+      <td>17.305377</td>
+      <td>2.231495</td>
+      <td>12.37</td>
+      <td>15.49</td>
+      <td>17.485</td>
+      <td>19.030</td>
+      <td>23.01</td>
+      <td>-0.111456</td>
+      <td>-0.897492</td>
+    </tr>
+    <tr>
+      <td>flipper_length_mm</td>
+      <td>5090.0</td>
+      <td>202.237800</td>
+      <td>14.342621</td>
+      <td>162.79</td>
+      <td>191.10</td>
+      <td>199.315</td>
+      <td>214.100</td>
+      <td>252.40</td>
+      <td>0.329099</td>
+      <td>-0.616376</td>
+    </tr>
+    <tr>
+      <td>body_mass_g</td>
+      <td>5135.0</td>
+      <td>3853.645265</td>
+      <td>898.232986</td>
+      <td>2376.56</td>
+      <td>3219.50</td>
+      <td>3742.000</td>
+      <td>4376.515</td>
+      <td>7378.33</td>
+      <td>0.616778</td>
+      <td>0.086446</td>
+    </tr>
+  </tbody>
+</table></div></div></details><details class='section' id='preview-of-duplicated-rows'><summary>Preview Of Duplicated Rows</summary><div class='card'><h3>Duplicated Rows</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>tag_id</th>
+      <th>species</th>
+      <th>bill length (mm)</th>
+      <th>bill depth (mm)</th>
+      <th>flipper_length_mm</th>
+      <th>body_mass_g</th>
+      <th>age_group</th>
+      <th>sex</th>
+      <th>colony_id</th>
+      <th>island</th>
+      <th>capture_date</th>
+      <th>health_status</th>
+      <th>study_name</th>
+      <th>clutch_completion</th>
+      <th>date_egg</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NaN</td>
+      <td>Gentoo</td>
+      <td>48.99</td>
+      <td>14.11</td>
+      <td>220.9</td>
+      <td>5890.0</td>
+      <td>Adult</td>
+      <td>Male</td>
+      <td>Torgersen North</td>
+      <td>Torgersen</td>
+      <td>2023-11-17</td>
+      <td>NaN</td>
+      <td>PAPRI2023</td>
+      <td>Yes</td>
+      <td>2023-11-09</td>
+    </tr>
+    <tr>
+      <td>NaN</td>
+      <td>Gentoo</td>
+      <td>48.99</td>
+      <td>14.11</td>
+      <td>220.9</td>
+      <td>5890.0</td>
+      <td>Adult</td>
+      <td>Male</td>
+      <td>Torgersen North</td>
+      <td>Torgersen</td>
+      <td>2023-11-17</td>
+      <td>NaN</td>
+      <td>PAPRI2023</td>
+      <td>Yes</td>
+      <td>2023-11-09</td>
+    </tr>
+  </tbody>
+</table></div></div></details><details class='section' open id='first-rows-preview'><summary>First Rows Preview</summary><div class='card'><h3>Head</h3><div class='table-wrap'><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>tag_id</th>
+      <th>species</th>
+      <th>bill length (mm)</th>
+      <th>bill depth (mm)</th>
+      <th>flipper_length_mm</th>
+      <th>body_mass_g</th>
+      <th>age_group</th>
+      <th>sex</th>
+      <th>colony_id</th>
+      <th>island</th>
+      <th>capture_date</th>
+      <th>health_status</th>
+      <th>study_name</th>
+      <th>clutch_completion</th>
+      <th>date_egg</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NaN</td>
+      <td>Gentoo</td>
+      <td>48.99</td>
+      <td>14.11</td>
+      <td>220.9</td>
+      <td>5890.0</td>
+      <td>Adult</td>
+      <td>Male</td>
+      <td>Torgersen North</td>
+      <td>Torgersen</td>
+      <td>2023-11-17</td>
+      <td>NaN</td>
+      <td>PAPRI2023</td>
+      <td>Yes</td>
+      <td>2023-11-09</td>
+    </tr>
+    <tr>
+      <td>NaN</td>
+      <td>Gentoo</td>
+      <td>48.99</td>
+      <td>14.11</td>
+      <td>220.9</td>
+      <td>5890.0</td>
+      <td>Adult</td>
+      <td>Male</td>
+      <td>Torgersen North</td>
+      <td>Torgersen</td>
+      <td>2023-11-17</td>
+      <td>NaN</td>
+      <td>PAPRI2023</td>
+      <td>Yes</td>
+      <td>2023-11-09</td>
+    </tr>
+    <tr>
+      <td>ADE-0001</td>
+      <td>Adelie</td>
+      <td>39.55</td>
+      <td>19.92</td>
+      <td>186.2</td>
+      <td>2500.0</td>
+      <td>Chick</td>
+      <td>Male</td>
+      <td>Biscoe West</td>
+      <td>Biscoe</td>
+      <td>2024-13-03</td>
+      <td>Underweight</td>
+      <td>PAPRI2022</td>
+      <td>Yes</td>
+      <td>2022-07-20</td>
+    </tr>
+    <tr>
+      <td>NaN</td>
+      <td>Gentoo</td>
+      <td>48.23</td>
+      <td>13.00</td>
+      <td>NaN</td>
+      <td>4536.0</td>
+      <td>Adult</td>
+      <td>Female</td>
+      <td>Biscoe West</td>
+      <td>NaN</td>
+      <td>2024-04-14</td>
+      <td>Healthy</td>
+      <td>NaN</td>
+      <td>Yes</td>
+      <td>2024-04-12</td>
+    </tr>
+    <tr>
+      <td>GEN-0001</td>
+      <td>Gentoo</td>
+      <td>46.22</td>
+      <td>13.91</td>
+      <td>212.8</td>
+      <td>2500.0</td>
+      <td>Juvenile</td>
+      <td>Female</td>
+      <td>Dream South</td>
+      <td>Dream</td>
+      <td>NaN</td>
+      <td>Underweight</td>
+      <td>PAPRI2020</td>
+      <td>Yes</td>
+      <td>2020-04-14</td>
+    </tr>
+  </tbody>
+</table></div></div></details><dialog class='plot-modal' id='plot-modal'><div class='plot-modal-card'><div class='plot-modal-header'><h3 id='plot-modal-title'>Plot</h3><button class='plot-modal-close' type='button' onclick='window.atkDashboard.closePlot()' aria-label='Close expanded plot'>&times;</button></div><div class='plot-modal-body'><img id='plot-modal-image' src='' alt='Expanded plot'></div></div></dialog></div></body></html>

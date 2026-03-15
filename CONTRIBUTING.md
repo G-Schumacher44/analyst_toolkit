@@ -19,13 +19,14 @@ make install-mcp
 
 ## Branch and PR Workflow
 
-1. Create a branch from `main`.
+1. Create a branch from `dev`.
 2. Keep changes scoped to one concern per PR.
-3. Open a pull request using the PR template.
+3. Open a pull request targeting `dev`.
 4. Link related issues in the PR description (`Closes #123`).
 5. If behavior, API, or docs meaningfully change, add an entry to `CHANGELOG.md` under `Unreleased`.
 6. If CodeRabbit is enabled for the repository, request CodeRabbit review on the PR and resolve or explicitly dismiss its feedback before merge.
 7. If behavior changes, add or update tests in the same PR.
+8. Promote `dev` into `main` only after the integration slice is green and ready to release publicly.
 
 ## Quality Gates
 
