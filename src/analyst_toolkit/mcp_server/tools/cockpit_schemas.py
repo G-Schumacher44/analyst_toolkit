@@ -1,6 +1,6 @@
 """Input schemas for cockpit MCP tools."""
 
-from analyst_toolkit.mcp_server.schemas import _GCS_PATH_PROP, _INPUT_ID_PROP, _RUN_ID_PROP
+from analyst_toolkit.mcp_server.schemas import _GCS_PATH_PROP, _RUN_ID_PROP, INPUT_ID_PROP
 
 CAPABILITY_CATALOG_INPUT_SCHEMA = {
     "type": "object",
@@ -90,7 +90,7 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
                 "when building from an existing run context."
             ),
         },
-        **_INPUT_ID_PROP,
+        **INPUT_ID_PROP,
         "run_id": {
             "type": "string",
             "description": (

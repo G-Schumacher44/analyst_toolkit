@@ -9,6 +9,7 @@ from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor, regist
 from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.response_utils import new_trace_id
+from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 
 logger = logging.getLogger("analyst_toolkit.mcp_server.input_ingest")
 
@@ -154,9 +155,7 @@ register_tool(
     description="Fetch metadata for a canonical input reference by input_id.",
     input_schema={
         "type": "object",
-        "properties": {
-            "input_id": {"type": "string", "description": "Canonical input reference identifier."}
-        },
+        "properties": {**INPUT_ID_PROP},
         "required": ["input_id"],
     },
 )

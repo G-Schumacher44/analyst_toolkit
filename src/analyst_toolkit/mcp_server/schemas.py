@@ -35,7 +35,7 @@ _SESSION_ID_PROP = {
     }
 }
 
-_INPUT_ID_PROP = {
+INPUT_ID_PROP = {
     "input_id": {
         "type": "string",
         "pattern": "^input_[a-f0-9]{12}$",
@@ -94,7 +94,7 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
     props = {
         **_GCS_PATH_PROP,
         **_SESSION_ID_PROP,
-        **_INPUT_ID_PROP,
+        **INPUT_ID_PROP,
         **_CONFIG_PROP,
         **_RUNTIME_PROP,
         **_RUN_ID_PROP,

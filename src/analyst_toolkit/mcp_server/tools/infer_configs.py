@@ -9,6 +9,7 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
     runtime_to_tool_overrides,
 )
+from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 
 
 async def _toolkit_infer_configs(
@@ -154,14 +155,7 @@ _INPUT_SCHEMA = {
             "type": "string",
             "description": "Optional: In-memory session identifier from a previous tool run.",
         },
-        "input_id": {
-            "type": "string",
-            "description": (
-                "Optional: Canonical server-managed input reference returned by ingest/register "
-                "flows. If provided, gcs_path and session_id are ignored."
-            ),
-            "pattern": "^input_[a-f0-9]{12}$",
-        },
+        **INPUT_ID_PROP,
         "runtime": {
             "type": ["object", "string"],
             "description": (
