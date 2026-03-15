@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.3-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -17,14 +17,14 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
-## 🆕 Version 0.4.3: Operability + Hardening
+## 🆕 Version 0.4.4: Full Dashboard Rollout
 
-The current release line turns the toolkit from a collection of utilities into a cohesive, artifact-first auditing engine.
+Every pipeline module now produces a standalone, exportable HTML dashboard. The toolkit went from a few report surfaces to a complete, artifact-first audit trail — end to end.
 
-1. **Listen (Inference):** Predict data needs automatically using `infer_configs`.
-2. **Diagnose (Validation):** Detect holes (nulls) and bumps (outliers) with a single score.
-3. **Heal (Auto-Apply):** Automatically repair data based on inferred rules using `auto_heal`.
-4. **Certify (Audit):** Generate reviewable dashboards, exports, and a final sequence ledger.
+1. **See Everything:** Cockpit, diagnostics, normalization, duplicates, outlier detection, outlier handling, imputation, final audit, auto-heal, and data dictionary — each as a self-contained HTML artifact.
+2. **Navigate with the Cockpit Hub:** A single landing page links every module dashboard for a run into one reviewable session view.
+3. **Browse Locally:** An optional artifact server turns cockpit artifact references into live browser-openable links — no manual file paths.
+4. **Share Templates:** MCP `resources/list` and `resources/read` now expose the full template and resource inventory directly to clients and agents.
 
 ---
 
@@ -66,13 +66,6 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - [🤝 Contributing Guide](CONTRIBUTING.md) — Development workflow, quality gates, and PR expectations
 - [📝 Changelog](CHANGELOG.md) — Versioned, deterministic release notes
 
-Sample report entry points:
-- [Cockpit dashboard](exports/sample/reports/cockpit_dashboard.html)
-- [Diagnostics dashboard](exports/sample/reports/diagnostics_report.html)
-- [Final audit dashboard](exports/sample/reports/final_audit_report.html)
-
-These HTML exports are tracked sample artifacts. GitHub will link to them directly, but it will not render them inline inside the README.
-
 ---
 
 ### 📚 Quick Start Notebooks
@@ -94,14 +87,16 @@ These HTML exports are tracked sample artifacts. GitHub will link to them direct
 <div align="center">
   <table>
     <tr>
-      <td><img src="repo_files/sample_cockpit_dashboard.png" alt="Cockpit dashboard" width="400"/></td>
-      <td><img src="repo_files/sample_diagnostics_dashboard.png" alt="Diagnostics dashboard" width="400"/></td>
-      <td><img src="repo_files/sample_final_audit_dashboard.png" alt="Final audit dashboard" width="400"/></td>
+      <td><img src="repo_files/sample_cockpit_dashboard.png" alt="Cockpit dashboard" width="460"/></td>
+      <td><img src="repo_files/sample_diagnostics_dashboard.png" alt="Diagnostics dashboard" width="460"/></td>
+    </tr>
+    <tr>
+      <td colspan="2" align="center"><img src="repo_files/sample_final_audit_dashboard.png" alt="Final audit dashboard" width="640"/></td>
     </tr>
   </table>
 </div>
 
-<p align="center"><em>Fresh screenshots captured from the tracked sample HTML exports for cockpit, diagnostics, and final audit.</em></p>
+<p align="center"><em>Cockpit hub, diagnostics, and final audit — three of the ten standalone HTML dashboards produced per run.</em></p>
 
 For full HTML examples instead of screenshots:
 - [Open the sample cockpit dashboard](exports/sample/reports/cockpit_dashboard.html)
@@ -332,11 +327,16 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 <details>
 <summary><strong>🫆 Version Release Notes</strong></summary>
 
-**Current `dev` branch**
-- **Dashboard Surfaces:** Cockpit, diagnostics, final audit, data dictionary, and normalized module dashboards are now treated as first-class standalone HTML artifacts.
-- **Artifact Serving:** Optional local artifact server turns cockpit/module artifact references into browser-openable links.
-- **Template Exposure:** MCP resources now expose quickstart, playbook, capability catalog, and explicit template inventory surfaces.
-- **Repo Cleanup:** Packaging and environment definitions are being aligned around `pyproject.toml` and a cleaner public-facing `dev` branch.
+**v0.4.4 — Full Dashboard Rollout**
+- **Complete Dashboard Surface:** All ten pipeline modules now produce standalone exportable HTML dashboards — cockpit, diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, and data dictionary.
+- **Cockpit Hub:** A unified landing page links every module dashboard for a run into a single navigable session view with run metadata, artifact links, and health score.
+- **Dashboard Renderer Modularization:** `dashboard_html.py` refactored from a monolith into a composable renderer stack (`dashboard_core`, `dashboard_shared`, per-module renderers) — easier to review, extend, and test.
+- **Local Artifact Server:** Optional server turns cockpit and module artifact file references into browser-openable links for local development and review.
+- **Data Dictionary Artifacts:** Standalone data dictionary generation, surfaced as an MCP tool and as an HTML artifact with column-level schema, type, and sample coverage.
+- **MCP Template + Resource Inventory:** `resources/list` and `resources/read` now expose the full template and resource inventory — quickstart, playbook, capability catalog, module YAML templates — directly to MCP clients and agents.
+- **Export Destination Routing:** Configurable artifact routing with explicit GCS, local, and (stubbed) Google Drive destinations.
+- **Observability + Auth Hardening:** Structured request lifecycle logging (`ANALYST_MCP_STRUCTURED_LOGS`), `/metrics` and `/ready` endpoints, and optional bearer token auth (`ANALYST_MCP_AUTH_TOKEN`).
+- **CI Hardening:** Tightened lint, mypy, and test gates; CodeRabbit review workflow added to PR process.
 
 **v0.4.0 — The Cockpit Upgrade**
 - **State Management:** Introduced `StateStore` for in-memory DataFrame persistence between tool calls via `session_id`.

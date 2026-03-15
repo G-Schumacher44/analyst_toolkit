@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.3-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
 </p>
 
 ---
@@ -15,11 +15,15 @@
 
 The analyst toolkit MCP server exposes every toolkit module as a callable tool over the [Model Context Protocol](https://modelcontextprotocol.io). Any MCP-compatible host — FridAI, Claude Desktop, VS Code, or a plain JSON-RPC 2.0 client — can invoke toolkit operations against local or GCS-hosted data without any Python dependency on the host side.
 
-## 🆕 Version 0.4.3 Highlights
+## 🆕 Version 0.4.4 Highlights
 
-- **Pipeline Mode:** In-memory state management via `session_id` allows chaining multiple tools without manual file saving.
-- **Client Cockpit:** Tools for executive reporting, including a 0-100 Data Health Score, a "Healing Ledger" history, and operator guidance via cockpit/playbook surfaces.
-- **Golden Templates:** Example templates tuned for typical fraud/migration/compliance patterns.
+- **Full Dashboard Surface:** Every pipeline module now produces a standalone HTML dashboard artifact — diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, data dictionary, and final audit. Dashboard artifact paths are returned in tool responses.
+- **Cockpit Hub:** `get_cockpit_dashboard` returns a unified operator hub linking recent-run cards, module dashboards, artifact rows, and a data dictionary preview into a single HTML artifact.
+- **Local Artifact Server:** `ensure_artifact_server` starts an optional localhost file server so cockpit and module artifact references become browser-openable URLs instead of raw file paths.
+- **Data Dictionary:** `data_dictionary` is now fully implemented — generates a column-level schema report as a standalone HTML artifact and surfaces a preview in the cockpit dictionary tab.
+- **Pipeline Dashboard:** `get_pipeline_dashboard` produces a combined multi-module dashboard for a specific run, linked from the cockpit hub.
+- **Resource Inventory:** Quickstart, agent playbook, and capability catalog are now exposed as first-class MCP resources (in addition to tools) via `resources/list` and `resources/read`.
+- **Observability + Auth:** `/ready`, `/metrics`, structured lifecycle logs (`ANALYST_MCP_STRUCTURED_LOGS`), and optional bearer token auth (`ANALYST_MCP_AUTH_TOKEN`).
 - **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
 - **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.
 
@@ -32,6 +36,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 - [Tool Reference](#tool-reference) ▾
 - [Pipeline Mode](#pipeline-mode-state-management)
 - [Template Resources](#template-resources)
+- [Local Artifact Server](#local-artifact-server)
 - [Usage Examples](#usage-examples) ▾
 - [Host Integration](#host-integration) ▾
 - [Environment Variables](#environment-variables)
@@ -72,7 +77,7 @@ curl http://localhost:8001/health | python3 -m json.tool
 ```json
 {
   "status": "ok",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "uptime_sec": 42,
   "tools": [
     "diagnostics", "validation", "outliers", "normalization",
@@ -80,7 +85,9 @@ curl http://localhost:8001/health | python3 -m json.tool
     "drift_detection", "get_config_schema", "preflight_config", "get_golden_templates",
     "get_job_status", "list_jobs",
     "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
-    "get_run_history", "get_data_health_report"
+    "get_run_history", "get_data_health_report",
+    "data_dictionary", "get_pipeline_dashboard", "get_cockpit_dashboard",
+    "ensure_artifact_server"
   ]
 }
 ```
@@ -162,7 +169,7 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `get_job_status` | Poll status/result for async jobs (`job_id`) |
 | `list_jobs` | List recent async jobs and optionally filter by state (job state persists across restarts) |
 
-### Cockpit Tools
+### Cockpit + Dashboard Tools
 
 | Tool | Description |
 |---|---|
@@ -173,6 +180,10 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `get_user_quickstart` | Human quickstart payload for UI rendering (`content.format=markdown`, `content.markdown`, `quick_actions`) |
 | `get_capability_catalog` | Editable config knobs by module (supports `module`, `search`, `path_prefix`, `compact` filters) |
 | `final_audit` | Final certification step — produces the Healing Certificate HTML report |
+| `get_cockpit_dashboard` | Operator hub HTML artifact — recent-run cards, module dashboard links, artifact rows, data dictionary preview |
+| `get_pipeline_dashboard` | Combined multi-module HTML dashboard for a specific `run_id`; linked from the cockpit hub |
+| `data_dictionary` | Column-level schema report as a standalone HTML artifact; preview surfaced in the cockpit dictionary tab |
+| `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs |
 
 </details>
 
@@ -222,10 +233,13 @@ If a tool call provides both `session_id` and `run_id`, the server enforces life
 
 ## Template Resources
 
-In addition to tools, the server exposes YAML templates through MCP resources so clients/agents can pull them into context without calling a tool.
+In addition to tools, the server exposes YAML templates and informational surfaces through MCP resources so clients/agents can pull them into context without calling a tool.
 
 - Standard templates: `analyst://templates/config/{name}_template.yaml`
 - Golden templates: `analyst://templates/golden/{name}.yaml`
+- Agent playbook: `analyst://resources/agent_playbook`
+- User quickstart: `analyst://resources/user_quickstart`
+- Capability catalog: `analyst://resources/capability_catalog`
 
 Example JSON-RPC calls:
 
@@ -259,6 +273,42 @@ If your host needs URI templates explicitly, enable:
 ```bash
 export ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES=true
 ```
+
+---
+
+## Local Artifact Server
+
+By default, tool responses return artifact file paths (e.g. `exports/reports/run_001_diagnostics_report.html`). If you're running the server locally and want cockpit and module artifact references to be browser-openable URLs instead, enable the artifact server:
+
+```bash
+export ANALYST_MCP_ENABLE_ARTIFACT_SERVER=true
+```
+
+Then call `ensure_artifact_server` once to start it:
+
+```bash
+curl -X POST http://localhost:8001/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "ensure_artifact_server",
+      "arguments": {}
+    }
+  }'
+```
+
+The server binds to `127.0.0.1:8765` by default and serves the `exports/` directory. Artifact paths in subsequent tool responses will be replaced with `http://localhost:8765/...` URLs.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ANALYST_MCP_ENABLE_ARTIFACT_SERVER` | `false` | Enable the local artifact server |
+| `ANALYST_MCP_ARTIFACT_SERVER_HOST` | `127.0.0.1` | Bind address (localhost only by default) |
+| `ANALYST_MCP_ARTIFACT_SERVER_PORT` | `8765` | Port for the artifact server |
+| `ANALYST_MCP_ARTIFACT_SERVER_ROOT` | `exports` | Root directory to serve artifacts from |
+| `ANALYST_MCP_ALLOW_BIND_ALL` | `false` | Allow binding to `0.0.0.0` (explicit opt-in) |
 
 ---
 
@@ -621,6 +671,11 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT` | No | `50` | Default max ledger entries returned in compact mode when caller omits `limit` |
 | `ANALYST_MCP_DEDUP_RUN_ID_WARNINGS` | No | `true` | Deduplicate repeated run-id coercion warnings for the same session/request pair |
 | `ANALYST_MCP_ALLOW_EMPTY_CERT_RULES` | No | `false` | If `false`, `final_audit` fails closed when certification rule contract is empty |
+| `ANALYST_MCP_ENABLE_ARTIFACT_SERVER` | No | `false` | Enable the optional local artifact server for browser-openable dashboard links |
+| `ANALYST_MCP_ARTIFACT_SERVER_HOST` | No | `127.0.0.1` | Bind address for the artifact server (localhost only by default) |
+| `ANALYST_MCP_ARTIFACT_SERVER_PORT` | No | `8765` | Port for the local artifact server |
+| `ANALYST_MCP_ARTIFACT_SERVER_ROOT` | No | `exports` | Root directory served by the artifact server |
+| `ANALYST_MCP_ALLOW_BIND_ALL` | No | `false` | Allow artifact server to bind to `0.0.0.0` (explicit opt-in) |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
 
