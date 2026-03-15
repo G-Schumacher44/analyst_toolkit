@@ -52,6 +52,7 @@ def _sanitize_dashboard_step_summary(summary: dict | None) -> dict:
 async def _run_auto_heal_pipeline(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
 ) -> dict:
@@ -64,6 +65,7 @@ async def _run_auto_heal_pipeline(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
@@ -71,6 +73,7 @@ async def _run_auto_heal_pipeline(
     infer_res = await _toolkit_infer_configs(
         gcs_path=gcs_path,
         session_id=session_id,
+        input_id=input_id,
         runtime=runtime_cfg,
         run_id=run_id,
         modules=["normalization", "imputation"],
@@ -296,12 +299,14 @@ async def _auto_heal_worker(
     session_id: str | None,
     runtime: dict | str | None,
     run_id: str,
+    input_id: str | None,
 ):
     JobStore.mark_running(job_id)
     try:
         result = await _run_auto_heal_pipeline(
             gcs_path=gcs_path,
             session_id=session_id,
+            input_id=input_id,
             runtime=runtime,
             run_id=run_id,
         )
@@ -330,6 +335,7 @@ async def _auto_heal_worker(
 async def _toolkit_auto_heal(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
     async_mode: bool = False,
@@ -342,6 +348,7 @@ async def _toolkit_auto_heal(
     normalized_runtime = runtime_cfg if runtime_cfg else runtime
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
@@ -352,13 +359,14 @@ async def _toolkit_auto_heal(
             inputs={
                 "gcs_path": gcs_path,
                 "session_id": session_id,
+                "input_id": input_id,
                 "runtime": normalized_runtime,
                 "run_id": run_id,
             },
         )
         try:
             asyncio.create_task(
-                _auto_heal_worker(job_id, gcs_path, session_id, normalized_runtime, run_id)
+                _auto_heal_worker(job_id, gcs_path, session_id, normalized_runtime, run_id, input_id)
             )
         except Exception as exc:
             JobStore.mark_failed(
@@ -391,6 +399,7 @@ async def _toolkit_auto_heal(
     return await _run_auto_heal_pipeline(
         gcs_path=gcs_path,
         session_id=session_id,
+        input_id=input_id,
         runtime=normalized_runtime,
         run_id=run_id,
     )
@@ -406,6 +415,10 @@ _INPUT_SCHEMA = {
         "session_id": {
             "type": "string",
             "description": "Optional: In-memory session identifier.",
+        },
+        "input_id": {
+            "type": "string",
+            "description": "Optional: Canonical server-managed input reference returned by ingest/register flows.",
         },
         "run_id": {
             "type": "string",
@@ -428,6 +441,7 @@ _INPUT_SCHEMA = {
     "anyOf": [
         {"required": ["gcs_path"]},
         {"required": ["session_id"]},
+        {"required": ["input_id"]},
     ],
 }
 

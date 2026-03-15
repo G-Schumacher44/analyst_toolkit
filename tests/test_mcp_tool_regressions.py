@@ -175,7 +175,7 @@ async def test_toolkit_diagnostics_accepts_runtime_overrides(mocker):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
     captured = {}
 
-    def fake_load_input(path=None, session_id=None):
+    def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
         captured["input_session_id"] = session_id
         return df
@@ -255,7 +255,7 @@ async def test_toolkit_infer_configs_accepts_runtime_overrides(monkeypatch, mock
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
     captured = {}
 
-    def fake_load_input(path=None, session_id=None):
+    def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
         captured["input_session_id"] = session_id
         return df
@@ -469,7 +469,7 @@ async def test_auto_heal_worker_marks_failed_when_result_status_is_error(mocker)
         return_value={"status": "error", "module": "auto_heal"},
     )
 
-    await auto_heal_tool._auto_heal_worker(job_id, None, "sess_test", None, "run_auto")
+    await auto_heal_tool._auto_heal_worker(job_id, None, "sess_test", None, "run_auto", None)
     job = auto_heal_tool.JobStore.get(job_id)
 
     assert job is not None
@@ -680,7 +680,7 @@ async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
     df = pd.DataFrame({"id": [1, 1], "value": [10, 10]})
     captured = {}
 
-    def fake_load_input(path=None, session_id=None):
+    def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
         return df
 
@@ -714,7 +714,7 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
     df = pd.DataFrame({"value": [1]})
     captured = {}
 
-    def fake_load_input(path=None, session_id=None):
+    def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
         return df
 

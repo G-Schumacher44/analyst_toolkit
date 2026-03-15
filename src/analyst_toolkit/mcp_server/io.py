@@ -22,6 +22,7 @@ from analyst_toolkit.mcp_server.destination_routing import (
 from analyst_toolkit.mcp_server.destination_routing import (
     split_artifact_reference as _split_artifact_reference,
 )
+from analyst_toolkit.mcp_server.input.ingest import load_dataframe as _load_input_dataframe
 from analyst_toolkit.mcp_server.io_history_files import (
     read_history_file_safe as _read_history_file_safe,
 )
@@ -39,14 +40,8 @@ from analyst_toolkit.mcp_server.io_serialization import (
     fold_status_with_artifacts,
     make_json_safe,
 )
-from analyst_toolkit.mcp_server.io_storage import (
-    load_from_gcs,
-    save_output,
-    should_export_html,
-)
-from analyst_toolkit.mcp_server.io_storage import (
-    upload_artifact as _upload_artifact,
-)
+from analyst_toolkit.mcp_server.io_storage import save_output, should_export_html
+from analyst_toolkit.mcp_server.io_storage import upload_artifact as _upload_artifact
 from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -186,34 +181,26 @@ def resolve_run_context(
     return effective_run_id, lifecycle
 
 
-def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> pd.DataFrame:
-    """Load data from GCS, local file, or in-memory session."""
-    if session_id:
-        df = StateStore.get(session_id)
-        if df is not None:
-            logger.info(f"Loaded from session: {session_id}")
-            return df
-        elif not path:
-            raise ValueError(f"Session {session_id} not found and no path provided.")
+def load_input(
+    path: Optional[str] = None,
+    session_id: Optional[str] = None,
+    input_id: Optional[str] = None,
+) -> pd.DataFrame:
+    """Load data from a canonical input reference, GCS, local file, or in-memory session."""
+    normalized_path = path
+    if normalized_path:
+        normalized_path, path_warning = _normalize_input_path(normalized_path)
+        if path_warning:
+            logger.warning(path_warning)
+        if _looks_like_bucket_path(normalized_path):
+            raise FileNotFoundError(
+                f"Input path not found: '{normalized_path}'. Did you mean 'gs://{normalized_path}'?"
+            )
 
-    if not path:
-        raise ValueError("Either 'path' (gcs_path) or 'session_id' must be provided.")
-
-    path, path_warning = _normalize_input_path(path)
-    if path_warning:
-        logger.warning(path_warning)
-
-    if path.startswith("gs://"):
-        return load_from_gcs(path)
-    if path.endswith(".parquet"):
-        return pd.read_parquet(path)
-    if Path(path).exists():
-        return pd.read_csv(path, low_memory=False)
-
-    if _looks_like_bucket_path(path):
-        raise FileNotFoundError(f"Input path not found: '{path}'. Did you mean 'gs://{path}'?")
-
-    raise FileNotFoundError(f"Input path not found: '{path}'")
+    df = _load_input_dataframe(path=normalized_path, session_id=session_id, input_id=input_id)
+    if session_id and StateStore.get(session_id) is not None:
+        logger.info(f"Loaded from session: {session_id}")
+    return df
 
 
 def save_to_session(

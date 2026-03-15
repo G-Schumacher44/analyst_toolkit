@@ -62,6 +62,7 @@ mcp = [
   "pyarrow>=14.0",
   "google-cloud-storage>=2.14",
   "gcsfs>=2024.2.0",
+  "python-multipart>=0.0.9",
   "pydantic>=2.0",
   "analyst_toolkit_deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git@b8127f990e1c7bd6b7fd6b66f4987e0bd86fbad6",
 ]
