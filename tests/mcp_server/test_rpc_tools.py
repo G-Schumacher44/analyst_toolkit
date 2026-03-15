@@ -180,17 +180,27 @@ def test_rpc_user_quickstart_tool(client, monkeypatch):
     assert "auto_heal" in result["content"]["markdown"]
     assert "cockpit dashboard" in result["content"]["markdown"].lower()
     assert "ensure_artifact_server" in result["content"]["markdown"]
+    assert "register_input" in result["content"]["markdown"]
+    assert "/inputs/upload" in result["content"]["markdown"]
     assert "machine_guide" in result
-    assert result["machine_guide"]["ordered_steps"][0]["tool"] == "diagnostics"
-    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
-    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == ["gcs_path|session_id"]
+    assert result["machine_guide"]["ordered_steps"][0]["tool"] == "register_input"
+    assert result["machine_guide"]["ordered_steps"][1]["tool"] == "diagnostics"
+    assert result["machine_guide"]["ordered_steps"][1]["required_inputs"] == [
+        "input_id|gcs_path|session_id|runtime.run.input_path",
+        "run_id|runtime.run.run_id",
+    ]
+    assert result["machine_guide"]["ordered_steps"][2]["tool"] == "infer_configs"
+    assert result["machine_guide"]["ordered_steps"][2]["required_inputs"] == [
+        "input_id|gcs_path|session_id"
+    ]
     assert len(result["quick_actions"]) >= 2
     assert not any(a["tool"] == "get_cockpit_dashboard" for a in result["quick_actions"])
+    assert any(a["tool"] == "register_input" for a in result["quick_actions"])
     assert any(a["tool"] == "diagnostics" for a in result["quick_actions"])
     assert any(a["tool"] == "infer_configs" for a in result["quick_actions"])
     assert any(a["tool"] == "auto_heal" for a in result["quick_actions"])
     infer_quick = next(a for a in result["quick_actions"] if a["tool"] == "infer_configs")
-    assert infer_quick["arguments_schema_hint"]["required"] == ["gcs_path|session_id"]
+    assert infer_quick["arguments_schema_hint"]["required"] == ["input_id|gcs_path|session_id"]
     assert isinstance(result.get("trace_id"), str)
     assert result["trace_id"]
 
@@ -209,16 +219,17 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, m
     result = response.json()["result"]
     assert result["status"] == "pass"
     assert result["ordered_steps"][0]["tool"] == "ensure_artifact_server"
-    assert result["ordered_steps"][1]["tool"] == "diagnostics"
+    assert result["ordered_steps"][1]["tool"] == "register_input"
+    assert result["ordered_steps"][2]["tool"] == "diagnostics"
     infer_step = next(
         step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
     )
-    assert infer_step["required_inputs"] == ["gcs_path|session_id"]
+    assert infer_step["required_inputs"] == ["input_id|gcs_path|session_id"]
     auto_heal_step = next(
         step for step in result["ordered_steps"] if step.get("tool") == "auto_heal"
     )
     assert auto_heal_step["required_inputs"] == [
-        "gcs_path|session_id|runtime.run.input_path",
+        "input_id|gcs_path|session_id|runtime.run.input_path",
         "run_id|runtime.run.run_id",
     ]
 
