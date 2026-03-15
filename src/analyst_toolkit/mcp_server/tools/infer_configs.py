@@ -1,5 +1,6 @@
 """MCP tool: toolkit_infer_configs — config generation via analyst_toolkit_deploy."""
 
+import inspect
 import os
 import tempfile
 
@@ -10,6 +11,47 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     runtime_to_tool_overrides,
 )
 from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
+
+
+def _call_external_infer_configs(
+    infer_configs_fn,
+    *,
+    input_path: str,
+    options: dict,
+    modules: list[str] | None,
+    sample_rows: int | None,
+) -> tuple[dict, list[str]]:
+    """Call the external infer_configs helper with signature compatibility."""
+    kwargs = {
+        "root": options.get("root", "."),
+        "input_path": input_path,
+        "modules": modules or options.get("modules"),
+        "outdir": options.get("outdir"),
+        "sample_rows": sample_rows or options.get("sample_rows"),
+        "max_unique": options.get("max_unique", 30),
+        "exclude_patterns": options.get("exclude_patterns", "id|uuid|tag"),
+        "detect_datetimes": options.get("detect_datetimes", True),
+        "datetime_hints": options.get("datetime_hints"),
+    }
+
+    signature = inspect.signature(infer_configs_fn)
+    accepts_var_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+    if accepts_var_kwargs:
+        return infer_configs_fn(**kwargs), []
+
+    supported = set(signature.parameters)
+    filtered_kwargs = {key: value for key, value in kwargs.items() if key in supported}
+    dropped = sorted(key for key in kwargs if key not in supported and kwargs[key] is not None)
+    warnings = []
+    if dropped:
+        warnings.append(
+            "External infer_configs helper does not support the following arguments and they "
+            f"were ignored: {', '.join(dropped)}."
+        )
+    return infer_configs_fn(**filtered_kwargs), warnings
 
 
 async def _toolkit_infer_configs(
@@ -74,17 +116,14 @@ async def _toolkit_infer_configs(
             "config_yaml": "",
         }
 
+    external_warnings: list[str] = []
     try:
-        configs = infer_configs(
-            root=options.get("root", "."),
+        configs, external_warnings = _call_external_infer_configs(
+            infer_configs,
             input_path=input_path,
-            modules=modules or options.get("modules"),
-            outdir=options.get("outdir"),
-            sample_rows=sample_rows or options.get("sample_rows"),
-            max_unique=options.get("max_unique", 30),
-            exclude_patterns=options.get("exclude_patterns", "id|uuid|tag"),
-            detect_datetimes=options.get("detect_datetimes", True),
-            datetime_hints=options.get("datetime_hints"),
+            options=options,
+            modules=modules,
+            sample_rows=sample_rows,
         )
     finally:
         if temp_file:
@@ -138,7 +177,7 @@ async def _toolkit_infer_configs(
             "session_id": session_id,
             "configs": configs,
             "runtime_applied": runtime_applied,
-            "warnings": runtime_warnings,
+            "warnings": runtime_warnings + external_warnings,
         },
         next_steps,
     )
