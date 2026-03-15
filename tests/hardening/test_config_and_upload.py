@@ -215,7 +215,7 @@ def test_load_input_auto_normalizes_bucket_like_path(monkeypatch):
 
     expected = pd.DataFrame({"a": [1]})
     monkeypatch.setattr(
-        "analyst_toolkit.mcp_server.io.load_from_gcs",
+        "analyst_toolkit.mcp_server.input.loaders.load_from_gcs",
         lambda gcs_path: expected if gcs_path == "gs://my-bucket/path/file.csv" else None,
     )
     out = load_input("my-bucket/path/file.csv")
