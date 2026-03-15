@@ -6,6 +6,59 @@ from typing import Any
 import pandas as pd
 
 
+def _lookup_original_column_name(changelog: dict[str, Any], normalized_col: str) -> str:
+    renamed_columns = changelog.get("renamed_columns")
+    if (
+        isinstance(renamed_columns, pd.DataFrame)
+        and not renamed_columns.empty
+        and {"Original Name", "New Name"}.issubset(renamed_columns.columns)
+    ):
+        matched = renamed_columns.loc[
+            renamed_columns["New Name"] == normalized_col, "Original Name"
+        ]
+        if not matched.empty:
+            return str(matched.iloc[0])
+    return normalized_col
+
+
+def _build_column_value_analysis(
+    df_original: pd.DataFrame,
+    df_transformed: pd.DataFrame,
+    changelog: dict[str, Any],
+    preview_columns: list[str],
+) -> dict[str, dict[str, pd.DataFrame]]:
+    analysis: dict[str, dict[str, pd.DataFrame]] = {}
+    for column in preview_columns:
+        original_col = _lookup_original_column_name(changelog, column)
+        if original_col not in df_original.columns or column not in df_transformed.columns:
+            continue
+
+        before_counts = df_original[original_col].value_counts(dropna=False)
+        after_counts = df_transformed[column].value_counts(dropna=False)
+        normalized_values = (
+            pd.DataFrame({"Value": after_counts.index, "Count": after_counts.values})
+            .sort_values(by="Count", ascending=False)
+            .reset_index(drop=True)
+        )
+        all_values = pd.Index(before_counts.index).union(after_counts.index)
+        audit_df = (
+            pd.DataFrame(
+                {
+                    "Value": all_values,
+                    "Original Count": [before_counts.get(value, 0) for value in all_values],
+                    "Normalized Count": [after_counts.get(value, 0) for value in all_values],
+                }
+            )
+            .sort_values(by=["Original Count", "Normalized Count"], ascending=False)
+            .reset_index(drop=True)
+        )
+        analysis[column] = {
+            "normalized_values": normalized_values,
+            "value_audit": audit_df,
+        }
+    return analysis
+
+
 def generate_transformation_report(
     df_original: pd.DataFrame,
     df_transformed: pd.DataFrame,
@@ -13,6 +66,7 @@ def generate_transformation_report(
     module_name: str,
     run_id: str,
     export_config: dict,
+    preview_columns: list[str] | None = None,
 ) -> dict:
     """Generates comparison tables, summary stats, and changelog views."""
     report_tables: dict[str, pd.DataFrame | dict[str, pd.DataFrame]] = {}
@@ -66,6 +120,30 @@ def generate_transformation_report(
     col_change_summary = diff_table.groupby("column").size().reset_index(name="change_count")
     report_tables["column_changes_summary"] = col_change_summary
 
+    if isinstance(preview_columns, str):
+        selected_preview_columns = [preview_columns]
+    else:
+        selected_preview_columns = list(preview_columns or [])
+    if (
+        not selected_preview_columns
+        and not col_change_summary.empty
+        and "column" in col_change_summary.columns
+    ):
+        selected_preview_columns = [
+            str(value)
+            for value in col_change_summary.sort_values("change_count", ascending=False)["column"]
+            .head(3)
+            .tolist()
+        ]
+    column_value_analysis = _build_column_value_analysis(
+        df_original=df_original,
+        df_transformed=df_transformed,
+        changelog=changelog,
+        preview_columns=selected_preview_columns,
+    )
+    if column_value_analysis:
+        report_tables["column_value_analysis"] = column_value_analysis
+
     # 4. Changelog
     changelog_dfs = {k: v for k, v in changelog.items() if isinstance(v, pd.DataFrame)}
     changelog_scalars = {k: v for k, v in changelog.items() if not isinstance(v, pd.DataFrame)}
@@ -85,6 +163,10 @@ def generate_transformation_report(
         "transformed_shape": df_transformed.shape,
     }
     report_tables["meta_info"] = pd.DataFrame([meta_info])
+    if selected_preview_columns:
+        report_tables["__dashboard_meta__"] = {
+            "preview_columns": selected_preview_columns,
+        }
 
     return report_tables
 
