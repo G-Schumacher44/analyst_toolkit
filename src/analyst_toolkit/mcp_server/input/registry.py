@@ -39,6 +39,8 @@ def _env_float(name: str, default: float) -> float:
 
 _REGISTRY_MAX_ENTRIES = _env_int("ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES", 512)
 _REGISTRY_TTL_SEC = _env_float("ANALYST_MCP_INPUT_REGISTRY_TTL_SEC", 21600.0)
+INPUT_DESCRIPTOR_CONFLICT_CODE = "INPUT_DESCRIPTOR_CONFLICT"
+INPUT_NOT_FOUND_CODE = "INPUT_NOT_FOUND"
 
 
 @dataclass
@@ -69,6 +71,10 @@ def _expires_at(now: float) -> float:
 
 def _remove_input_locked(input_id: str) -> None:
     _INPUTS.pop(input_id, None)
+    _cleanup_sessions_for_input_locked(input_id)
+
+
+def _cleanup_sessions_for_input_locked(input_id: str) -> None:
     stale_sessions = [
         session_id
         for session_id, binding in list(_SESSION_INPUTS.items())
@@ -78,7 +84,9 @@ def _remove_input_locked(input_id: str) -> None:
         _SESSION_INPUTS.pop(session_id, None)
 
 
-def _refresh_input_locked(input_id: str, descriptor: InputDescriptor, now: float) -> InputDescriptor:
+def _refresh_input_locked(
+    input_id: str, descriptor: InputDescriptor, now: float
+) -> InputDescriptor:
     _INPUTS[input_id] = _RegistryEntry(descriptor=descriptor, expires_at=_expires_at(now))
     _INPUTS.move_to_end(input_id)
     return descriptor
@@ -94,9 +102,7 @@ def _refresh_session_locked(session_id: str, input_id: str, now: float) -> None:
 
 def _prune_locked(now: float) -> None:
     expired_inputs = [
-        input_id
-        for input_id, entry in list(_INPUTS.items())
-        if entry.expires_at <= now
+        input_id for input_id, entry in list(_INPUTS.items()) if entry.expires_at <= now
     ]
     for input_id in expired_inputs:
         _remove_input_locked(input_id)
@@ -111,13 +117,7 @@ def _prune_locked(now: float) -> None:
 
     while len(_INPUTS) > _REGISTRY_MAX_ENTRIES:
         oldest_input_id, _ = _INPUTS.popitem(last=False)
-        stale_sessions = [
-            session_id
-            for session_id, binding in list(_SESSION_INPUTS.items())
-            if binding.input_id == oldest_input_id
-        ]
-        for session_id in stale_sessions:
-            _SESSION_INPUTS.pop(session_id, None)
+        _cleanup_sessions_for_input_locked(oldest_input_id)
 
 
 def save_descriptor(descriptor: InputDescriptor) -> InputDescriptor:
@@ -131,7 +131,8 @@ def save_descriptor(descriptor: InputDescriptor) -> InputDescriptor:
             existing_descriptor = existing_entry.descriptor
             if not existing_descriptor.same_canonical_input(descriptor):
                 raise ValueError(
-                    f"Conflicting descriptor for input_id '{descriptor.input_id}'."
+                    f"[{INPUT_DESCRIPTOR_CONFLICT_CODE}] Conflicting descriptor for input_id "
+                    f"'{descriptor.input_id}'."
                 )
             effective_descriptor = descriptor.with_runtime_binding(
                 session_id=descriptor.session_id or existing_descriptor.session_id,
@@ -149,7 +150,6 @@ def save_descriptor(descriptor: InputDescriptor) -> InputDescriptor:
                 effective_descriptor.input_id,
                 now,
             )
-        _prune_locked(now)
     return effective_descriptor
 
 
@@ -169,7 +169,7 @@ def bind_session_input(session_id: str, input_id: str) -> None:
         _prune_locked(now)
         entry = _INPUTS.get(input_id)
         if entry is None:
-            raise ValueError(f"input_id '{input_id}' not found in registry")
+            raise ValueError(f"[{INPUT_NOT_FOUND_CODE}] input_id '{input_id}' not found in registry")
         _refresh_input_locked(input_id, entry.descriptor, now)
         _refresh_session_locked(session_id, input_id, now)
 

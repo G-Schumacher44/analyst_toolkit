@@ -61,6 +61,8 @@ def test_inputs_upload_reuses_input_id_for_same_payload(client, monkeypatch, tmp
 
     assert response_one.status_code == 200
     assert response_two.status_code == 200
+    assert response_one.json()["status"] == "pass"
+    assert response_two.json()["status"] == "pass"
     assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
 
 
@@ -85,9 +87,7 @@ def test_inputs_register_server_path_loads_into_session(client, monkeypatch, tmp
     assert payload["summary"]["row_count"] == 2
 
 
-def test_inputs_register_reuses_input_id_with_stable_idempotency_key(
-    client, monkeypatch, tmp_path
-):
+def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, monkeypatch, tmp_path):
     monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
     monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
     StateStore.clear()
@@ -115,7 +115,44 @@ def test_inputs_register_reuses_input_id_with_stable_idempotency_key(
 
     assert response_one.status_code == 200
     assert response_two.status_code == 200
+    assert response_one.json()["status"] == "pass"
+    assert response_two.json()["status"] == "pass"
     assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+
+
+def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    StateStore.clear()
+    input_registry.clear()
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key-a",
+        },
+    )
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key-b",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["status"] == "pass"
+    assert response_two.json()["status"] == "pass"
+    assert response_one.json()["input"]["input_id"] != response_two.json()["input"]["input_id"]
 
 
 def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch, tmp_path):

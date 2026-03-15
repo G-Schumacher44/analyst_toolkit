@@ -129,9 +129,12 @@ register_tool(
             },
             "idempotency_key": {
                 "type": "string",
+                "minLength": 1,
+                "pattern": "^.*\\S.*$",
                 "description": (
                     "Optional stable idempotency key. Provide this to reuse the same "
-                    "input_id across retries for the same logical source."
+                    "input_id across retries for the same logical source. Reusing the "
+                    "same key for a different canonical source is rejected as a conflict."
                 ),
             },
             "load_into_session": {

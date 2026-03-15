@@ -1,3 +1,5 @@
+import pytest
+
 from analyst_toolkit.mcp_server.input import registry as input_registry
 from analyst_toolkit.mcp_server.input.models import InputDescriptor
 
@@ -49,12 +51,8 @@ def test_registry_rejects_conflicting_descriptor_reuse(monkeypatch):
 
     input_registry.save_descriptor(_descriptor("input_conflict", sha256="abc"))
 
-    try:
+    with pytest.raises(ValueError, match="Conflicting descriptor"):
         input_registry.save_descriptor(_descriptor("input_conflict", sha256="def"))
-    except ValueError as exc:
-        assert "Conflicting descriptor" in str(exc)
-    else:
-        raise AssertionError("Expected conflicting descriptor reuse to raise ValueError")
 
 
 def test_registry_evicts_oldest_entries_when_capacity_is_exceeded(monkeypatch):

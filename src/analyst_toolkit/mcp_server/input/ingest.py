@@ -89,14 +89,14 @@ def register_input_source(
     """
     Register a canonical input source from a local server path or gs:// URI.
 
-    Retries are only input-idempotent when callers provide a stable idempotency_key.
-    Without one, the source is registered under a new input_id on each call.
+    By default the same canonical resolved source reuses the same input_id. Callers may
+    provide a stable idempotency_key to control that identity explicitly across retries.
     """
     resolved_type, resolved_reference, display_name = resolve_source_reference(
         reference, source_type
     )
     descriptor = InputDescriptor(
-        input_id=_new_input_id(idempotency_key),
+        input_id=_new_input_id(idempotency_key or f"source:{resolved_reference}"),
         source_type=resolved_type,
         original_reference=reference,
         resolved_reference=resolved_reference,

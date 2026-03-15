@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
 InputSourceType = Literal["upload", "server_path", "gcs", "gdrive"]
+_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -42,13 +43,17 @@ class InputDescriptor:
     def with_runtime_binding(
         self,
         *,
-        session_id: str | None = None,
-        run_id: str | None = None,
+        session_id: str | None | object = _UNSET,
+        run_id: str | None | object = _UNSET,
     ) -> "InputDescriptor":
+        next_session_id: str | None = (
+            self.session_id if session_id is _UNSET else session_id  # type: ignore[assignment]
+        )
+        next_run_id: str | None = self.run_id if run_id is _UNSET else run_id  # type: ignore[assignment]
         return replace(
             self,
-            session_id=session_id if session_id is not None else self.session_id,
-            run_id=run_id if run_id is not None else self.run_id,
+            session_id=next_session_id,
+            run_id=next_run_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
