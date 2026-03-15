@@ -43,6 +43,8 @@ def test_rpc_tools_list(client):
     assert "get_pipeline_dashboard" in tool_names
     assert "ensure_artifact_server" in tool_names
     assert "data_dictionary" in tool_names
+    assert "register_input" in tool_names
+    assert "get_input_descriptor" in tool_names
     assert "preflight_config" in tool_names
     assert "get_job_status" in tool_names
     assert "list_jobs" in tool_names
@@ -611,7 +613,7 @@ def test_rpc_data_dictionary_tool(client, mocker, tmp_path):
     assert result["cockpit_preview"]["overview"]["expected_columns"] == 3
     assert result["cockpit_preview"]["expected_schema_preview"][0]["Column"] == "customer_id"
     assert result["next_actions"][0]["tool"] == "get_cockpit_dashboard"
-    load_input.assert_called_once_with("gs://bucket/data.csv", session_id=None)
+    load_input.assert_called_once_with("gs://bucket/data.csv", session_id=None, input_id=None)
     save_to_session.assert_called_once_with(dataframe, run_id="dictionary_prelaunch_001")
     infer_configs.assert_awaited_once_with(
         gcs_path="gs://bucket/data.csv",

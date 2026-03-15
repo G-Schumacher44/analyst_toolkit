@@ -93,3 +93,14 @@ def test_auth_mode_allows_bearer_token(client, monkeypatch):
     rpc_response = client.post("/rpc", json=rpc_payload, headers=headers)
     assert rpc_response.status_code == 200
     assert rpc_response.json()["result"]["serverInfo"]["name"] == "analyst-toolkit"
+
+
+def test_auth_mode_rejects_unauthorized_input_register(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(server_module, "AUTH_TOKEN", "test-token")
+    source = tmp_path / "dirty_penguins.csv"
+    source.write_text("species,bill_length_mm\nAdelie,39.1\n")
+
+    response = client.post("/inputs/register", json={"uri": str(source), "load_into_session": False})
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "Unauthorized"
+    assert isinstance(response.json()["detail"]["trace_id"], str)

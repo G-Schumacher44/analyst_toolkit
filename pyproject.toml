@@ -59,6 +59,7 @@ mcp = [
   "mcp>=1.2.1",
   "pyarrow>=14.0",
   "google-cloud-storage>=2.14",
+  "python-multipart>=0.0.9",
   "pydantic>=2.0",
 ]
 dev = [

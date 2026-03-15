@@ -80,6 +80,7 @@ def _build_cockpit_preview(report: dict[str, Any]) -> dict[str, Any]:
 async def _toolkit_data_dictionary(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     run_id: str | None = None,
     runtime: dict | str | None = None,
     profile_depth: str = "standard",
@@ -93,6 +94,7 @@ async def _toolkit_data_dictionary(
         runtime_applied = bool(runtime_cfg)
         gcs_path = gcs_path or runtime_overrides.get("gcs_path")
         session_id = session_id or runtime_overrides.get("session_id")
+        input_id = input_id or runtime_overrides.get("input_id")
         run_id = run_id or runtime_overrides.get("run_id") or "data_dictionary_prelaunch"
 
         delivery_config = {
@@ -108,7 +110,7 @@ async def _toolkit_data_dictionary(
         }
 
         run_id, lifecycle = resolve_run_context(run_id, session_id)
-        df = load_input(gcs_path, session_id=session_id)
+        df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
         if not session_id:
             session_id = save_to_session(df, run_id=run_id)

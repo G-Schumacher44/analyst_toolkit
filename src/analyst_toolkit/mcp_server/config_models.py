@@ -206,6 +206,9 @@ class RuntimeRunConfig(BaseModel):
     session_id: Optional[str] = Field(
         None, description="Optional existing session_id for runtime-scoped execution."
     )
+    input_id: Optional[str] = Field(
+        None, description="Optional canonical input reference returned by the ingest subsystem."
+    )
     input_path: Optional[str] = Field(None, description="Optional runtime input path override.")
 
 

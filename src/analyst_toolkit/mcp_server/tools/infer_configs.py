@@ -14,6 +14,7 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
 async def _toolkit_infer_configs(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     runtime: dict | str | None = None,
     options: dict | None = None,
     modules: list[str] | None = None,
@@ -30,10 +31,11 @@ async def _toolkit_infer_configs(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, _lifecycle = resolve_run_context(run_id, session_id)
     options = options or {}
-    df = load_input(gcs_path, session_id=session_id)
+    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     # If it came from a path and we don't have a session, start one
     if not session_id:
@@ -143,6 +145,10 @@ _INPUT_SCHEMA = {
             "type": "string",
             "description": "Optional: In-memory session identifier from a previous tool run.",
         },
+        "input_id": {
+            "type": "string",
+            "description": "Optional: Canonical server-managed input reference returned by ingest/register flows.",
+        },
         "runtime": {
             "type": ["object", "string"],
             "description": (
@@ -180,6 +186,7 @@ _INPUT_SCHEMA = {
     "anyOf": [
         {"required": ["gcs_path"]},
         {"required": ["session_id"]},
+        {"required": ["input_id"]},
         {"required": ["runtime"]},
     ],
 }

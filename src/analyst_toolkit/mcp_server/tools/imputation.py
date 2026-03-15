@@ -45,6 +45,7 @@ def _column_null_count(df: pd.DataFrame, column: str) -> int:
 async def _toolkit_imputation(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     config: dict | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
@@ -56,6 +57,7 @@ async def _toolkit_imputation(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     for key in (
         "output_bucket",
@@ -73,7 +75,7 @@ async def _toolkit_imputation(
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )
-    df = load_input(gcs_path, session_id=session_id)
+    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     base_cfg = config.get("imputation", config)
 

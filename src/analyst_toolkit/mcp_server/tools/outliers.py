@@ -37,6 +37,7 @@ from analyst_toolkit.mcp_server.schemas import base_input_schema
 async def _toolkit_outliers(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     config: dict | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
@@ -48,6 +49,7 @@ async def _toolkit_outliers(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     for key in (
         "output_bucket",
@@ -67,7 +69,7 @@ async def _toolkit_outliers(
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )
-    df = load_input(gcs_path, session_id=session_id)
+    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     base_cfg = normalize_outliers_config(config.get("outlier_detection", config))
 

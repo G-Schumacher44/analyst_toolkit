@@ -35,6 +35,13 @@ _SESSION_ID_PROP = {
     }
 }
 
+_INPUT_ID_PROP = {
+    "input_id": {
+        "type": "string",
+        "description": "Optional: Canonical server-managed input reference returned by input ingest/register flows.",
+    }
+}
+
 _CONFIG_PROP = {
     "config": {
         "type": "object",
@@ -83,6 +90,7 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
     props = {
         **_GCS_PATH_PROP,
         **_SESSION_ID_PROP,
+        **_INPUT_ID_PROP,
         **_CONFIG_PROP,
         **_RUNTIME_PROP,
         **_RUN_ID_PROP,
@@ -96,6 +104,7 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
         "anyOf": [
             {"required": ["gcs_path"]},
             {"required": ["session_id"]},
+            {"required": ["input_id"]},
         ],
     }
 

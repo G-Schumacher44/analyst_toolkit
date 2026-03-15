@@ -25,7 +25,7 @@ class RuntimeOverlayError(ValueError):
 
 _RUNTIME_ALLOWED_KEYS: dict[str | None, set[str]] = {
     None: {"run", "artifacts", "destinations", "paths", "execution"},
-    "run": {"run_id", "session_id", "input_path"},
+    "run": {"run_id", "session_id", "input_id", "input_path"},
     "artifacts": {
         "export_html",
         "export_xlsx",
@@ -262,6 +262,8 @@ def runtime_to_tool_overrides(runtime: dict[str, Any]) -> dict[str, Any]:
             overrides["run_id"] = run_cfg["run_id"]
         if run_cfg.get("session_id"):
             overrides["session_id"] = run_cfg["session_id"]
+        if run_cfg.get("input_id"):
+            overrides["input_id"] = run_cfg["input_id"]
         if run_cfg.get("input_path"):
             overrides["gcs_path"] = run_cfg["input_path"]
 

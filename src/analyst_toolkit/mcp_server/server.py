@@ -26,14 +26,21 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import mcp.types as types
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from mcp.server import NotificationOptions, Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
+from pydantic import BaseModel
 
 from analyst_toolkit.mcp_server.auth import is_authorized
+from analyst_toolkit.mcp_server.input.ingest import (
+    get_input_descriptor,
+    ingest_uploaded_bytes,
+    register_input_source,
+)
+from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.observability import RuntimeMetrics, log_rpc_event
 from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
 from analyst_toolkit.mcp_server.resources import list_mcp_resources, read_mcp_resource
@@ -105,6 +112,21 @@ def _log_rpc_event(level: int, event: str, **fields: Any) -> None:
 
 def _is_authorized(request: Request) -> bool:
     return is_authorized(request, AUTH_TOKEN)
+
+
+class RegisterInputRequest(BaseModel):
+    uri: str
+    source_type: InputSourceType | None = None
+    session_id: str | None = None
+    run_id: str | None = None
+    load_into_session: bool = True
+
+
+def _require_http_auth(request: Request) -> str:
+    trace_id = new_trace_id()
+    if not _is_authorized(request):
+        raise HTTPException(status_code=401, detail={"error": "Unauthorized", "trace_id": trace_id})
+    return trace_id
 
 
 @mcp_server.list_tools()
@@ -303,6 +325,95 @@ async def rpc_handler(request: Request) -> JSONResponse:
     )
 
 
+@app.post("/inputs/upload")
+async def upload_input(
+    request: Request,
+    file: UploadFile = File(...),
+    session_id: str | None = Form(default=None),
+    run_id: str | None = Form(default=None),
+    load_into_session: bool = Form(default=True),
+) -> JSONResponse:
+    trace_id = _require_http_auth(request)
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Empty upload payload.", "trace_id": trace_id},
+        )
+    try:
+        descriptor, df, effective_session_id = ingest_uploaded_bytes(
+            filename=file.filename or "upload.csv",
+            payload=payload,
+            media_type=file.content_type,
+            session_id=session_id,
+            run_id=run_id,
+            load_into_session=load_into_session,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "trace_id": trace_id},
+        ) from exc
+
+    summary = {}
+    if df is not None:
+        summary = {"row_count": int(df.shape[0]), "column_count": int(df.shape[1])}
+    return JSONResponse(
+        {
+            "status": "pass",
+            "trace_id": trace_id,
+            "input": descriptor.to_dict(),
+            "session_id": effective_session_id or "",
+            "summary": summary,
+        }
+    )
+
+
+@app.post("/inputs/register")
+async def register_input(request: Request, payload: RegisterInputRequest) -> JSONResponse:
+    trace_id = _require_http_auth(request)
+    try:
+        descriptor, df, effective_session_id = register_input_source(
+            reference=payload.uri,
+            source_type=payload.source_type,
+            session_id=payload.session_id,
+            run_id=payload.run_id,
+            load_into_session=payload.load_into_session,
+        )
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=501,
+            detail={"error": str(exc), "trace_id": trace_id},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": str(exc), "trace_id": trace_id},
+        ) from exc
+
+    summary = {}
+    if df is not None:
+        summary = {"row_count": int(df.shape[0]), "column_count": int(df.shape[1])}
+    return JSONResponse(
+        {
+            "status": "pass",
+            "trace_id": trace_id,
+            "input": descriptor.to_dict(),
+            "session_id": effective_session_id or "",
+            "summary": summary,
+        }
+    )
+
+
+@app.get("/inputs/{input_id}")
+async def read_input_descriptor(input_id: str, request: Request) -> JSONResponse:
+    trace_id = _require_http_auth(request)
+    descriptor = get_input_descriptor(input_id)
+    if descriptor is None:
+        raise HTTPException(status_code=404, detail={"error": "Input not found.", "trace_id": trace_id})
+    return JSONResponse({"status": "pass", "trace_id": trace_id, "input": descriptor.to_dict()})
+
+
 @app.get("/health")
 async def health(request: Request) -> Any:
     if not _is_authorized(request):
@@ -343,6 +454,7 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     final_audit,
     imputation,
     infer_configs,
+    input_ingest,
     jobs,
     normalization,
     outliers,
