@@ -269,9 +269,7 @@ def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(client, 
     assert isinstance(detail["trace_id"], str)
 
 
-def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(
-    client, clean_input_env
-):
+def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(client, clean_input_env):
     payload = {
         "jsonrpc": "2.0",
         "id": 903,
