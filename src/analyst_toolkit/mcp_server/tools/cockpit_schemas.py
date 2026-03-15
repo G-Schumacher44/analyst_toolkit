@@ -85,10 +85,21 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
         **_GCS_PATH_PROP,
         "session_id": {
             "type": "string",
-            "description": "Optional session scope when building from an existing run context.",
+            "description": (
+                "Optional in-memory session identifier to use as the primary input source "
+                "when building from an existing run context."
+            ),
         },
         **_INPUT_ID_PROP,
-        **_RUN_ID_PROP,
+        "run_id": {
+            "type": "string",
+            "description": (
+                "Optional run identifier used for output paths and artifact naming. "
+                "This does not resolve the input source by itself; provide gcs_path, "
+                "session_id, or input_id."
+            ),
+            "default": "mcp_run",
+        },
         "runtime": {
             "type": "object",
             "description": "Optional runtime overlay for cross-cutting execution settings.",
