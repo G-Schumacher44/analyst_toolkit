@@ -634,6 +634,64 @@ def test_rpc_data_dictionary_tool(client, mocker, tmp_path):
     )
 
 
+def test_rpc_data_dictionary_tool_passes_explicit_input_id(client, mocker, tmp_path):
+    dataframe = pd.DataFrame(
+        {
+            "customer_id": [1, 2],
+            "status": ["new", "done"],
+            "amount": [10.5, 12.0],
+        }
+    )
+    load_input = mocker.patch.object(data_dictionary_tool, "load_input", return_value=dataframe)
+    mocker.patch.object(data_dictionary_tool, "save_to_session", return_value="sess_dictionary")
+    mocker.patch.object(data_dictionary_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(data_dictionary_tool, "export_dataframes", return_value=None)
+    mocker.patch.object(
+        data_dictionary_tool,
+        "export_html_report",
+        return_value=str(tmp_path / "dictionary.html"),
+    )
+    mocker.patch.object(
+        data_dictionary_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": local_path,
+            "local_path": local_path,
+            "url": "" if local_path.endswith(".xlsx") else "https://example.com/dictionary.html",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(
+        data_dictionary_tool,
+        "_toolkit_infer_configs",
+        mocker.AsyncMock(return_value={"status": "pass", "configs": {}, "warnings": []}),
+    )
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "tools/call",
+        "params": {
+            "name": "data_dictionary",
+            "arguments": {
+                "gcs_path": "gs://bucket/data.csv",
+                "input_id": "input_deadbeefcafe",
+                "run_id": "dictionary_prelaunch_002",
+            },
+        },
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] in {"pass", "warn"}
+    load_input.assert_called_once_with(
+        "gs://bucket/data.csv",
+        session_id=None,
+        input_id="input_deadbeefcafe",
+    )
+
+
 @pytest.mark.asyncio
 async def test_rpc_tool_invocation_structure(mocker):
     """

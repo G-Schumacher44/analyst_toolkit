@@ -198,7 +198,7 @@ def load_input(
             )
 
     df = _load_input_dataframe(path=normalized_path, session_id=session_id, input_id=input_id)
-    if session_id and StateStore.get(session_id) is not None:
+    if session_id and not normalized_path and not input_id and StateStore.get(session_id) is not None:
         logger.info(f"Loaded from session: {session_id}")
     return df
 

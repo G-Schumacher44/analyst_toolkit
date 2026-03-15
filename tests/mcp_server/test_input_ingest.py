@@ -24,7 +24,9 @@ def test_inputs_upload_creates_session_and_descriptor(client, monkeypatch, tmp_p
 
     response = client.post(
         "/inputs/upload",
-        files={"file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")},
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
         data={"load_into_session": "true"},
     )
     assert response.status_code == 200

@@ -1,37 +1,57 @@
 """MCP tools for registering and inspecting canonical input sources."""
 
+import asyncio
+import logging
+from functools import partial
+
 from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor, register_input_source
+from analyst_toolkit.mcp_server.input.loaders import InputNotSupportedError
+from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.registry import register_tool
+from analyst_toolkit.mcp_server.response_utils import new_trace_id
+
+logger = logging.getLogger("analyst_toolkit.mcp_server.input_ingest")
 
 
 async def _toolkit_register_input(
     uri: str,
-    source_type: str | None = None,
+    source_type: InputSourceType | None = None,
     session_id: str | None = None,
     run_id: str | None = None,
     load_into_session: bool = True,
 ) -> dict:
     try:
-        descriptor, df, effective_session_id = register_input_source(
-            reference=uri,
-            source_type=source_type,  # type: ignore[arg-type]
-            session_id=session_id,
-            run_id=run_id,
-            load_into_session=load_into_session,
+        loop = asyncio.get_running_loop()
+        descriptor, df, effective_session_id = await loop.run_in_executor(
+            None,
+            partial(
+                register_input_source,
+                reference=uri,
+                source_type=source_type,
+                session_id=session_id,
+                run_id=run_id,
+                load_into_session=load_into_session,
+            ),
         )
-    except NotImplementedError as exc:
+    except InputNotSupportedError:
+        trace_id = new_trace_id()
+        logger.exception("Input source unsupported (trace_id=%s)", trace_id)
         return {
             "status": "error",
             "module": "register_input",
             "code": "INPUT_SOURCE_UNSUPPORTED",
-            "message": str(exc),
+            "message": "The specified input source is not supported.",
+            "trace_id": trace_id,
         }
-    except Exception as exc:
+    except Exception:
+        trace_id = new_trace_id()
+        logger.exception("Failed to register input (trace_id=%s)", trace_id)
         return {
             "status": "error",
             "module": "register_input",
             "code": "INPUT_REGISTER_FAILED",
-            "message": str(exc),
+            "message": "Failed to register input source.",
+            "trace_id": trace_id,
         }
 
     summary = {}
@@ -47,13 +67,16 @@ async def _toolkit_register_input(
 
 
 async def _toolkit_get_input_descriptor(input_id: str) -> dict:
-    descriptor = get_input_descriptor(input_id)
+    loop = asyncio.get_running_loop()
+    descriptor = await loop.run_in_executor(None, get_input_descriptor, input_id)
     if descriptor is None:
+        trace_id = new_trace_id()
         return {
             "status": "error",
             "module": "get_input_descriptor",
             "code": "INPUT_NOT_FOUND",
-            "message": f"Input not found: {input_id}",
+            "message": "Input descriptor not found.",
+            "trace_id": trace_id,
         }
     return {
         "status": "pass",
@@ -66,8 +89,9 @@ register_tool(
     name="register_input",
     fn=_toolkit_register_input,
     description=(
-        "Register a server-visible local path or gs:// URI as a canonical input reference "
-        "and optionally bind it into a session."
+        "Register a canonical input reference from a server-visible local path or gs:// URI "
+        "and optionally bind it into a session. Local server_path access is restricted to "
+        "server-configured allowlisted roots."
     ),
     input_schema={
         "type": "object",
@@ -82,7 +106,13 @@ register_tool(
                 "type": "string",
                 "description": "Optional session to bind the registered input to.",
             },
-            "run_id": {"type": "string", "description": "Optional run identifier."},
+            "run_id": {
+                "type": "string",
+                "description": (
+                    "Optional run identifier. Provide a stable run_id if clients need "
+                    "idempotent retries; omitted run_id values may create distinct runs."
+                ),
+            },
             "load_into_session": {
                 "type": "boolean",
                 "description": "If true, load the input and save it into the session store.",

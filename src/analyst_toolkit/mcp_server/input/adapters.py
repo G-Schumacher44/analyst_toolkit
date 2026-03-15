@@ -18,7 +18,9 @@ def detect_source_type(reference: str) -> InputSourceType:
     return "server_path"
 
 
-def resolve_source_reference(reference: str, source_type: InputSourceType | None = None) -> tuple[InputSourceType, str, str]:
+def resolve_source_reference(
+    reference: str, source_type: InputSourceType | None = None
+) -> tuple[InputSourceType, str, str]:
     resolved_type = source_type or detect_source_type(reference)
     if resolved_type == "gcs":
         return resolved_type, reference, Path(reference).name or reference

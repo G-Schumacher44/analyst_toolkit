@@ -410,7 +410,9 @@ async def read_input_descriptor(input_id: str, request: Request) -> JSONResponse
     trace_id = _require_http_auth(request)
     descriptor = get_input_descriptor(input_id)
     if descriptor is None:
-        raise HTTPException(status_code=404, detail={"error": "Input not found.", "trace_id": trace_id})
+        raise HTTPException(
+            status_code=404, detail={"error": "Input not found.", "trace_id": trace_id}
+        )
     return JSONResponse({"status": "pass", "trace_id": trace_id, "input": descriptor.to_dict()})
 
 
