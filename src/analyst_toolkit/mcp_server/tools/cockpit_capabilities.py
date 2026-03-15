@@ -5,15 +5,11 @@ from typing import Any
 
 import yaml
 
-_TEMPLATE_SPECS = [
-    ("diagnostics", "diagnostics", "config/diag_config_template.yaml"),
-    ("validation", "validation", "config/validation_config_template.yaml"),
-    ("normalization", "normalization", "config/normalization_config_template.yaml"),
-    ("duplicates", "duplicates", "config/dups_config_template.yaml"),
-    ("outliers", "outlier_detection", "config/outlier_config_template.yaml"),
-    ("imputation", "imputation", "config/imputation_config_template.yaml"),
-    ("final_audit", "final_audit", "config/final_audit_config_template.yaml"),
-]
+from analyst_toolkit.mcp_server.templates import (
+    list_module_template_specs,
+    list_runtime_template_specs,
+    list_workflow_template_specs,
+)
 
 _KEY_KNOBS: dict[str, list[dict[str, str]]] = {
     "diagnostics": [
@@ -121,6 +117,17 @@ _KEY_KNOBS: dict[str, list[dict[str, str]]] = {
     ],
 }
 
+_WORKFLOW_TOOL_METADATA: dict[str, dict[str, Any]] = {
+    "auto_heal": {
+        "description": "One-shot automated cleaning request with runtime-scoped controls and dashboard output.",
+        "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
+    },
+    "data_dictionary": {
+        "description": "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts.",
+        "outputs": ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"],
+    },
+}
+
 
 def _load_template_root(root_key: str, template_path: str) -> dict[str, Any]:
     path = Path(template_path)
@@ -147,8 +154,25 @@ def _extract_value(root: dict[str, Any], path: str) -> Any:
 
 
 def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any]:
+    module_template_specs = list_module_template_specs()
+    workflow_template_specs = list_workflow_template_specs()
+    runtime_template_specs = list_runtime_template_specs()
+    if not runtime_template_specs:
+        raise ValueError("Runtime template inventory is empty.")
+    if len(runtime_template_specs) > 1:
+        raise ValueError("Multiple runtime templates are not supported in capability catalog.")
+    runtime_template_path = runtime_template_specs[0].path.as_posix()
+    workflow_template_paths = {
+        spec.tool: spec.path.as_posix() for spec in workflow_template_specs if spec.tool
+    }
+
     modules: list[dict[str, Any]] = []
-    for tool_name, root_key, template_path in _TEMPLATE_SPECS:
+    for spec in module_template_specs:
+        if not spec.tool or not spec.config_root:
+            continue
+        tool_name = spec.tool
+        root_key = spec.config_root
+        template_path = spec.path.as_posix()
         root = _load_template_root(root_key, template_path)
         knobs = []
         for knob in _KEY_KNOBS.get(tool_name, []):
@@ -179,9 +203,9 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             "inference_tool": "infer_configs",
             "manual_override_recommended": True,
             "runtime_overlay_available": True,
-            "runtime_template_path": "config/runtime_overlay_template.yaml",
-            "auto_heal_template_path": "config/auto_heal_request_template.yaml",
-            "data_dictionary_template_path": "config/data_dictionary_request_template.yaml",
+            "runtime_template_path": runtime_template_path,
+            "auto_heal_template_path": workflow_template_paths.get("auto_heal", ""),
+            "data_dictionary_template_path": workflow_template_paths.get("data_dictionary", ""),
         },
         "global_controls": [
             {
@@ -297,17 +321,12 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
         ],
         "workflow_templates": [
             {
-                "tool": "auto_heal",
-                "template_path": "config/auto_heal_request_template.yaml",
-                "description": "One-shot automated cleaning request with runtime-scoped controls and dashboard output.",
-                "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
-            },
-            {
-                "tool": "data_dictionary",
-                "template_path": "config/data_dictionary_request_template.yaml",
-                "description": "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts.",
-                "outputs": ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"],
-            },
+                "tool": spec.tool,
+                "template_path": spec.path.as_posix(),
+                **_WORKFLOW_TOOL_METADATA[spec.tool],
+            }
+            for spec in workflow_template_specs
+            if spec.tool in _WORKFLOW_TOOL_METADATA
         ],
         "golden_templates": sorted(golden_configs.keys()),
         "modules": modules,

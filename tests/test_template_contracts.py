@@ -8,6 +8,7 @@ import yaml
 
 from analyst_toolkit.mcp_server.templates import (
     get_golden_configs,
+    list_config_template_specs,
     list_template_resources,
     read_template_resource,
 )
@@ -18,9 +19,7 @@ def test_template_resource_uris_cover_template_files():
     uris = {item["uri"] for item in resources}
 
     expected_config = {
-        f"analyst://templates/config/{p.name}"
-        for p in sorted(Path("config").glob("*_template.yaml"))
-        if p.is_file()
+        f"analyst://templates/config/{spec.filename}" for spec in list_config_template_specs()
     }
     expected_golden = {
         f"analyst://templates/golden/{p.name}"
@@ -30,6 +29,9 @@ def test_template_resource_uris_cover_template_files():
 
     assert expected_config <= uris
     assert expected_golden <= uris
+    # These are concrete local/internal run configs, not user-facing template resources.
+    assert "analyst://templates/config/nightly_silver_qa_config.yaml" not in uris
+    assert "analyst://templates/config/run_toolkit_config.yaml" not in uris
 
 
 def test_all_template_resources_parse_as_yaml_mapping():

@@ -2,6 +2,8 @@
 templates.py — Template discovery for tool calls and MCP resources.
 """
 
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -12,18 +14,141 @@ RESOURCE_HOST = "templates"
 
 CONFIG_DIR = Path("config")
 GOLDEN_TEMPLATE_DIR = CONFIG_DIR / "golden_templates"
+GOLDEN_TEMPLATE_FILENAMES: tuple[str, ...] = (
+    "compliance_audit.yaml",
+    "fraud_detection.yaml",
+    "quick_migration.yaml",
+)
+
+
+@dataclass(frozen=True)
+class TemplateSpec:
+    filename: str
+    description: str
+    category: str
+    tool: str | None = None
+    config_root: str | None = None
+
+    @property
+    def path(self) -> Path:
+        return CONFIG_DIR / self.filename
+
+    @property
+    def uri(self) -> str:
+        return f"{RESOURCE_SCHEME}://{RESOURCE_HOST}/config/{self.filename}"
+
+    @property
+    def name(self) -> str:
+        return f"config::{Path(self.filename).stem}"
+
+
+CONFIG_TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
+    TemplateSpec(
+        filename="diag_config_template.yaml",
+        description="Module config template: diagnostics",
+        category="module_config",
+        tool="diagnostics",
+        config_root="diagnostics",
+    ),
+    TemplateSpec(
+        filename="validation_config_template.yaml",
+        description="Module config template: validation",
+        category="module_config",
+        tool="validation",
+        config_root="validation",
+    ),
+    TemplateSpec(
+        filename="normalization_config_template.yaml",
+        description="Module config template: normalization",
+        category="module_config",
+        tool="normalization",
+        config_root="normalization",
+    ),
+    TemplateSpec(
+        filename="dups_config_template.yaml",
+        description="Module config template: duplicates",
+        category="module_config",
+        tool="duplicates",
+        config_root="duplicates",
+    ),
+    TemplateSpec(
+        filename="outlier_config_template.yaml",
+        description="Module config template: outlier detection",
+        category="module_config",
+        tool="outliers",
+        config_root="outlier_detection",
+    ),
+    TemplateSpec(
+        filename="handling_config_template.yaml",
+        description="Module config template: outlier handling",
+        category="module_config",
+    ),
+    TemplateSpec(
+        filename="imputation_config_template.yaml",
+        description="Module config template: imputation",
+        category="module_config",
+        tool="imputation",
+        config_root="imputation",
+    ),
+    TemplateSpec(
+        filename="final_audit_config_template.yaml",
+        description="Module config template: final audit",
+        category="module_config",
+        tool="final_audit",
+        config_root="final_audit",
+    ),
+    TemplateSpec(
+        filename="certification_config_template.yaml",
+        description="Module config template: certification",
+        category="module_config",
+    ),
+    TemplateSpec(
+        filename="runtime_overlay_template.yaml",
+        description="Runtime/shared template: run-scoped overlays and destinations",
+        category="runtime_template",
+    ),
+    TemplateSpec(
+        filename="auto_heal_request_template.yaml",
+        description="Workflow template: auto-heal request",
+        category="workflow_template",
+        tool="auto_heal",
+    ),
+    TemplateSpec(
+        filename="data_dictionary_request_template.yaml",
+        description="Workflow template: data dictionary request",
+        category="workflow_template",
+        tool="data_dictionary",
+    ),
+)
 
 
 def _iter_golden_template_files() -> list[Path]:
-    if not GOLDEN_TEMPLATE_DIR.exists():
-        return []
-    return sorted(p for p in GOLDEN_TEMPLATE_DIR.glob("*.yaml") if p.is_file())
+    return [
+        GOLDEN_TEMPLATE_DIR / filename
+        for filename in GOLDEN_TEMPLATE_FILENAMES
+        if (GOLDEN_TEMPLATE_DIR / filename).is_file()
+    ]
 
 
-def _iter_standard_template_files() -> list[Path]:
-    if not CONFIG_DIR.exists():
-        return []
-    return sorted(p for p in CONFIG_DIR.glob("*_template.yaml") if p.is_file())
+@lru_cache(maxsize=1)
+def list_config_template_specs() -> list[TemplateSpec]:
+    return [spec for spec in CONFIG_TEMPLATE_SPECS if spec.path.is_file()]
+
+
+def refresh_template_spec_cache() -> None:
+    list_config_template_specs.cache_clear()
+
+
+def list_module_template_specs() -> list[TemplateSpec]:
+    return [spec for spec in list_config_template_specs() if spec.category == "module_config"]
+
+
+def list_workflow_template_specs() -> list[TemplateSpec]:
+    return [spec for spec in list_config_template_specs() if spec.category == "workflow_template"]
+
+
+def list_runtime_template_specs() -> list[TemplateSpec]:
+    return [spec for spec in list_config_template_specs() if spec.category == "runtime_template"]
 
 
 def list_template_resources() -> list[dict[str, str]]:
@@ -42,13 +167,14 @@ def list_template_resources() -> list[dict[str, str]]:
             }
         )
 
-    for path in _iter_standard_template_files():
+    for spec in list_config_template_specs():
         resources.append(
             {
-                "name": f"config::{path.stem}",
-                "uri": f"{RESOURCE_SCHEME}://{RESOURCE_HOST}/config/{path.name}",
-                "description": f"Config template: {path.stem}",
+                "name": spec.name,
+                "uri": spec.uri,
+                "description": spec.description,
                 "mimeType": "application/x-yaml",
+                "category": spec.category,
             }
         )
 
@@ -73,12 +199,13 @@ def resolve_template_uri(uri: str) -> Path:
         raise FileNotFoundError(f"Invalid template filename in URI: {uri}")
 
     if group == "golden":
+        if filename not in GOLDEN_TEMPLATE_FILENAMES:
+            raise FileNotFoundError(f"Golden resource is not in the exposed allowlist: {uri}")
         base = GOLDEN_TEMPLATE_DIR
     elif group == "config":
-        if not filename.endswith("_template.yaml"):
-            raise FileNotFoundError(
-                f"Only *_template.yaml files are allowed for config resources: {uri}"
-            )
+        allowed = {spec.filename for spec in list_config_template_specs()}
+        if filename not in allowed:
+            raise FileNotFoundError(f"Config resource is not in the exposed allowlist: {uri}")
         base = CONFIG_DIR
     else:
         raise FileNotFoundError(f"Unknown template group in URI: {uri}")

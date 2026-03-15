@@ -7,9 +7,19 @@ from typing import Any, Awaitable, Callable
 
 import mcp.types as types
 
+from analyst_toolkit.mcp_server.resources import ResourceNotFoundError, ResourcePayloadError
 from analyst_toolkit.mcp_server.response_utils import (
     attach_trace_id,
     build_error_envelope,
+)
+
+_ALLOWED_RESOURCE_MIME_TYPES = frozenset(
+    {
+        "application/json",
+        "application/x-yaml",
+        "text/markdown",
+        "text/plain",
+    }
 )
 
 
@@ -34,6 +44,12 @@ def rpc_ok(req_id: Any, result: Any) -> dict:
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
 
+def _normalize_resource_mime_type(mime_type: str | None) -> str:
+    if mime_type in _ALLOWED_RESOURCE_MIME_TYPES:
+        return mime_type
+    return "application/octet-stream"
+
+
 async def dispatch_rpc_method(
     *,
     req_id: Any,
@@ -45,7 +61,7 @@ async def dispatch_rpc_method(
     resource_io_timeout_sec: float,
     resource_models_with_timeout: Callable[[], Awaitable[list[types.Resource]]],
     resource_template_models: Callable[[], list[types.ResourceTemplate]],
-    read_template_with_timeout: Callable[[str], Awaitable[str]],
+    read_resource_with_timeout: Callable[[str], Awaitable[tuple[str, str]]],
     trace_id: str,
     logger: logging.Logger,
 ) -> RpcDispatchResult:
@@ -187,7 +203,52 @@ async def dispatch_rpc_method(
                 error_code=-32602,
             )
         try:
-            text = await read_template_with_timeout(uri)
+            text, mime_type = await read_resource_with_timeout(uri)
+            mime_type = _normalize_resource_mime_type(mime_type)
+        except ResourceNotFoundError as exc:
+            return RpcDispatchResult(
+                payload=rpc_error(
+                    req_id,
+                    -32602,
+                    f"Resource not found: {exc.code}",
+                    data={
+                        "error": build_error_envelope(
+                            category="io",
+                            code=exc.code.lower(),
+                            message=f"Resource not found for URI: {uri}",
+                            remediation="Refresh resources/list and retry with an existing URI.",
+                            retryable=False,
+                            trace_id=exc.trace_id,
+                        )
+                    },
+                ),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32602,
+            )
+        except ResourcePayloadError as exc:
+            return RpcDispatchResult(
+                payload=rpc_error(
+                    req_id,
+                    -32603,
+                    f"Internal error: {exc.code} (trace_id={exc.trace_id})",
+                    data={
+                        "error": build_error_envelope(
+                            category="internal",
+                            code=exc.code.lower(),
+                            message=str(exc),
+                            remediation=(
+                                "Retry once. If it persists, inspect server logs using trace_id."
+                            ),
+                            retryable=False,
+                            trace_id=exc.trace_id,
+                        )
+                    },
+                ),
+                ok=False,
+                level=logging.ERROR,
+                error_code=-32603,
+            )
         except FileNotFoundError as exc:
             return RpcDispatchResult(
                 payload=rpc_error(
@@ -198,7 +259,7 @@ async def dispatch_rpc_method(
                         "error": build_error_envelope(
                             category="io",
                             code="resource_not_found",
-                            message=f"Template resource not found for URI: {uri}",
+                            message=f"Resource not found for URI: {uri}",
                             remediation="Refresh resources/list and retry with an existing URI.",
                             retryable=False,
                             trace_id=trace_id,
@@ -222,7 +283,7 @@ async def dispatch_rpc_method(
                         "error": build_error_envelope(
                             category="transport",
                             code="resource_read_timeout",
-                            message=f"Template read timed out for URI: {uri}",
+                            message=f"Resource read timed out for URI: {uri}",
                             remediation=(
                                 "Retry once. If repeated, increase ANALYST_MCP_RESOURCE_TIMEOUT_SEC "
                                 "and validate storage responsiveness."
@@ -268,7 +329,7 @@ async def dispatch_rpc_method(
                     "contents": [
                         {
                             "uri": uri,
-                            "mimeType": "application/x-yaml",
+                            "mimeType": mime_type,
                             "text": text,
                         }
                     ]
