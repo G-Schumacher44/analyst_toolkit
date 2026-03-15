@@ -6,7 +6,11 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.0-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
+    <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
+  </a>
+  <img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-analyst--toolkit--mcp-blue?logo=docker">
 </p>
 
 ---
@@ -16,6 +20,8 @@
 The Analyst Toolkit is governed entirely by modular YAML configuration files. These configs define the behavior of each module — from data validation and profiling to outlier handling and certification testing.
 
 Each YAML configuration file serves a specific purpose and is passed to the pipeline via CLI or notebook workflows.
+
+For MCP-specific template/resource exposure and remote tool usage, see the [MCP Server Guide](mcp_server_guide.md).
 
 ### Downloadable YAML Templates
 
