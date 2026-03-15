@@ -16,6 +16,8 @@ reviews:
     enabled: true
     drafts: true
     auto_incremental_review: true
+    base_branches:
+      - "dev"
   path_filters:
     - "src/**"
     - "tests/**"
