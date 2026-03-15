@@ -169,7 +169,9 @@ def bind_session_input(session_id: str, input_id: str) -> None:
         _prune_locked(now)
         entry = _INPUTS.get(input_id)
         if entry is None:
-            raise ValueError(f"[{INPUT_NOT_FOUND_CODE}] input_id '{input_id}' not found in registry")
+            raise ValueError(
+                f"[{INPUT_NOT_FOUND_CODE}] input_id '{input_id}' not found in registry"
+            )
         _refresh_input_locked(input_id, entry.descriptor, now)
         _refresh_session_locked(session_id, input_id, now)
 
