@@ -253,6 +253,38 @@ async def test_toolkit_infer_configs_includes_apply_next_actions(monkeypatch, mo
 
 
 @pytest.mark.asyncio
+async def test_toolkit_infer_configs_ignores_unsupported_external_modules_kw(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(*, root, input_path, sample_rows=None):
+        assert root == "."
+        assert input_path
+        assert sample_rows == 5
+        return {"normalization": "normalization:\\n  rules: {}\\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_compat",
+        modules=["normalization"],
+        sample_rows=5,
+    )
+
+    assert result["status"] == "pass"
+    assert "normalization" in result["configs"]
+    assert any(
+        "does not support the following arguments" in warning for warning in result["warnings"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_toolkit_infer_configs_accepts_runtime_overrides(monkeypatch, mocker):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
     captured = {}
