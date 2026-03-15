@@ -98,7 +98,7 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
                 "This does not resolve the input source by itself; provide gcs_path, "
                 "session_id, or input_id."
             ),
-            "default": "mcp_run",
+            "default": "data_dictionary_prelaunch",
         },
         "runtime": {
             "type": "object",
