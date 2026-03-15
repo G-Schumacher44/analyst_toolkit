@@ -91,7 +91,11 @@ def _artifact_server_root() -> Path:
     )
     for sensitive_root in sensitive_roots:
         sensitive_root = sensitive_root.resolve(strict=False)
-        if candidate == sensitive_root or sensitive_root in candidate.parents:
+        if (
+            candidate == sensitive_root
+            or sensitive_root in candidate.parents
+            or candidate in sensitive_root.parents
+        ):
             raise ValueError(
                 f"ANALYST_MCP_ARTIFACT_SERVER_ROOT points at a protected path: {candidate}"
             )

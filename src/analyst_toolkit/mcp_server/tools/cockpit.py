@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -950,11 +951,18 @@ async def _toolkit_ensure_artifact_server() -> dict:
     try:
         result = ensure_local_artifact_server()
     except ValueError as exc:
+        trace_id = str(uuid.uuid4())
+        logger.exception(
+            "Artifact server configuration invalid trace_id=%s",
+            trace_id,
+            exc_info=exc,
+        )
         return {
             "status": "error",
             "module": "artifact_server",
             "code": "ARTIFACT_SERVER_CONFIG_INVALID",
-            "message": str(exc),
+            "trace_id": trace_id,
+            "message": "Artifact server configuration invalid; see trace_id.",
             "warnings": [],
         }
     result_status = str(result.get("status", "")).lower()

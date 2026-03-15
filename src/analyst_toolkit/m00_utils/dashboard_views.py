@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import posixpath
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -48,14 +49,15 @@ def _render_cockpit_artifact_reference(value: Any, *, empty_label: str) -> str:
     if not text:
         return f"<p class='empty'>{html.escape(empty_label)}</p>"
     normalized = text
-    if normalized.startswith(("http://", "https://")):
+    parsed = urlparse(normalized)
+    if parsed.scheme in {"http", "https"}:
         rendered = html.escape(normalized)
         return (
             "<p class='subtle'><a href='"
             f"{rendered}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
         )
     exports_index = normalized.rfind("exports/")
-    if exports_index >= 0:
+    if not parsed.scheme and exports_index >= 0:
         normalized = "/" + normalized[exports_index:]
 
     rendered = html.escape(normalized)
