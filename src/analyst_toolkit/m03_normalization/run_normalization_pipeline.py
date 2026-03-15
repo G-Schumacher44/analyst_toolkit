@@ -94,6 +94,8 @@ def run_normalization_pipeline(
     df_original, df_normalized, changelog = apply_normalization(df, module_cfg)
 
     settings = module_cfg.get("settings", {})
+    rules = module_cfg.get("rules")
+    normalized_rules = rules if isinstance(rules, dict) else {}
     report_tables = generate_transformation_report(
         df_original=df_original,
         df_transformed=df_normalized,
@@ -101,7 +103,7 @@ def run_normalization_pipeline(
         module_name="normalization",
         run_id=run_id,
         export_config=settings,
-        preview_columns=module_cfg.get("rules", {}).get("preview_columns", []),
+        preview_columns=normalized_rules.get("preview_columns", []),
     )
 
     if settings.get("show_inline", True) and notebook:

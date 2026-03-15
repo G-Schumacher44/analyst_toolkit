@@ -285,7 +285,7 @@ def _render_normalization_column_value_analysis(column_value_analysis: Any) -> s
             continue
         normalized_values = payload.get("normalized_values", pd.DataFrame())
         value_audit = payload.get("value_audit", pd.DataFrame())
-        if not isinstance(normalized_values, pd.DataFrame) and not isinstance(
+        if not isinstance(normalized_values, pd.DataFrame) or not isinstance(
             value_audit, pd.DataFrame
         ):
             continue

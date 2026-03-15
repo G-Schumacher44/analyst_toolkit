@@ -120,7 +120,10 @@ def generate_transformation_report(
     col_change_summary = diff_table.groupby("column").size().reset_index(name="change_count")
     report_tables["column_changes_summary"] = col_change_summary
 
-    selected_preview_columns = list(preview_columns or [])
+    if isinstance(preview_columns, str):
+        selected_preview_columns = [preview_columns]
+    else:
+        selected_preview_columns = list(preview_columns or [])
     if (
         not selected_preview_columns
         and not col_change_summary.empty
