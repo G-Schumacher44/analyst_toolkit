@@ -1,6 +1,7 @@
 import pytest
 
 from analyst_toolkit.mcp_server.input import registry as input_registry
+from analyst_toolkit.mcp_server.input.errors import InputConflictError
 from analyst_toolkit.mcp_server.input.models import InputDescriptor
 
 
@@ -51,7 +52,7 @@ def test_registry_rejects_conflicting_descriptor_reuse(monkeypatch):
 
     input_registry.save_descriptor(_descriptor("input_conflict", sha256="abc"))
 
-    with pytest.raises(ValueError, match="Conflicting descriptor"):
+    with pytest.raises(InputConflictError, match="Conflicting descriptor"):
         input_registry.save_descriptor(_descriptor("input_conflict", sha256="def"))
 
 
@@ -85,3 +86,29 @@ def test_registry_expires_descriptors_and_session_bindings(monkeypatch):
     clock["now"] = 1006.0
     assert input_registry.get_descriptor("input_ttl") is None
     assert input_registry.get_session_input_id("sess_ttl") is None
+
+
+def test_remove_descriptor_cleans_up_session_bindings(monkeypatch):
+    monkeypatch.setattr(input_registry, "_REGISTRY_MAX_ENTRIES", 8)
+    monkeypatch.setattr(input_registry, "_REGISTRY_TTL_SEC", 3600.0)
+    input_registry.clear()
+
+    input_registry.save_descriptor(_descriptor("input_remove", session_id="sess_remove"))
+    input_registry.remove_descriptor("input_remove")
+
+    assert input_registry.get_descriptor("input_remove") is None
+    assert input_registry.get_session_input_id("sess_remove") is None
+
+
+def test_get_registry_stats_reports_current_counts(monkeypatch):
+    monkeypatch.setattr(input_registry, "_REGISTRY_MAX_ENTRIES", 8)
+    monkeypatch.setattr(input_registry, "_REGISTRY_TTL_SEC", 3600.0)
+    input_registry.clear()
+
+    input_registry.save_descriptor(_descriptor("input_stats", session_id="sess_stats"))
+    stats = input_registry.get_registry_stats()
+
+    assert stats["input_count"] == 1
+    assert stats["session_binding_count"] == 1
+    assert stats["max_entries"] == 8
+    assert stats["ttl_sec"] == 3600.0

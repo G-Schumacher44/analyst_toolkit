@@ -38,6 +38,28 @@ def test_inputs_upload_creates_session_and_descriptor(client, monkeypatch, tmp_p
     assert payload["summary"]["column_count"] == 2
 
 
+def test_inputs_upload_rejects_payload_over_limit(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    monkeypatch.setattr(
+        "analyst_toolkit.mcp_server.input.storage._MAX_UPLOAD_BYTES",
+        8,
+    )
+    StateStore.clear()
+    input_registry.clear()
+
+    response = client.post(
+        "/inputs/upload",
+        files={"file": ("dirty_penguins.csv", b"species,bill_length_mm\n", "text/csv")},
+        data={"load_into_session": "false"},
+    )
+
+    assert response.status_code == 413
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_PAYLOAD_TOO_LARGE"
+    assert isinstance(detail["trace_id"], str)
+
+
 def test_inputs_upload_reuses_input_id_for_same_payload(client, monkeypatch, tmp_path):
     monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
     monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
@@ -170,6 +192,43 @@ def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch,
     )
     assert response.status_code == 400
     assert "not visible to the MCP runtime" in response.json()["detail"]["error"]
+
+
+def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    StateStore.clear()
+    input_registry.clear()
+
+    source_one = tmp_path / "dirty_penguins.csv"
+    source_two = tmp_path / "clean_penguins.csv"
+    _write_sample_csv(source_one)
+    _write_sample_csv(source_two)
+
+    first = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": False,
+            "idempotency_key": "shared-key",
+        },
+    )
+    second = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_two),
+            "load_into_session": False,
+            "idempotency_key": "shared-key",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    detail = second.json()["detail"]
+    assert detail["code"] == "INPUT_CONFLICT"
+    assert isinstance(detail["trace_id"], str)
 
 
 def test_register_input_tool_and_diagnostics_input_id_flow(client, monkeypatch, mocker, tmp_path):
