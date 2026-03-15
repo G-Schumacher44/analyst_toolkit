@@ -111,7 +111,7 @@ Sample report entry points:
 ```bash
 git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
-make install-dev       # editable install + pre-commit hooks
+make install-dev       # editable install + dev tooling + notebook extras
 ```
 
 **With MCP server deps**

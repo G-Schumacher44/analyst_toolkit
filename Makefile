@@ -52,7 +52,7 @@ install-notebook:
 	pip install -e ".[notebook]"
 
 install-dev:
-	pip install -e ".[dev]"
+	pip install -e ".[dev,notebook]"
 	pre-commit install
 
 # ─── Code quality ──────────────────────────────────────────────────────────────
