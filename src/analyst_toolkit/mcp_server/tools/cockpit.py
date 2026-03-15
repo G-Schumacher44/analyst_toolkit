@@ -18,6 +18,11 @@ from analyst_toolkit.mcp_server.io import (
     get_last_history_read_meta,
     get_run_history,
 )
+from analyst_toolkit.mcp_server.local_artifact_server import (
+    build_local_artifact_url,
+    ensure_local_artifact_server,
+    get_local_artifact_server_status,
+)
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.response_utils import (
     next_action,
@@ -38,6 +43,7 @@ from analyst_toolkit.mcp_server.tools.cockpit_runtime import (
     build_run_history_result,
 )
 from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
+    ARTIFACT_SERVER_INPUT_SCHEMA,
     CAPABILITY_CATALOG_INPUT_SCHEMA,
     COCKPIT_DASHBOARD_INPUT_SCHEMA,
     DATA_HEALTH_REPORT_INPUT_SCHEMA,
@@ -85,6 +91,13 @@ TRUSTED_HISTORY_ENABLED = _env_bool(
     "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
     _env_bool("ANALYST_MCP_STDIO", False),
 )
+
+
+def _artifact_server_control_enabled() -> bool:
+    return _env_bool(
+        "ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL",
+        _env_bool("ANALYST_MCP_STDIO", False),
+    )
 
 
 def _build_capability_catalog() -> dict[str, Any]:
@@ -301,11 +314,20 @@ def _read_history_entries(path: Path) -> list[dict[str, Any]]:
 
 
 def _dashboard_ref(entry: dict[str, Any]) -> str:
-    return str(entry.get("dashboard_url") or entry.get("dashboard_path") or "")
+    dashboard_path = str(entry.get("dashboard_path") or "")
+    return str(
+        entry.get("dashboard_url") or build_local_artifact_url(dashboard_path) or dashboard_path
+    )
 
 
 def _export_ref(entry: dict[str, Any]) -> str:
-    return str(entry.get("export_url") or entry.get("artifact_url") or "")
+    export_path = str(entry.get("export_path") or entry.get("xlsx_path") or "")
+    return str(
+        entry.get("export_url")
+        or entry.get("artifact_url")
+        or build_local_artifact_url(export_path)
+        or export_path
+    )
 
 
 def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
@@ -387,6 +409,44 @@ def _latest_recent_module_entry(module_name: str, limit: int) -> dict[str, Any]:
     return {}
 
 
+def _build_recent_artifact_rows(limit: int) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for history_file in _iter_recent_history_files(limit):
+        history = _read_history_entries(history_file)
+        if not history:
+            continue
+        for entry in reversed(history):
+            module = str(entry.get("module", "")).strip()
+            if not module:
+                continue
+            dashboard_ref = _dashboard_ref(entry)
+            export_ref = _export_ref(entry)
+            artifact_path = str(entry.get("artifact_path", "") or entry.get("dashboard_path", ""))
+            if not (dashboard_ref or export_ref or artifact_path):
+                continue
+            run_id = str(entry.get("run_id", ""))
+            session_id = str(entry.get("session_id", ""))
+            key = (run_id, session_id, module, dashboard_ref or export_ref or artifact_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "Run": run_id or "Unknown",
+                    "Session": session_id or "",
+                    "Module": _module_display_name(module),
+                    "Status": str(entry.get("status", "unknown")).upper(),
+                    "Dashboard": dashboard_ref,
+                    "Export": export_ref,
+                    "Artifact Path": artifact_path,
+                }
+            )
+            if len(rows) >= 24:
+                return rows
+    return rows
+
+
 def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
     recent_runs = _build_recent_run_cards(limit)
     warnings = sum(1 for run in recent_runs if str(run.get("status", "")).lower() in {"warn"})
@@ -402,6 +462,8 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
     top_auto_heal = next((run for run in recent_runs if run.get("auto_heal_dashboard")), {})
     top_final_audit = next((run for run in recent_runs if run.get("final_audit_dashboard")), {})
     latest_dictionary = _latest_recent_module_entry("data_dictionary", limit)
+    artifact_server = get_local_artifact_server_status()
+    artifact_rows = _build_recent_artifact_rows(limit)
     blocker_runs = [
         {
             "run_id": str(run.get("run_id", "")),
@@ -499,6 +561,11 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
         },
     ]
     launchpad = [
+        {
+            "Action": "Ensure Artifact Server",
+            "Tool": "ensure_artifact_server",
+            "Why": "Start localhost artifact serving so dashboard links open as stable local URLs instead of raw paths.",
+        },
         {
             "Action": "Infer Configs",
             "Tool": "infer_configs",
@@ -599,6 +666,8 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
         "resource_groups": resource_groups,
         "launchpad": launchpad,
         "launch_sequences": launch_sequences,
+        "artifact_server": artifact_server,
+        "artifacts": artifact_rows,
         "data_dictionary": {
             "status": str(latest_dictionary.get("status", "not_implemented") or "not_implemented"),
             "template_path": "config/data_dictionary_request_template.yaml",
@@ -819,6 +888,11 @@ async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
                     "Open the quickstart guide for the operator/resource hub content surfaced in the cockpit dashboard.",
                     {},
                 ),
+                next_action(
+                    "ensure_artifact_server",
+                    "Start the local artifact server so cockpit and module dashboard links resolve as local URLs.",
+                    {},
+                ),
             ],
         )
     except Exception:
@@ -843,6 +917,44 @@ async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
         return with_next_actions(failure, [])
 
 
+async def _toolkit_ensure_artifact_server() -> dict:
+    if not _artifact_server_control_enabled():
+        return {
+            "status": "error",
+            "module": "artifact_server",
+            "code": "ARTIFACT_SERVER_CONTROL_DISABLED",
+            "message": (
+                "Artifact server control is disabled. Enable ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL=1 "
+                "or use trusted/local stdio mode."
+            ),
+            "warnings": [],
+        }
+
+    result = ensure_local_artifact_server()
+    status = "pass" if result.get("running") else "warn"
+    return with_next_actions(
+        {
+            "status": status,
+            "module": "artifact_server",
+            "summary": {
+                "running": bool(result.get("running")),
+                "enabled": bool(result.get("enabled")),
+                "already_running": bool(result.get("already_running")),
+            },
+            "base_url": str(result.get("base_url", "")),
+            "root": str(result.get("root", "")),
+            "warnings": ([] if result.get("running") else [str(result.get("message", ""))]),
+        },
+        [
+            next_action(
+                "get_cockpit_dashboard",
+                "Open the cockpit after the artifact server is available so recent dashboard links use served local URLs.",
+                {},
+            )
+        ],
+    )
+
+
 register_tool(
     name="get_agent_playbook",
     fn=_toolkit_get_agent_playbook,
@@ -862,6 +974,13 @@ register_tool(
     fn=_toolkit_get_capability_catalog,
     description="Returns module capability knobs sourced from YAML templates, including defaults.",
     input_schema=CAPABILITY_CATALOG_INPUT_SCHEMA,
+)
+
+register_tool(
+    name="ensure_artifact_server",
+    fn=_toolkit_ensure_artifact_server,
+    description="Ensure the opt-in localhost artifact web server is running for exported dashboard URLs.",
+    input_schema=ARTIFACT_SERVER_INPUT_SCHEMA,
 )
 
 register_tool(

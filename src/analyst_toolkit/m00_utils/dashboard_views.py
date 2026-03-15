@@ -277,6 +277,48 @@ def _render_cockpit_launchpad(
     )
 
 
+def _render_cockpit_artifacts(
+    artifacts: list[dict[str, Any]], artifact_server: dict[str, Any]
+) -> str:
+    artifact_df = pd.DataFrame(artifacts)
+    server_running = bool(artifact_server.get("running"))
+    server_base_url = str(artifact_server.get("base_url", ""))
+    server_root = str(artifact_server.get("root", ""))
+    return (
+        "<div class='readme-grid'>"
+        "<div class='hub-grid'>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Artifact Server</p>"
+        "<h3>Status</h3>"
+        f"{_metric_value('Running' if server_running else 'Not Running')}"
+        "<p class='subtle'>The local artifact server turns export paths into browsable localhost links.</p>"
+        "</div>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Local URL Base</p>"
+        "<h3>Base URL</h3>"
+        f"{_render_reference_value(server_base_url, empty_label='No local base URL is active.')}"
+        "</div>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Served Root</p>"
+        "<h3>Artifact Root</h3>"
+        f"{_render_reference_value(server_root, empty_label='No artifact root recorded.')}"
+        "</div>"
+        "<div class='hub-card'>"
+        "<p class='hub-kicker'>Recent Surfaces</p>"
+        "<h3>Indexed Items</h3>"
+        f"{_metric_value(len(artifacts))}"
+        "<p class='subtle'>Recent dashboards and exports discovered from local run history.</p>"
+        "</div>"
+        "</div>"
+        "<div class='readme-section'>"
+        "<h3>Artifact Index</h3>"
+        "<p class='subtle'>Use this page as the cockpit linkage shelf for recent dashboards, exports, and operator-facing review surfaces.</p>"
+        f"{_render_df(artifact_df, full_preview=True, wide_layout=True)}"
+        "</div>"
+        "</div>"
+    )
+
+
 def _render_cockpit_dictionary(data_dictionary: dict[str, Any]) -> str:
     latest_run_id = str(data_dictionary.get("latest_run_id", ""))
     latest_dashboard = data_dictionary.get("latest_dashboard", "")
@@ -629,6 +671,8 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
     resource_groups = report.get("resource_groups", [])
     launchpad = report.get("launchpad", [])
     launch_sequences = report.get("launch_sequences", [])
+    artifacts = report.get("artifacts", [])
+    artifact_server = report.get("artifact_server", {})
     data_dictionary = report.get("data_dictionary", {})
 
     posture_label = str(operating_posture.get("label", "Healthy"))
@@ -658,6 +702,7 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
     )
     recent_runs_section = _render_cockpit_recent_runs(recent_runs)
     resources_panel = _render_cockpit_resources(resources, resource_groups)
+    artifacts_panel = _render_cockpit_artifacts(artifacts, artifact_server)
     launchpad_panel = _render_cockpit_launchpad(launchpad, launch_sequences)
     dictionary_tab = _render_cockpit_dictionary(data_dictionary)
 
@@ -665,6 +710,7 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
         "<button class='tab-button active' type='button' data-tab-target='cockpit-overview' onclick='window.atkDashboard.openTab(this)'>Overview</button>",
         "<button class='tab-button' type='button' data-tab-target='cockpit-runs' onclick='window.atkDashboard.openTab(this)'>Recent Runs</button>",
         "<button class='tab-button' type='button' data-tab-target='cockpit-resources' onclick='window.atkDashboard.openTab(this)'>Resources</button>",
+        "<button class='tab-button' type='button' data-tab-target='cockpit-artifacts' onclick='window.atkDashboard.openTab(this)'>Artifacts</button>",
         "<button class='tab-button' type='button' data-tab-target='cockpit-launchpad' onclick='window.atkDashboard.openTab(this)'>Launchpad</button>",
         "<button class='tab-button' type='button' data-tab-target='cockpit-dictionary' onclick='window.atkDashboard.openTab(this)'>Data Dictionary</button>",
     ]
@@ -672,6 +718,7 @@ def render_cockpit_dashboard(report: dict[str, Any], run_id: str) -> str:
         f"<div class='tab-panel active' id='cockpit-overview'>{overview_section}</div>",
         f"<div class='tab-panel' id='cockpit-runs'>{recent_runs_section}</div>",
         f"<div class='tab-panel' id='cockpit-resources'>{resources_panel}</div>",
+        f"<div class='tab-panel' id='cockpit-artifacts'>{artifacts_panel}</div>",
         f"<div class='tab-panel' id='cockpit-launchpad'>{launchpad_panel}</div>",
         f"<div class='tab-panel' id='cockpit-dictionary'>{dictionary_tab}</div>",
     ]

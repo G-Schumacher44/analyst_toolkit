@@ -23,6 +23,11 @@ CAPABILITY_CATALOG_INPUT_SCHEMA = {
     },
 }
 
+ARTIFACT_SERVER_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {},
+}
+
 RUN_HISTORY_INPUT_SCHEMA = {
     "type": "object",
     "properties": {

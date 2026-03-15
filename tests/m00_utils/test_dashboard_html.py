@@ -654,9 +654,31 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
         ],
         "launchpad": [
             {
+                "Action": "Ensure Artifact Server",
+                "Tool": "ensure_artifact_server",
+                "Why": "Start localhost artifact serving before opening local dashboard links.",
+            },
+            {
                 "Action": "Infer Configs",
                 "Tool": "infer_configs",
                 "Why": "Seed config review and prelaunch dictionary work.",
+            },
+        ],
+        "artifact_server": {
+            "enabled": True,
+            "running": True,
+            "base_url": "http://127.0.0.1:8765",
+            "root": "exports",
+        },
+        "artifacts": [
+            {
+                "Run": "run_001",
+                "Session": "sess_001",
+                "Module": "Validation",
+                "Status": "WARN",
+                "Dashboard": "http://127.0.0.1:8765/exports/reports/validation/run_001_validation.html",
+                "Export": "gs://bucket/run_001.csv",
+                "Artifact Path": "exports/reports/validation/run_001_validation.html",
             }
         ],
         "data_dictionary": {
@@ -696,6 +718,7 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "Overview" in html
     assert "Recent Runs" in html
     assert "Resources" in html
+    assert "Artifacts" in html
     assert "Launchpad" in html
     assert "Data Dictionary" in html
     assert "What This Cockpit Helps You Review" in html
@@ -708,6 +731,8 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "Missing Dashboard Or Artifact" in html
     assert "Resources For Reading, Planning, And Setup" in html
     assert "Launchpad For Moving From Review To Action" in html
+    assert "Artifact Index" in html
+    assert "http://127.0.0.1:8765" in html
     assert "Recent Dictionary Artifact" in html
     assert "Expected Schema Preview" in html
     assert "Top Readiness Items" in html
@@ -716,6 +741,7 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "run_001" in html
     assert "dictionary_001" in html
     assert "analyst://docs/quickstart" in html
+    assert "ensure_artifact_server" in html
     assert "infer_configs" in html
     assert "config/data_dictionary_request_template.yaml" in html
 

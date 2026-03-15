@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+import analyst_toolkit.mcp_server.local_artifact_server as artifact_server_module
 import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
 import analyst_toolkit.mcp_server.tools.data_dictionary as data_dictionary_tool
 from analyst_toolkit.mcp_server.server import TOOL_REGISTRY, app
@@ -33,6 +34,7 @@ def test_rpc_tools_list(client):
     assert "get_capability_catalog" in tool_names
     assert "get_cockpit_dashboard" in tool_names
     assert "get_pipeline_dashboard" in tool_names
+    assert "ensure_artifact_server" in tool_names
     assert "data_dictionary" in tool_names
     assert "preflight_config" in tool_names
     assert "get_job_status" in tool_names
@@ -136,7 +138,7 @@ def test_rpc_user_quickstart_tool(client, monkeypatch):
     assert "plotting" in result["content"]["markdown"].lower()
     assert "auto_heal" in result["content"]["markdown"]
     assert "cockpit dashboard" in result["content"]["markdown"].lower()
-    assert "local artifact server" in result["content"]["markdown"].lower()
+    assert "ensure_artifact_server" in result["content"]["markdown"]
     assert "machine_guide" in result
     assert result["machine_guide"]["ordered_steps"][0]["tool"] == "diagnostics"
     assert result["machine_guide"]["ordered_steps"][1]["tool"] == "infer_configs"
@@ -165,7 +167,8 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, m
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["status"] == "pass"
-    assert result["ordered_steps"][0]["tool"] == "diagnostics"
+    assert result["ordered_steps"][0]["tool"] == "ensure_artifact_server"
+    assert result["ordered_steps"][1]["tool"] == "diagnostics"
     infer_step = next(
         step for step in result["ordered_steps"] if step.get("tool") == "infer_configs"
     )
@@ -177,6 +180,35 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, m
         "gcs_path|session_id|runtime.run.input_path",
         "run_id|runtime.run.run_id",
     ]
+
+
+def test_rpc_ensure_artifact_server_tool(client, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL", "true")
+    monkeypatch.setattr(
+        cockpit_module,
+        "ensure_local_artifact_server",
+        lambda: {
+            "status": "pass",
+            "enabled": True,
+            "running": True,
+            "already_running": False,
+            "base_url": "http://127.0.0.1:8765",
+            "root": "exports",
+        },
+    )
+    artifact_server_module._reset_local_artifact_server_for_tests()
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {"name": "ensure_artifact_server", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["summary"]["running"] is True
+    assert result["base_url"] == "http://127.0.0.1:8765"
 
 
 def test_rpc_get_config_schema_supports_final_audit(client):
