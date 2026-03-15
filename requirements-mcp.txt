@@ -4,4 +4,4 @@
 # Canonical dependency source:
 # - core + extras live in pyproject.toml
 # - this file remains as a thin wrapper for Docker/CI and operator familiarity
--e .[mcp]
+.[mcp]

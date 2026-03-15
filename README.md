@@ -23,7 +23,7 @@ Every pipeline module now produces a standalone, exportable HTML dashboard. The 
 
 1. **See Everything:** Cockpit, diagnostics, normalization, duplicates, outlier detection, outlier handling, imputation, final audit, auto-heal, and data dictionary — each as a self-contained HTML artifact.
 2. **Navigate with the Cockpit Hub:** A single landing page links every module dashboard for a run into one reviewable session view.
-3. **Browse Locally:** An optional artifact server turns cockpit artifact references into live browser-openable links — no manual file paths.
+3. **Browse Locally:** An optional artifact server turns cockpit artifact references into stable browser links — no manual file paths.
 4. **Share Templates:** MCP `resources/list` and `resources/read` now expose the full template and resource inventory directly to clients and agents.
 
 ---
@@ -175,7 +175,7 @@ Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an op
 If template/resource reads are timing out under load, tune `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` and `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`.
 For structured request lifecycle logs, set `ANALYST_MCP_STRUCTURED_LOGS=true`.
 For token auth in networked deployments, set `ANALYST_MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>`.
-To enable local browser-openable artifact links from cockpit and dashboard responses, enable the local artifact server in trusted/local mode.
+To enable stable browser links from cockpit and dashboard responses, set `ANALYST_MCP_ENABLE_ARTIFACT_SERVER=true` in trusted/local mode. See the MCP Server Guide for the full artifact server configuration.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
@@ -453,7 +453,7 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 
 ## 🤝 On Generative AI Use
 
-Generative AI tools (Gemini 2.5-PRO, ChatGPT 4o - 4.1, Claude Sonnet) were used throughout this project as part of an integrated workflow — supporting code generation, documentation refinement, and idea testing. These tools accelerated development, but the logic, structure, and documentation reflect intentional, human-led design. This repository reflects a collaborative process: where automation supports clarity, and iteration deepens understanding.
+Generative AI tools (Gemini 2.5-PRO, ChatGPT 4o - 4.1,Codex 5.4, Claude Sonnet 4.6) were used throughout this project as part of an integrated workflow — supporting code generation, documentation refinement, and idea testing. These tools accelerated development, but the logic, structure, and documentation reflect intentional, human-led design. This repository reflects a collaborative process: where automation supports clarity, and iteration deepens understanding.
 
 ---
 

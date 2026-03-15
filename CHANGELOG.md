@@ -45,98 +45,98 @@ Format:
 
 ### Added
 
-- Add standalone dashboard HTML exports
-- Add expandable diagnostics plot modal
-- Roll out polished module dashboards
-- Surface dashboard artifacts in MCP responses
-- Add runtime overlay merge foundation
-- Wire runtime overlays into core MCP tools
-- Extend runtime overlays across remaining MCP tools
-- Add first-wave artifact destination routing
-- Roll out runtime overlays across remaining MCP tools
-- Finish artifact delivery rollout
-- Add auto-heal dashboard export
-- Polish auto-heal dashboard
-- Add tabbed pipeline dashboard shell
-- Reserve data dictionary MCP surface
-- Add cockpit dashboard hub
-- Implement data dictionary artifacts
-- Wire data dictionary into cockpit
-- Expose cockpit docs as MCP resources
-- Add local artifact server support
+- Added standalone dashboard HTML exports.
+- Added an expandable diagnostics plot modal.
+- Rolled out polished module dashboards.
+- Surfaced dashboard artifacts in MCP responses.
+- Added the runtime overlay merge foundation.
+- Wired runtime overlays into core MCP tools.
+- Extended runtime overlays across remaining MCP tools.
+- Added first-wave artifact destination routing.
+- Rolled out runtime overlays across remaining MCP tools.
+- Finished the artifact delivery rollout.
+- Added auto-heal dashboard export.
+- Polished the auto-heal dashboard.
+- Added a tabbed pipeline dashboard shell.
+- Reserved the data dictionary MCP surface.
+- Added the cockpit dashboard hub.
+- Implemented data dictionary artifacts.
+- Wired the data dictionary into cockpit.
+- Exposed cockpit docs as MCP resources.
+- Added local artifact server support.
 
 ### Changed
 
-- Untrack monolith decomposition plan and ignore locally
-- Tighten CI and review workflow
-- Split stable and local agent guidance
-- Expose runtime overlays to agents
-- Share empty delivery state helper
-- Expose auto-heal agent templates
-- Extract shared dashboard helpers
-- Extract dashboard page shell
-- Split dashboard view renderers
-- Extract certification dashboards
-- Tighten shared dashboard renderers
-- Extract module dashboard renderers
-- Split dashboard modules by domain
-- Decompose cockpit dashboard view
-- Centralize template inventory
-- Update repo workflow guidance
-- Remove tracked deployment wheel
-- Clean up public repo surfaces
-- Remove unused dev requirements files
-- Centralize MCP dependency metadata
-- Polish MCP docker surfaces
-- Refresh conda environment definition
-- Refresh dashboard screenshots
-- Update release notes to 0.4.4
+- Untracked the monolith decomposition plan and ignored it locally.
+- Tightened the CI and review workflow.
+- Split stable and local agent guidance.
+- Exposed runtime overlays to agents.
+- Shared the empty delivery state helper.
+- Exposed auto-heal agent templates.
+- Extracted shared dashboard helpers.
+- Extracted the dashboard page shell.
+- Split dashboard view renderers.
+- Extracted certification dashboards.
+- Tightened shared dashboard renderers.
+- Extracted module dashboard renderers.
+- Split dashboard modules by domain.
+- Decomposed the cockpit dashboard view.
+- Centralized the template inventory.
+- Updated repo workflow guidance.
+- Removed the tracked deployment wheel.
+- Cleaned up public repo surfaces.
+- Removed unused dev requirements files.
+- Centralized MCP dependency metadata.
+- Polished MCP docker surfaces.
+- Refreshed the conda environment definition.
+- Refreshed dashboard screenshots.
+- Updated release notes to 0.4.4.
 
 ### Fixed
 
-- Correct yamllint command references
-- Polish diagnostics dashboard export
-- Harden dashboard table rendering
-- Tighten diagnostics export defaults
-- Stabilize imputation plot wiring test
-- Refine dashboard export ergonomics
-- Normalize export artifact file names
-- Tighten export run id detection
-- Avoid duplicate normalization work
-- Harden runtime overlay and destination routing
-- Stabilize runtime config default factories
-- Tighten runtime routing follow-ups
-- Tighten runtime overlay rollout follow-ups
-- Harden auto-heal dashboard export
-- Sanitize auto-heal export warnings
-- Harden auto-heal artifact fallback
-- Tighten auto-heal dashboard rendering
-- Clean up pipeline dashboard cockpit wiring
-- Harden pipeline dashboard artifact handling
-- Avoid duplicate dashboard titles
-- Harden cockpit history access
-- Harden cockpit artifact contracts
-- Honor runtime export html overlay
-- Narrow export html overlay path
-- Escape cockpit blocker fallback html
-- Harden cockpit dashboard contracts
-- Harden cockpit error handling
-- Avoid pre312 f-string parse error
-- Harden modular dashboard renderers
-- Tighten dashboard renderer helpers
-- Harden data dictionary config parsing
-- Harden MCP resource contracts
-- Tighten MCP resource error handling
-- Expose MCP docker server on all interfaces
-- Type artifact server metadata
-- Clean up artifact server lifecycle
-- Render cockpit artifact links correctly
-- Tighten artifact server review followups
-- Harden local artifact server controls
-- Improve normalization dashboard detail
-- Tighten artifact server error handling
-- Harden normalization dashboard inputs
-- Preserve normalization preview audits
+- Corrected yamllint command references.
+- Polished the diagnostics dashboard export.
+- Hardened dashboard table rendering.
+- Tightened diagnostics export defaults.
+- Stabilized the imputation plot wiring test.
+- Refined dashboard export ergonomics.
+- Normalized export artifact file names.
+- Tightened export run id detection.
+- Avoided duplicate normalization work.
+- Hardened runtime overlay and destination routing.
+- Stabilized runtime config default factories.
+- Tightened runtime routing follow-ups.
+- Tightened runtime overlay rollout follow-ups.
+- Hardened the auto-heal dashboard export.
+- Sanitized auto-heal export warnings.
+- Hardened auto-heal artifact fallback.
+- Tightened auto-heal dashboard rendering.
+- Cleaned up pipeline dashboard cockpit wiring.
+- Hardened pipeline dashboard artifact handling.
+- Avoided duplicate dashboard titles.
+- Hardened cockpit history access.
+- Hardened cockpit artifact contracts.
+- Honored the runtime export html overlay.
+- Narrowed the export html overlay path.
+- Escaped cockpit blocker fallback html.
+- Hardened cockpit dashboard contracts.
+- Hardened cockpit error handling.
+- Avoided the pre312 f-string parse error.
+- Hardened modular dashboard renderers.
+- Tightened dashboard renderer helpers.
+- Hardened data dictionary config parsing.
+- Hardened MCP resource contracts.
+- Tightened MCP resource error handling.
+- Exposed the MCP docker server on all interfaces.
+- Typed artifact server metadata.
+- Cleaned up the artifact server lifecycle.
+- Rendered cockpit artifact links correctly.
+- Tightened artifact server review followups.
+- Hardened local artifact server controls.
+- Improved normalization dashboard detail.
+- Tightened artifact server error handling.
+- Hardened normalization dashboard inputs.
+- Preserved normalization preview audits.
 
 ### Deprecated
 
