@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 import uuid
-from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -22,7 +22,10 @@ from analyst_toolkit.mcp_server.input.storage import stage_uploaded_file
 from analyst_toolkit.mcp_server.state import StateStore
 
 
-def _new_input_id() -> str:
+def _new_input_id(stable_key: str | None = None) -> str:
+    if stable_key:
+        digest = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()
+        return f"input_{digest[:12]}"
     return f"input_{uuid.uuid4().hex[:12]}"
 
 
@@ -38,10 +41,17 @@ def ingest_uploaded_bytes(
     session_id: str | None = None,
     run_id: str | None = None,
     load_into_session: bool = True,
+    idempotency_key: str | None = None,
 ) -> tuple[InputDescriptor, pd.DataFrame | None, str | None]:
+    """
+    Stage uploaded bytes into a canonical input reference.
+
+    Input identity is deterministic for repeated uploads of the same filename/content pair.
+    Full run/session idempotency still requires callers to provide stable session_id/run_id.
+    """
     staged_path, digest, size = stage_uploaded_file(filename=filename, payload=payload)
     descriptor = InputDescriptor(
-        input_id=_new_input_id(),
+        input_id=_new_input_id(idempotency_key or f"upload:{Path(filename).name}:{digest}"),
         source_type="upload",
         original_reference=filename,
         resolved_reference=str(staged_path),
@@ -57,7 +67,10 @@ def ingest_uploaded_bytes(
     if load_into_session:
         df = load_dataframe_from_descriptor(descriptor)
         effective_session_id = StateStore.save(df, session_id=session_id, run_id=run_id)
-        descriptor = replace(descriptor, session_id=effective_session_id)
+        descriptor = descriptor.with_runtime_binding(
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
     descriptor = save_descriptor(descriptor)
     if load_into_session and effective_session_id is not None:
         bind_session_input(effective_session_id, descriptor.input_id)
@@ -71,12 +84,19 @@ def register_input_source(
     session_id: str | None = None,
     run_id: str | None = None,
     load_into_session: bool = True,
+    idempotency_key: str | None = None,
 ) -> tuple[InputDescriptor, pd.DataFrame | None, str | None]:
+    """
+    Register a canonical input source from a local server path or gs:// URI.
+
+    Retries are only input-idempotent when callers provide a stable idempotency_key.
+    Without one, the source is registered under a new input_id on each call.
+    """
     resolved_type, resolved_reference, display_name = resolve_source_reference(
         reference, source_type
     )
     descriptor = InputDescriptor(
-        input_id=_new_input_id(),
+        input_id=_new_input_id(idempotency_key),
         source_type=resolved_type,
         original_reference=reference,
         resolved_reference=resolved_reference,
@@ -90,7 +110,10 @@ def register_input_source(
     if load_into_session:
         df = load_dataframe_from_descriptor(descriptor)
         effective_session_id = StateStore.save(df, session_id=session_id, run_id=run_id)
-        descriptor = replace(descriptor, session_id=effective_session_id)
+        descriptor = descriptor.with_runtime_binding(
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
     descriptor = save_descriptor(descriptor)
     if load_into_session and effective_session_id is not None:
         bind_session_input(effective_session_id, descriptor.input_id)

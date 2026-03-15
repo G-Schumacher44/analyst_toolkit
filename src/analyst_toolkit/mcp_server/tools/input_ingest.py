@@ -18,6 +18,7 @@ async def _toolkit_register_input(
     source_type: InputSourceType | None = None,
     session_id: str | None = None,
     run_id: str | None = None,
+    idempotency_key: str | None = None,
     load_into_session: bool = True,
 ) -> dict:
     try:
@@ -30,6 +31,7 @@ async def _toolkit_register_input(
                 source_type=source_type,
                 session_id=session_id,
                 run_id=run_id,
+                idempotency_key=idempotency_key,
                 load_into_session=load_into_session,
             ),
         )
@@ -123,6 +125,13 @@ register_tool(
                 "description": (
                     "Optional run identifier. Provide a stable run_id if clients need "
                     "idempotent retries; omitted run_id values may create distinct runs."
+                ),
+            },
+            "idempotency_key": {
+                "type": "string",
+                "description": (
+                    "Optional stable idempotency key. Provide this to reuse the same "
+                    "input_id across retries for the same logical source."
                 ),
             },
             "load_into_session": {

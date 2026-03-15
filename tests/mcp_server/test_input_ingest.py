@@ -38,6 +38,32 @@ def test_inputs_upload_creates_session_and_descriptor(client, monkeypatch, tmp_p
     assert payload["summary"]["column_count"] == 2
 
 
+def test_inputs_upload_reuses_input_id_for_same_payload(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    StateStore.clear()
+    input_registry.clear()
+
+    response_one = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={"load_into_session": "false"},
+    )
+    response_two = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={"load_into_session": "false"},
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+
+
 def test_inputs_register_server_path_loads_into_session(client, monkeypatch, tmp_path):
     monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
     monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
@@ -57,6 +83,39 @@ def test_inputs_register_server_path_loads_into_session(client, monkeypatch, tmp
     assert payload["input"]["source_type"] == "server_path"
     assert payload["session_id"].startswith("sess_")
     assert payload["summary"]["row_count"] == 2
+
+
+def test_inputs_register_reuses_input_id_with_stable_idempotency_key(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    StateStore.clear()
+    input_registry.clear()
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key",
+        },
+    )
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
 
 
 def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch, tmp_path):

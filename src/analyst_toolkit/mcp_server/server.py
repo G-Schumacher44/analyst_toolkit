@@ -119,6 +119,7 @@ class RegisterInputRequest(BaseModel):
     source_type: InputSourceType | None = None
     session_id: str | None = None
     run_id: str | None = None
+    idempotency_key: str | None = None
     load_into_session: bool = True
 
 
@@ -331,6 +332,7 @@ async def upload_input(
     file: UploadFile = File(...),
     session_id: str | None = Form(default=None),
     run_id: str | None = Form(default=None),
+    idempotency_key: str | None = Form(default=None),
     load_into_session: bool = Form(default=True),
 ) -> JSONResponse:
     trace_id = _require_http_auth(request)
@@ -347,6 +349,7 @@ async def upload_input(
             media_type=file.content_type,
             session_id=session_id,
             run_id=run_id,
+            idempotency_key=idempotency_key,
             load_into_session=load_into_session,
         )
     except Exception as exc:
@@ -378,6 +381,7 @@ async def register_input(request: Request, payload: RegisterInputRequest) -> JSO
             source_type=payload.source_type,
             session_id=payload.session_id,
             run_id=payload.run_id,
+            idempotency_key=payload.idempotency_key,
             load_into_session=payload.load_into_session,
         )
     except NotImplementedError as exc:
