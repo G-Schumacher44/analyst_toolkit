@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable
 
 import mcp.types as types
 
+from analyst_toolkit.mcp_server.resources import ResourceNotFoundError, ResourcePayloadError
 from analyst_toolkit.mcp_server.response_utils import (
     attach_trace_id,
     build_error_envelope,
@@ -204,6 +205,50 @@ async def dispatch_rpc_method(
         try:
             text, mime_type = await read_resource_with_timeout(uri)
             mime_type = _normalize_resource_mime_type(mime_type)
+        except ResourceNotFoundError as exc:
+            return RpcDispatchResult(
+                payload=rpc_error(
+                    req_id,
+                    -32602,
+                    f"Resource not found: {exc.code}",
+                    data={
+                        "error": build_error_envelope(
+                            category="io",
+                            code=exc.code.lower(),
+                            message=f"Resource not found for URI: {uri}",
+                            remediation="Refresh resources/list and retry with an existing URI.",
+                            retryable=False,
+                            trace_id=exc.trace_id,
+                        )
+                    },
+                ),
+                ok=False,
+                level=logging.WARNING,
+                error_code=-32602,
+            )
+        except ResourcePayloadError as exc:
+            return RpcDispatchResult(
+                payload=rpc_error(
+                    req_id,
+                    -32603,
+                    f"Internal error: {exc.code} (trace_id={exc.trace_id})",
+                    data={
+                        "error": build_error_envelope(
+                            category="internal",
+                            code=exc.code.lower(),
+                            message=str(exc),
+                            remediation=(
+                                "Retry once. If it persists, inspect server logs using trace_id."
+                            ),
+                            retryable=False,
+                            trace_id=exc.trace_id,
+                        )
+                    },
+                ),
+                ok=False,
+                level=logging.ERROR,
+                error_code=-32603,
+            )
         except FileNotFoundError as exc:
             return RpcDispatchResult(
                 payload=rpc_error(

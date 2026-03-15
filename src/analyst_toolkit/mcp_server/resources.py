@@ -3,6 +3,7 @@
 import json
 import logging
 
+from analyst_toolkit.mcp_server.response_utils import new_trace_id
 from analyst_toolkit.mcp_server.templates import (
     get_golden_configs,
     list_template_resources,
@@ -21,12 +22,22 @@ AGENT_PLAYBOOK_URI = "analyst://docs/agent-playbook"
 CAPABILITY_CATALOG_URI = "analyst://catalog/capabilities"
 
 
-class ResourceNotFoundError(FileNotFoundError):
+class ResourceNotFoundError(Exception):
     """Stable client-safe missing-resource error."""
 
-    def __init__(self, code: str = "RESOURCE_NOT_FOUND"):
+    def __init__(self, code: str = "RESOURCE_NOT_FOUND", trace_id: str | None = None):
         self.code = code
+        self.trace_id = trace_id or new_trace_id()
         super().__init__(code)
+
+
+class ResourcePayloadError(Exception):
+    """Stable client-safe resource payload validation error."""
+
+    def __init__(self, code: str, message: str, trace_id: str | None = None):
+        self.code = code
+        self.trace_id = trace_id or new_trace_id()
+        super().__init__(message)
 
 
 def list_mcp_resources() -> list[dict[str, str]]:
@@ -63,15 +74,24 @@ def _read_quickstart_resource() -> tuple[str, str]:
     payload = user_quickstart_payload()
     if not isinstance(payload, dict):
         logger.warning("Quickstart payload must be a mapping, got %r", payload)
-        raise ValueError("Quickstart payload is not a mapping.")
+        raise ResourcePayloadError(
+            code="QUICKSTART_PAYLOAD_INVALID",
+            message="Invalid quickstart payload.",
+        )
     content = payload.get("content")
     if not isinstance(content, dict):
         logger.warning("Quickstart payload missing content mapping: %r", payload)
-        raise ValueError("Quickstart payload is missing content.")
+        raise ResourcePayloadError(
+            code="QUICKSTART_PAYLOAD_INVALID",
+            message="Invalid quickstart payload.",
+        )
     markdown = content.get("markdown")
     if not isinstance(markdown, str) or not markdown.strip():
         logger.warning("Quickstart payload missing markdown body: %r", payload)
-        raise ValueError("Quickstart payload is missing markdown.")
+        raise ResourcePayloadError(
+            code="QUICKSTART_PAYLOAD_INVALID",
+            message="Invalid quickstart payload.",
+        )
     return markdown, "text/markdown"
 
 

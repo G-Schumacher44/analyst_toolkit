@@ -379,18 +379,27 @@ def main():
         default=int(os.environ.get("ANALYST_MCP_PORT", 8001)),
         help="HTTP port (default: 8001)",
     )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("ANALYST_MCP_HOST", "127.0.0.1"),
+        help="HTTP bind host (default: 127.0.0.1)",
+    )
     args = parser.parse_args()
 
     if args.stdio or os.environ.get("ANALYST_MCP_STDIO", "").lower() == "true":
         logger.info("Starting Analyst Toolkit MCP Server in stdio mode")
         asyncio.run(run_stdio())
     else:
-        logger.info(f"Starting Analyst Toolkit MCP Server in HTTP mode on port {args.port}")
+        logger.info(
+            "Starting Analyst Toolkit MCP Server in HTTP mode on %s:%s",
+            args.host,
+            args.port,
+        )
         import uvicorn
 
         uvicorn.run(
             "analyst_toolkit.mcp_server.server:app",
-            host="0.0.0.0",
+            host=args.host,
             port=args.port,
             log_level="info",
         )
