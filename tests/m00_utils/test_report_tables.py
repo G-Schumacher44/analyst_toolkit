@@ -5,9 +5,7 @@ from analyst_toolkit.m00_utils.report_tables import generate_transformation_repo
 
 def test_generate_transformation_report_resolves_renamed_preview_columns():
     df_original = pd.DataFrame({"sex": ["male", "female"], "bill_length_mm": [39.1, 40.3]})
-    df_transformed = pd.DataFrame(
-        {"gender": ["MALE", "FEMALE"], "bill_length_mm": [39.1, 40.3]}
-    )
+    df_transformed = pd.DataFrame({"gender": ["MALE", "FEMALE"], "bill_length_mm": [39.1, 40.3]})
     changelog = {
         "renamed_columns": pd.DataFrame([{"Original Name": "sex", "New Name": "gender"}]),
         "values_mapped": pd.DataFrame([{"Column": "gender", "Mappings Applied": 2}]),

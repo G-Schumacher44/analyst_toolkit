@@ -6,9 +6,7 @@ from typing import Any
 import pandas as pd
 
 
-def _resolve_preview_column_pair(
-    changelog: dict[str, Any], preview_column: str
-) -> tuple[str, str]:
+def _resolve_preview_column_pair(changelog: dict[str, Any], preview_column: str) -> tuple[str, str]:
     renamed_columns = changelog.get("renamed_columns")
     if (
         isinstance(renamed_columns, pd.DataFrame)

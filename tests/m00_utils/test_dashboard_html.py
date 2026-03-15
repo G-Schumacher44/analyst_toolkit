@@ -321,7 +321,14 @@ def test_generate_normalization_dashboard_renders_transform_story():
 def test_generate_normalization_dashboard_renders_column_value_analysis_without_summary_table():
     report = {
         "row_change_summary": pd.DataFrame(
-            [{"rows_total": 3, "rows_changed": 1, "rows_unchanged": 2, "rows_changed_percent": 33.33}]
+            [
+                {
+                    "rows_total": 3,
+                    "rows_changed": 1,
+                    "rows_unchanged": 2,
+                    "rows_changed_percent": 33.33,
+                }
+            ]
         ),
         "column_changes_summary": pd.DataFrame(),
         "changed_rows_preview": pd.DataFrame(),

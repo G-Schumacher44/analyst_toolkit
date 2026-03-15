@@ -400,7 +400,9 @@ def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:
         toc.append(("Scalar Changelog Notes", "Scalar Changelog Notes"))
 
     has_column_changes = isinstance(column_changes_df, pd.DataFrame) and not column_changes_df.empty
-    has_column_value_analysis = isinstance(column_value_analysis, dict) and bool(column_value_analysis)
+    has_column_value_analysis = isinstance(column_value_analysis, dict) and bool(
+        column_value_analysis
+    )
     if has_column_changes or has_column_value_analysis:
         column_change_summary_html = (
             "<div class='card wide'>"
