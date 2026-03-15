@@ -43,7 +43,7 @@ def user_quickstart_payload() -> dict:
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
 - `auto_heal` returns its own standalone dashboard artifact and should be surfaced the same way.
-- `data_dictionary` is currently a reserved MCP surface. Use its template and plan references to prepare the future prelaunch dictionary flow; do not present it as implemented yet.
+- `data_dictionary` now returns a compact prelaunch dictionary surface with standalone artifacts; prefer the dashboard artifact over summarizing the whole dictionary inline.
 
 ## Runtime Overlay
 - Use `runtime` for run-scoped execution policy.
@@ -63,10 +63,10 @@ def user_quickstart_payload() -> dict:
 - After the call, surface `dashboard_url` first and `dashboard_path` only as fallback.
 
 ## Data Dictionary
-- The future `data_dictionary` flow should start from `infer_configs`, not from blind profiling alone.
+- `data_dictionary` should still start from `infer_configs`, not from blind profiling alone.
 - Treat it as a prelaunch report and dictionary surface that explains expected fields, rules, and readiness before a full run.
-- Start from `config/data_dictionary_request_template.yaml` when drafting the future request shape.
-- When it lands, it should be surfaced from the cockpit dashboard as a resource/report card, not buried as a raw artifact.
+- Start from `config/data_dictionary_request_template.yaml` when drafting the request shape.
+- Surface the dictionary dashboard from cockpit or direct tool output instead of burying it as a raw artifact link.
 
 ## Key Example: Fuzzy Matching
 In normalization config:

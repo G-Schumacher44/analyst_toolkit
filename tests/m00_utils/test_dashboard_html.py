@@ -2,6 +2,7 @@ import base64
 
 import pandas as pd
 
+from analyst_toolkit.m00_utils.data_dictionary_builder import build_data_dictionary_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
 from analyst_toolkit.m00_utils.report_html import generate_html_report
 
@@ -53,6 +54,148 @@ def test_generate_diagnostics_dashboard_embeds_plots(tmp_path):
     assert "Click to expand" in contents
     assert "id='plot-modal'" in contents
     assert "window.atkDashboard.openPlot" in contents
+
+
+def test_generate_data_dictionary_dashboard_renders_prelaunch_contract():
+    report = {
+        "overview": pd.DataFrame(
+            [
+                {
+                    "Rows": 10,
+                    "Columns": 3,
+                    "Expected Columns": 4,
+                    "Missing Expected Columns": 1,
+                    "Metadata Gaps": 2,
+                    "Profile Depth": "standard",
+                    "Examples Included": True,
+                    "Prelaunch Report": True,
+                    "Inference Seeded": True,
+                }
+            ]
+        ),
+        "expected_schema": pd.DataFrame(
+            [
+                {
+                    "Column": "customer_id",
+                    "Observed": "Yes",
+                    "Expected Dtype": "",
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                },
+                {
+                    "Column": "status",
+                    "Observed": "Yes",
+                    "Expected Dtype": "",
+                    "Allowed Values Preview": "new, done",
+                    "Numeric Rule": "",
+                },
+                {
+                    "Column": "country",
+                    "Observed": "No",
+                    "Expected Dtype": "",
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                },
+            ]
+        ),
+        "column_dictionary": pd.DataFrame(
+            [
+                {
+                    "Column": "customer_id",
+                    "Observed Dtype": "int64",
+                    "Expected Dtype": "",
+                    "Semantic Type": "identifier",
+                    "Expected In Schema": "Yes",
+                    "Nullable": "No",
+                    "Unique": "Yes",
+                    "Distinct Count": 10,
+                    "Null Count": 0,
+                    "Null %": 0.0,
+                    "Example Values": "1, 2",
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                    "Transformation Notes": "",
+                    "Quality Notes": "OK",
+                }
+            ]
+        ),
+        "prelaunch_readiness": pd.DataFrame(
+            [
+                {
+                    "Severity": "fail",
+                    "Type": "missing_expected_column",
+                    "Column": "country",
+                    "Detail": "Present in inferred validation schema but missing from the current dataset.",
+                }
+            ]
+        ),
+        "profile_snapshot": pd.DataFrame(
+            [
+                {
+                    "Column": "customer_id",
+                    "Dtype": "int64",
+                    "Unique Values": 10,
+                    "Audit Remarks": "OK",
+                    "Missing Count": 0,
+                }
+            ]
+        ),
+        "__dashboard_meta__": {"status": "warn"},
+    }
+
+    html = generate_html_report(report, "Data Dictionary", "dict-001")
+
+    assert "Data Dictionary" in html
+    assert "Dictionary Overview" in html
+    assert "Expected Schema And Contract" in html
+    assert "Column Dictionary" in html
+    assert "Prelaunch Readiness" in html
+    assert "metadata gaps" in html.lower()
+    assert "country" in html
+
+
+def test_build_data_dictionary_report_tolerates_malformed_nested_config_nodes():
+    dataframe = pd.DataFrame(
+        {
+            "customer_id": [1, 2],
+            "status": ["new", "done"],
+        }
+    )
+
+    report = build_data_dictionary_report(
+        dataframe,
+        inferred_configs={
+            "validation": {
+                "validation": {
+                    "schema_validation": [],
+                }
+            },
+            "normalization": {
+                "normalization": {
+                    "rules": None,
+                }
+            },
+            "duplicates": {
+                "duplicates": {
+                    "subset_columns": "customer_id",
+                }
+            },
+            "imputation": {
+                "imputation": {
+                    "rules": [],
+                }
+            },
+            "outliers": {
+                "outliers": {
+                    "detection_specs": None,
+                }
+            },
+        },
+    )
+
+    assert isinstance(report["expected_schema"], pd.DataFrame)
+    assert not report["expected_schema"].empty
+    assert "customer_id" in report["expected_schema"]["Column"].tolist()
 
 
 def test_generate_validation_dashboard_renders_failure_details():
@@ -517,9 +660,31 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
             }
         ],
         "data_dictionary": {
-            "status": "not_implemented",
+            "status": "warn",
             "template_path": "config/data_dictionary_request_template.yaml",
             "implementation_plan": "local_plans/DATA_DICTIONARY_IMPLEMENTATION_WAVE_2026-03-14.md",
+            "latest_run_id": "dictionary_001",
+            "latest_dashboard": "exports/reports/data_dictionary/dictionary_001.html",
+            "latest_export": "exports/reports/data_dictionary/dictionary_001.xlsx",
+            "cockpit_preview": {
+                "overview": {
+                    "rows": 344,
+                    "columns": 12,
+                    "expected_columns": 15,
+                    "metadata_gaps": 4,
+                },
+                "expected_schema_preview": [
+                    {"Column": "customer_id", "Expected Type": "int64", "Required": "True"},
+                    {"Column": "status", "Expected Type": "category", "Required": "True"},
+                ],
+                "readiness_preview": [
+                    {
+                        "Type": "missing_expected_column",
+                        "Column": "region",
+                        "Detail": "Column is expected by inferred validation contract but not present.",
+                    }
+                ],
+            },
         },
     }
 
@@ -543,8 +708,13 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "Missing Dashboard Or Artifact" in html
     assert "Resources For Reading, Planning, And Setup" in html
     assert "Launchpad For Moving From Review To Action" in html
-    assert "Data Dictionary Lane" in html
+    assert "Recent Dictionary Artifact" in html
+    assert "Expected Schema Preview" in html
+    assert "Top Readiness Items" in html
+    assert "customer_id" in html
+    assert "region" in html
     assert "run_001" in html
+    assert "dictionary_001" in html
     assert "tool:get_user_quickstart" in html
     assert "infer_configs" in html
     assert "config/data_dictionary_request_template.yaml" in html
