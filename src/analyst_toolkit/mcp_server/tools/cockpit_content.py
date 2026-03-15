@@ -38,7 +38,7 @@ def user_quickstart_payload() -> dict:
 
 ## Dashboard Artifacts
 - In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
-- If the local artifact server is not already serving exported HTML, ask the user to start it before relying on local dashboard links.
+- Use `ensure_artifact_server` before relying on localhost dashboard links.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
@@ -94,7 +94,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "outputs": ["dashboard_url?", "dashboard_path?"],
                 "notes": [
                     "Build this first when possible so the user gets one human-readable landing page.",
-                    "If the local artifact server is not running, ask the user to start it before depending on local dashboard links.",
+                    "If local dashboard links should resolve directly, call ensure_artifact_server before depending on localhost artifact URLs.",
                 ],
             }
         )
@@ -189,6 +189,11 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
         "quick_actions": (
             [
                 {
+                    "label": "Ensure artifact server",
+                    "tool": "ensure_artifact_server",
+                    "arguments_schema_hint": {"required": []},
+                },
+                {
                     "label": "Open cockpit dashboard",
                     "tool": "get_cockpit_dashboard",
                     "arguments_schema_hint": {"required": []},
@@ -252,7 +257,7 @@ def agent_playbook_payload() -> dict:
                     "notes": [
                         "Build this at the start of a trusted/local session when possible.",
                         "Return the cockpit dashboard link to the user as the human-facing landing page before deeper tool work.",
-                        "If local HTML artifacts are not being served yet, prompt the user to start the local artifact server.",
+                        "If local HTML artifacts should open as localhost links, call ensure_artifact_server first.",
                     ],
                     "next": [offset],
                 },
@@ -263,6 +268,16 @@ def agent_playbook_payload() -> dict:
         + [
             {
                 "step": offset,
+                "tool": "ensure_artifact_server",
+                "required_inputs": [],
+                "outputs": ["base_url", "running"],
+                "notes": [
+                    "Optional but recommended in trusted/local mode before promising direct dashboard links.",
+                ],
+                "next": [offset + 1],
+            },
+            {
+                "step": offset + 1,
                 "tool": "diagnostics",
                 "required_inputs": [
                     "gcs_path|session_id|runtime.run.input_path",
@@ -275,31 +290,31 @@ def agent_playbook_payload() -> dict:
                     "artifact_url?",
                     "plot_urls?",
                 ],
-                "next": [offset + 1],
-            },
-            {
-                "step": offset + 1,
-                "tool": "get_data_health_report",
-                "required_inputs": ["run_id", "session_id?"],
-                "outputs": ["health_score", "breakdown"],
                 "next": [offset + 2],
             },
             {
                 "step": offset + 2,
-                "tool": "infer_configs",
-                "required_inputs": ["gcs_path|session_id"],
-                "outputs": ["configs (YAML strings by module)"],
+                "tool": "get_data_health_report",
+                "required_inputs": ["run_id", "session_id?"],
+                "outputs": ["health_score", "breakdown"],
                 "next": [offset + 3],
             },
             {
                 "step": offset + 3,
-                "tool": "get_capability_catalog",
-                "required_inputs": [],
-                "outputs": ["editable knobs + defaults + example paths"],
+                "tool": "infer_configs",
+                "required_inputs": ["gcs_path|session_id"],
+                "outputs": ["configs (YAML strings by module)"],
                 "next": [offset + 4],
             },
             {
                 "step": offset + 4,
+                "tool": "get_capability_catalog",
+                "required_inputs": [],
+                "outputs": ["editable knobs + defaults + example paths"],
+                "next": [offset + 5],
+            },
+            {
+                "step": offset + 5,
                 "tool": "manual config + runtime review",
                 "required_inputs": [
                     "inferred configs",
@@ -314,10 +329,10 @@ def agent_playbook_payload() -> dict:
                     "Use runtime for paths, run_id, export_html, plotting, and destination overrides.",
                     "Use module config for business logic and per-module rules.",
                 ],
-                "next": [offset + 5],
+                "next": [offset + 6],
             },
             {
-                "step": offset + 5,
+                "step": offset + 6,
                 "tool": "auto_heal",
                 "required_inputs": [
                     "gcs_path|session_id|runtime.run.input_path",
@@ -328,10 +343,10 @@ def agent_playbook_payload() -> dict:
                     "Use only when the user explicitly wants one-shot automation.",
                     "Open or link the auto-heal dashboard artifact for review.",
                 ],
-                "next": [offset + 6],
+                "next": [offset + 7],
             },
             {
-                "step": offset + 6,
+                "step": offset + 7,
                 "tool_chain": [
                     "normalization",
                     "duplicates",
@@ -346,10 +361,10 @@ def agent_playbook_payload() -> dict:
                     "Prefer the standalone dashboard artifact as the main review surface.",
                     "Use runtime instead of editing every module config when the override is cross-cutting.",
                 ],
-                "next": [offset + 7],
+                "next": [offset + 8],
             },
             {
-                "step": offset + 7,
+                "step": offset + 8,
                 "tool_chain": ["final_audit", "get_run_history"],
                 "required_inputs": ["session_id", "run_id"],
                 "outputs": ["final certificate artifacts", "healing ledger"],

@@ -10,6 +10,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from analyst_toolkit.mcp_server.io_storage import upload_artifact as _upload_artifact
+from analyst_toolkit.mcp_server.local_artifact_server import build_local_artifact_url
 
 
 def _bucket_uri_from_config(config: dict[str, Any]) -> str:
@@ -121,6 +122,8 @@ def deliver_artifact(
         "reference": "",
         "local_path": "",
         "url": "",
+        "local_url": "",
+        "remote_url": "",
         "warnings": [],
         "destinations": {
             "local": {"status": "missing", "path": ""},
@@ -188,5 +191,10 @@ def deliver_artifact(
             result["warnings"].append(f"Upload failed or file not found: {effective_local_path}")
 
     result["local_path"] = effective_local_path
+    result["local_url"] = build_local_artifact_url(effective_local_path)
+    result["remote_url"] = result["url"]
+    result["url"] = result["remote_url"] or result["local_url"]
     result["reference"] = result["url"] or effective_local_path
+    if result["local_url"]:
+        result["destinations"]["local"]["url"] = result["local_url"]
     return result
