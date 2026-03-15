@@ -173,15 +173,15 @@ def test_rpc_user_quickstart_tool(client, monkeypatch):
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["status"] == "pass"
-    assert result["content"]["format"] == "markdown"
-    assert result["content"]["title"] == "Analyst Toolkit Quickstart"
-    assert "fuzzy matching" in result["content"]["markdown"].lower()
-    assert "plotting" in result["content"]["markdown"].lower()
-    assert "auto_heal" in result["content"]["markdown"]
-    assert "cockpit dashboard" in result["content"]["markdown"].lower()
-    assert "ensure_artifact_server" in result["content"]["markdown"]
-    assert "register_input" in result["content"]["markdown"]
-    assert "/inputs/upload" in result["content"]["markdown"]
+    assert result["format"] == "markdown"
+    assert result["title"] == "Analyst Toolkit Quickstart"
+    assert "fuzzy matching" in result["markdown"].lower()
+    assert "plotting" in result["markdown"].lower()
+    assert "auto_heal" in result["markdown"]
+    assert "cockpit dashboard" in result["markdown"].lower()
+    assert "ensure_artifact_server" in result["markdown"]
+    assert "register_input" in result["markdown"]
+    assert "/inputs/upload" in result["markdown"]
     assert "machine_guide" in result
     assert result["machine_guide"]["ordered_steps"][0]["tool"] == "register_input"
     assert result["machine_guide"]["ordered_steps"][1]["tool"] == "diagnostics"

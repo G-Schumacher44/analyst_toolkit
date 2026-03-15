@@ -78,14 +78,7 @@ def _read_quickstart_resource() -> tuple[str, str]:
             code="QUICKSTART_PAYLOAD_INVALID",
             message="Invalid quickstart payload.",
         )
-    content = payload.get("content")
-    if not isinstance(content, dict):
-        logger.warning("Quickstart payload missing content mapping: %r", payload)
-        raise ResourcePayloadError(
-            code="QUICKSTART_PAYLOAD_INVALID",
-            message="Invalid quickstart payload.",
-        )
-    markdown = content.get("markdown")
+    markdown = payload.get("markdown")
     if not isinstance(markdown, str) or not markdown.strip():
         logger.warning("Quickstart payload missing markdown body: %r", payload)
         raise ResourcePayloadError(
