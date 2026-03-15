@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import posixpath
 from typing import Any
 
 import pandas as pd
@@ -24,6 +25,7 @@ from analyst_toolkit.m00_utils.dashboard_tables import (
 )
 
 _TEMPLATES_GROUP_TITLE = "templates and contracts"
+_COCKPIT_REPORT_DIR = "exports/reports/cockpit"
 
 
 def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = True) -> str:
@@ -38,6 +40,34 @@ def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = Tr
         "<p class='subtle'><strong>Open With</strong></p>"
         f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
         "</div>"
+    )
+
+
+def _render_cockpit_artifact_reference(value: Any, *, empty_label: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return f"<p class='empty'>{html.escape(empty_label)}</p>"
+    normalized = text
+    if normalized.startswith(("http://", "https://")):
+        rendered = html.escape(normalized)
+        return (
+            "<p class='subtle'><a href='"
+            f"{rendered}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
+        )
+    if "/exports/" in normalized:
+        normalized = "/" + normalized[normalized.index("exports/") :]
+    elif normalized.startswith("exports/"):
+        normalized = "/" + normalized
+
+    rendered = html.escape(normalized)
+    if normalized.startswith("/exports/"):
+        relative = posixpath.relpath(normalized.lstrip("/"), _COCKPIT_REPORT_DIR)
+        href = html.escape(relative)
+    else:
+        return f"<p class='subtle'><code>{rendered}</code></p>"
+    return (
+        "<p class='subtle'><a href='"
+        f"{href}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
     )
 
 
@@ -281,6 +311,18 @@ def _render_cockpit_artifacts(
     artifacts: list[dict[str, Any]], artifact_server: dict[str, Any]
 ) -> str:
     artifact_df = pd.DataFrame(artifacts)
+    if not artifact_df.empty:
+        for column, empty_label in (
+            ("Dashboard", "No dashboard recorded."),
+            ("Export", "No export recorded."),
+            ("Artifact Path", "No artifact path recorded."),
+        ):
+            if column in artifact_df.columns:
+                artifact_df[column] = artifact_df[column].map(
+                    lambda value, label=empty_label: _render_cockpit_artifact_reference(
+                        value, empty_label=label
+                    )
+                )
     server_running = bool(artifact_server.get("running"))
     server_base_url = str(artifact_server.get("base_url", ""))
     server_root = str(artifact_server.get("root", ""))
@@ -313,7 +355,7 @@ def _render_cockpit_artifacts(
         "<div class='readme-section'>"
         "<h3>Artifact Index</h3>"
         "<p class='subtle'>Use this page as the cockpit linkage shelf for recent dashboards, exports, and operator-facing review surfaces.</p>"
-        f"{_render_df(artifact_df, full_preview=True, wide_layout=True)}"
+        f"{_render_df(artifact_df, full_preview=True, wide_layout=True, allow_html_cols={'Dashboard', 'Export', 'Artifact Path'})}"
         "</div>"
         "</div>"
     )
