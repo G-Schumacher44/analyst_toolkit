@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 logger = logging.getLogger("analyst_toolkit.mcp_server.local_artifact_server")
 
 _SERVER_GUARD = threading.Lock()
-_SERVER: ThreadingHTTPServer | None = None
+_SERVER: "_ArtifactHTTPServer | None" = None
 _SERVER_THREAD: threading.Thread | None = None
 _SERVER_BASE_URL = ""
 _SERVER_ROOT = Path("exports").resolve(strict=False)
@@ -108,6 +108,13 @@ class _ArtifactRequestHandler(SimpleHTTPRequestHandler):
         return str(candidate)
 
 
+class _ArtifactHTTPServer(ThreadingHTTPServer):
+    """Typed HTTP server carrying artifact-serving metadata."""
+
+    artifact_root: Path
+    base_url: str
+
+
 def _probe_server(base_url: str, timeout_sec: float = 0.25) -> bool:
     try:
         with urllib.request.urlopen(f"{base_url}/__health", timeout=timeout_sec) as response:
@@ -163,7 +170,7 @@ def ensure_local_artifact_server() -> dict[str, Any]:
         root.mkdir(parents=True, exist_ok=True)
         host = _artifact_server_host()
         requested_port = _artifact_server_port()
-        server = ThreadingHTTPServer((host, requested_port), _ArtifactRequestHandler)
+        server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
         server.artifact_root = root
         server.base_url = f"http://{host}:{server.server_address[1]}"
         thread = threading.Thread(
