@@ -12,6 +12,15 @@ from analyst_toolkit.mcp_server.response_utils import (
     build_error_envelope,
 )
 
+_ALLOWED_RESOURCE_MIME_TYPES = frozenset(
+    {
+        "application/json",
+        "application/x-yaml",
+        "text/markdown",
+        "text/plain",
+    }
+)
+
 
 @dataclass(frozen=True)
 class RpcDispatchResult:
@@ -32,6 +41,12 @@ def rpc_error(req_id: Any, code: int, message: str, data: dict | None = None) ->
 
 def rpc_ok(req_id: Any, result: Any) -> dict:
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
+
+def _normalize_resource_mime_type(mime_type: str | None) -> str:
+    if mime_type in _ALLOWED_RESOURCE_MIME_TYPES:
+        return mime_type
+    return "application/octet-stream"
 
 
 async def dispatch_rpc_method(
@@ -188,6 +203,7 @@ async def dispatch_rpc_method(
             )
         try:
             text, mime_type = await read_resource_with_timeout(uri)
+            mime_type = _normalize_resource_mime_type(mime_type)
         except FileNotFoundError as exc:
             return RpcDispatchResult(
                 payload=rpc_error(

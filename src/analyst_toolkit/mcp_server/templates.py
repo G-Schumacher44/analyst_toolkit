@@ -3,6 +3,7 @@ templates.py — Template discovery for tool calls and MCP resources.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -13,6 +14,11 @@ RESOURCE_HOST = "templates"
 
 CONFIG_DIR = Path("config")
 GOLDEN_TEMPLATE_DIR = CONFIG_DIR / "golden_templates"
+GOLDEN_TEMPLATE_FILENAMES: tuple[str, ...] = (
+    "compliance_audit.yaml",
+    "fraud_detection.yaml",
+    "quick_migration.yaml",
+)
 
 
 @dataclass(frozen=True)
@@ -117,13 +123,20 @@ CONFIG_TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
 
 
 def _iter_golden_template_files() -> list[Path]:
-    if not GOLDEN_TEMPLATE_DIR.exists():
-        return []
-    return sorted(p for p in GOLDEN_TEMPLATE_DIR.glob("*.yaml") if p.is_file())
+    return [
+        GOLDEN_TEMPLATE_DIR / filename
+        for filename in GOLDEN_TEMPLATE_FILENAMES
+        if (GOLDEN_TEMPLATE_DIR / filename).is_file()
+    ]
 
 
+@lru_cache(maxsize=1)
 def list_config_template_specs() -> list[TemplateSpec]:
     return [spec for spec in CONFIG_TEMPLATE_SPECS if spec.path.is_file()]
+
+
+def refresh_template_spec_cache() -> None:
+    list_config_template_specs.cache_clear()
 
 
 def list_module_template_specs() -> list[TemplateSpec]:
@@ -186,6 +199,8 @@ def resolve_template_uri(uri: str) -> Path:
         raise FileNotFoundError(f"Invalid template filename in URI: {uri}")
 
     if group == "golden":
+        if filename not in GOLDEN_TEMPLATE_FILENAMES:
+            raise FileNotFoundError(f"Golden resource is not in the exposed allowlist: {uri}")
         base = GOLDEN_TEMPLATE_DIR
     elif group == "config":
         allowed = {spec.filename for spec in list_config_template_specs()}

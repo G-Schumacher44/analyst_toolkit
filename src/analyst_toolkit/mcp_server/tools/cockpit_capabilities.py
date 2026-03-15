@@ -117,6 +117,17 @@ _KEY_KNOBS: dict[str, list[dict[str, str]]] = {
     ],
 }
 
+_WORKFLOW_TOOL_METADATA: dict[str, dict[str, Any]] = {
+    "auto_heal": {
+        "description": "One-shot automated cleaning request with runtime-scoped controls and dashboard output.",
+        "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
+    },
+    "data_dictionary": {
+        "description": "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts.",
+        "outputs": ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"],
+    },
+}
+
 
 def _load_template_root(root_key: str, template_path: str) -> dict[str, Any]:
     path = Path(template_path)
@@ -146,7 +157,11 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
     module_template_specs = list_module_template_specs()
     workflow_template_specs = list_workflow_template_specs()
     runtime_template_specs = list_runtime_template_specs()
-    runtime_template_path = runtime_template_specs[0].path.as_posix() if runtime_template_specs else ""
+    if not runtime_template_specs:
+        raise ValueError("Runtime template inventory is empty.")
+    if len(runtime_template_specs) > 1:
+        raise ValueError("Multiple runtime templates are not supported in capability catalog.")
+    runtime_template_path = runtime_template_specs[0].path.as_posix()
     workflow_template_paths = {
         spec.tool: spec.path.as_posix() for spec in workflow_template_specs if spec.tool
     }
@@ -308,19 +323,10 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             {
                 "tool": spec.tool,
                 "template_path": spec.path.as_posix(),
-                "description": (
-                    "One-shot automated cleaning request with runtime-scoped controls and dashboard output."
-                    if spec.tool == "auto_heal"
-                    else "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts."
-                ),
-                "outputs": (
-                    ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"]
-                    if spec.tool == "auto_heal"
-                    else ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"]
-                ),
+                **_WORKFLOW_TOOL_METADATA[spec.tool],
             }
             for spec in workflow_template_specs
-            if spec.tool in {"auto_heal", "data_dictionary"}
+            if spec.tool in _WORKFLOW_TOOL_METADATA
         ],
         "golden_templates": sorted(golden_configs.keys()),
         "modules": modules,

@@ -1,7 +1,7 @@
 """MCP resource inventory and read handlers."""
 
 import json
-from typing import Any
+import logging
 
 from analyst_toolkit.mcp_server.templates import (
     get_golden_configs,
@@ -14,9 +14,19 @@ from analyst_toolkit.mcp_server.tools.cockpit_content import (
     user_quickstart_payload,
 )
 
+logger = logging.getLogger("analyst_toolkit.mcp_server.resources")
+
 QUICKSTART_URI = "analyst://docs/quickstart"
 AGENT_PLAYBOOK_URI = "analyst://docs/agent-playbook"
 CAPABILITY_CATALOG_URI = "analyst://catalog/capabilities"
+
+
+class ResourceNotFoundError(FileNotFoundError):
+    """Stable client-safe missing-resource error."""
+
+    def __init__(self, code: str = "RESOURCE_NOT_FOUND"):
+        self.code = code
+        super().__init__(code)
 
 
 def list_mcp_resources() -> list[dict[str, str]]:
@@ -51,18 +61,28 @@ def list_mcp_resources() -> list[dict[str, str]]:
 
 def _read_quickstart_resource() -> tuple[str, str]:
     payload = user_quickstart_payload()
-    content = payload.get("content", {})
-    return str(content.get("markdown", "")), "text/markdown"
+    if not isinstance(payload, dict):
+        logger.warning("Quickstart payload must be a mapping, got %r", payload)
+        raise ValueError("Quickstart payload is not a mapping.")
+    content = payload.get("content")
+    if not isinstance(content, dict):
+        logger.warning("Quickstart payload missing content mapping: %r", payload)
+        raise ValueError("Quickstart payload is missing content.")
+    markdown = content.get("markdown")
+    if not isinstance(markdown, str) or not markdown.strip():
+        logger.warning("Quickstart payload missing markdown body: %r", payload)
+        raise ValueError("Quickstart payload is missing markdown.")
+    return markdown, "text/markdown"
 
 
 def _read_agent_playbook_resource() -> tuple[str, str]:
     payload = agent_playbook_payload()
-    return json.dumps(payload, indent=2), "application/json"
+    return json.dumps(payload, separators=(",", ":")), "application/json"
 
 
 def _read_capability_catalog_resource() -> tuple[str, str]:
     payload = build_capability_catalog(golden_configs=get_golden_configs())
-    return json.dumps(payload, indent=2), "application/json"
+    return json.dumps(payload, separators=(",", ":")), "application/json"
 
 
 def read_mcp_resource(uri: str) -> tuple[str, str]:
@@ -74,4 +94,4 @@ def read_mcp_resource(uri: str) -> tuple[str, str]:
         return _read_agent_playbook_resource()
     if uri == CAPABILITY_CATALOG_URI:
         return _read_capability_catalog_resource()
-    raise FileNotFoundError(f"Unsupported resource URI: {uri}")
+    raise ResourceNotFoundError()

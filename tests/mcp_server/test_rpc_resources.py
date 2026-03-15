@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 
 import pytest
@@ -105,8 +106,9 @@ def test_rpc_resources_read_capability_catalog(client):
     assert len(contents) == 1
     assert contents[0]["uri"] == "analyst://catalog/capabilities"
     assert contents[0]["mimeType"] == "application/json"
-    assert '"workflow_templates"' in contents[0]["text"]
-    assert '"modules"' in contents[0]["text"]
+    catalog = json.loads(contents[0]["text"])
+    assert "workflow_templates" in catalog
+    assert "modules" in catalog
 
 
 def test_rpc_resources_read_data_dictionary_template(client):

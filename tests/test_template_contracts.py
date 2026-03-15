@@ -29,6 +29,7 @@ def test_template_resource_uris_cover_template_files():
 
     assert expected_config <= uris
     assert expected_golden <= uris
+    # These are concrete local/internal run configs, not user-facing template resources.
     assert "analyst://templates/config/nightly_silver_qa_config.yaml" not in uris
     assert "analyst://templates/config/run_toolkit_config.yaml" not in uris
 
