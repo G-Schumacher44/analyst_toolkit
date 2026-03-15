@@ -1,5 +1,7 @@
 """Input schemas for cockpit MCP tools."""
 
+from analyst_toolkit.mcp_server.schemas import _GCS_PATH_PROP, _INPUT_ID_PROP, _RUN_ID_PROP
+
 CAPABILITY_CATALOG_INPUT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -80,18 +82,13 @@ DATA_HEALTH_REPORT_INPUT_SCHEMA = {
 DATA_DICTIONARY_INPUT_SCHEMA = {
     "type": "object",
     "properties": {
-        "gcs_path": {
-            "type": "string",
-            "description": "Optional input dataset path when no session_id exists yet.",
-        },
+        **_GCS_PATH_PROP,
         "session_id": {
             "type": "string",
             "description": "Optional session scope when building from an existing run context.",
         },
-        "run_id": {
-            "type": "string",
-            "description": "Optional run identifier used for future artifact names.",
-        },
+        **_INPUT_ID_PROP,
+        **_RUN_ID_PROP,
         "runtime": {
             "type": "object",
             "description": "Optional runtime overlay for cross-cutting execution settings.",
@@ -111,6 +108,11 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
             "description": "Reserve a prelaunch dictionary/readiness surface seeded from infer_configs.",
         },
     },
+    "anyOf": [
+        {"required": ["gcs_path"]},
+        {"required": ["session_id"]},
+        {"required": ["input_id"]},
+    ],
 }
 
 COCKPIT_DASHBOARD_INPUT_SCHEMA = {

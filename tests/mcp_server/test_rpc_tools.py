@@ -52,6 +52,24 @@ def test_rpc_tools_list(client):
     assert "get_agent_instructions" not in tool_names
 
 
+def test_rpc_tools_list_exposes_data_dictionary_input_id_schema(client):
+    """Verify data_dictionary advertises the shared input_id and anyOf input contract."""
+    payload = {"jsonrpc": "2.0", "id": 33, "method": "tools/list", "params": {}}
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    tools = response.json()["result"]["tools"]
+    data_dictionary = next(tool for tool in tools if tool["name"] == "data_dictionary")
+    input_schema = data_dictionary["inputSchema"]
+
+    assert input_schema["properties"]["input_id"]["pattern"] == "^input_[a-f0-9]{12}$"
+    assert input_schema["properties"]["input_id"]["description"].endswith(
+        "If provided, gcs_path and session_id are ignored."
+    )
+    assert {"required": ["input_id"]} in input_schema["anyOf"]
+    assert {"required": ["gcs_path"]} in input_schema["anyOf"]
+    assert {"required": ["session_id"]} in input_schema["anyOf"]
+
+
 def test_rpc_capability_catalog_tool(client):
     """Verify capability catalog exposes editable knobs including fuzzy matching."""
     payload = {
