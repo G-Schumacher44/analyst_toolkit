@@ -2,6 +2,7 @@ import base64
 
 import pandas as pd
 
+from analyst_toolkit.m00_utils.data_dictionary_builder import build_data_dictionary_report
 from analyst_toolkit.m00_utils.export_utils import export_html_report
 from analyst_toolkit.m00_utils.report_html import generate_html_report
 
@@ -151,6 +152,50 @@ def test_generate_data_dictionary_dashboard_renders_prelaunch_contract():
     assert "Prelaunch Readiness" in html
     assert "metadata gaps" in html.lower()
     assert "country" in html
+
+
+def test_build_data_dictionary_report_tolerates_malformed_nested_config_nodes():
+    dataframe = pd.DataFrame(
+        {
+            "customer_id": [1, 2],
+            "status": ["new", "done"],
+        }
+    )
+
+    report = build_data_dictionary_report(
+        dataframe,
+        inferred_configs={
+            "validation": {
+                "validation": {
+                    "schema_validation": [],
+                }
+            },
+            "normalization": {
+                "normalization": {
+                    "rules": None,
+                }
+            },
+            "duplicates": {
+                "duplicates": {
+                    "subset_columns": "customer_id",
+                }
+            },
+            "imputation": {
+                "imputation": {
+                    "rules": [],
+                }
+            },
+            "outliers": {
+                "outliers": {
+                    "detection_specs": None,
+                }
+            },
+        },
+    )
+
+    assert isinstance(report["expected_schema"], pd.DataFrame)
+    assert not report["expected_schema"].empty
+    assert "customer_id" in report["expected_schema"]["Column"].tolist()
 
 
 def test_generate_validation_dashboard_renders_failure_details():

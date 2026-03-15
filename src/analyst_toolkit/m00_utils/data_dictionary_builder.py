@@ -102,6 +102,14 @@ def _format_numeric_rule(bounds: Any) -> str:
     )
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def build_data_dictionary_report(
     df: pd.DataFrame,
     *,
@@ -119,21 +127,23 @@ def build_data_dictionary_report(
     schema_df = profile.get("schema", pd.DataFrame())
     parsed_configs, parse_warnings = _parse_inferred_configs(inferred_configs or {})
 
-    normalization_cfg = parsed_configs.get("normalization", {})
-    duplicates_cfg = parsed_configs.get("duplicates", {})
-    outliers_cfg = parsed_configs.get("outliers", {})
-    imputation_cfg = parsed_configs.get("imputation", {})
-    validation_cfg = parsed_configs.get("validation", {})
+    normalization_cfg = _as_dict(parsed_configs.get("normalization", {}))
+    duplicates_cfg = _as_dict(parsed_configs.get("duplicates", {}))
+    outliers_cfg = _as_dict(parsed_configs.get("outliers", {}))
+    imputation_cfg = _as_dict(parsed_configs.get("imputation", {}))
+    validation_cfg = _as_dict(parsed_configs.get("validation", {}))
 
-    normalization_rules = normalization_cfg.get("rules", {})
-    validation_rules = validation_cfg.get("schema_validation", {}).get("rules", {})
-    outlier_specs = outliers_cfg.get("detection_specs", {})
-    imputation_strategies = imputation_cfg.get("rules", {}).get("strategies", {})
-    duplicate_subset = duplicates_cfg.get("subset_columns") or []
-    expected_columns = validation_rules.get("expected_columns") or []
-    categorical_rules = validation_rules.get("categorical_values", {})
-    numeric_rules = validation_rules.get("numeric_ranges", {})
-    dtype_rules = normalization_rules.get("coerce_dtypes", {})
+    normalization_rules = _as_dict(normalization_cfg.get("rules", {}))
+    validation_schema = _as_dict(validation_cfg.get("schema_validation", {}))
+    validation_rules = _as_dict(validation_schema.get("rules", {}))
+    outlier_specs = _as_dict(outliers_cfg.get("detection_specs", {}))
+    imputation_rules = _as_dict(imputation_cfg.get("rules", {}))
+    imputation_strategies = _as_dict(imputation_rules.get("strategies", {}))
+    duplicate_subset = _as_list(duplicates_cfg.get("subset_columns") or [])
+    expected_columns = _as_list(validation_rules.get("expected_columns") or [])
+    categorical_rules = _as_dict(validation_rules.get("categorical_values", {}))
+    numeric_rules = _as_dict(validation_rules.get("numeric_ranges", {}))
+    dtype_rules = _as_dict(normalization_rules.get("coerce_dtypes", {}))
 
     schema_lookup = {}
     if (
