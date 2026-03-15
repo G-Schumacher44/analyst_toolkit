@@ -38,6 +38,7 @@ def _render_df(
     max_rows: int = _MAX_PREVIEW_ROWS,
     full_preview: bool = False,
     allow_html_cols: set[str] | None = None,
+    wide_layout: bool = False,
 ) -> str:
     if not isinstance(df, pd.DataFrame) or df.empty:
         return "<p class='empty'>No data available.</p>"
@@ -57,8 +58,10 @@ def _render_df(
         preview[column] = preview[column].map(
             lambda value: html.escape(value) if isinstance(value, str) else value
         )
-    table_html = preview.to_html(index=False, escape=False, border=0)
-    wrapped_table = f"<div class='table-wrap'>{table_html}</div>"
+    table_classes = "wide-table" if wide_layout else ""
+    table_html = preview.to_html(index=False, escape=False, border=0, classes=table_classes)
+    wrap_class = "table-wrap wide-table-wrap" if wide_layout else "table-wrap"
+    wrapped_table = f"<div class='{wrap_class}'>{table_html}</div>"
     if full_preview or total_rows <= max_rows:
         return wrapped_table
     return f"{wrapped_table}<p class='subtle'>Showing {len(preview):,} of {total_rows:,} rows.</p>"

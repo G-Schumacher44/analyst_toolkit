@@ -219,6 +219,27 @@ _DASHBOARD_CSS = """
     border: 1px solid #e7dfd1;
     background: #fff;
   }
+  .table-wrap table.wide-table {
+    table-layout: auto;
+    min-width: 1200px;
+    width: max-content;
+  }
+  .wide-table-wrap {
+    max-height: min(460px, 72vh);
+  }
+  .table-wrap table.wide-table th,
+  .table-wrap table.wide-table td {
+    min-width: 140px;
+    white-space: nowrap;
+  }
+  .table-wrap table.wide-table th:first-child,
+  .table-wrap table.wide-table td:first-child {
+    min-width: 180px;
+  }
+  .table-wrap table.wide-table td:last-child {
+    min-width: 260px;
+    white-space: normal;
+  }
   .empty {
     color: var(--muted);
     font-style: italic;
@@ -617,10 +638,13 @@ _DASHBOARD_CSS = """
   }
   .terminal-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     gap: 14px;
+    width: 100%;
+    max-width: 100%;
   }
   .terminal-slot {
+    min-width: 0;
     background: #fcfaf5;
     border: 1px solid var(--line);
     border-radius: 16px;
@@ -630,6 +654,12 @@ _DASHBOARD_CSS = """
     margin: 0 0 8px;
     font-size: 0.88rem;
     color: #22303a;
+  }
+  .terminal-slot p,
+  .terminal-slot a,
+  .terminal-slot code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .terminal-art {
     min-height: 150px;
@@ -651,6 +681,22 @@ _DASHBOARD_CSS = """
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 16px;
+  }
+  .dictionary-top-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .dictionary-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
   .hub-card {
     background: linear-gradient(180deg, #fcfaf5 0%, #f4efe2 100%);
@@ -788,8 +834,14 @@ _DASHBOARD_CSS = """
   .readme-grid {
     display: grid;
     gap: 18px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
   .readme-section {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     padding: 22px;
     border-radius: 20px;
     border: 1px solid var(--line);
@@ -915,6 +967,9 @@ _DASHBOARD_CSS = """
     box-shadow: var(--shadow);
   }
   @media (max-width: 920px) {
+    .dictionary-metric-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .cert-ledger {
       grid-template-columns: 1fr;
     }
@@ -943,6 +998,7 @@ _DASHBOARD_CSS = """
     .page { padding: 20px 12px 44px; }
     .hero { padding: 22px 18px; }
     .hero h1 { font-size: 1.8rem; }
+    .dictionary-metric-grid { grid-template-columns: 1fr; }
     .card.wide { grid-column: auto; }
   }
   @keyframes fade-in {

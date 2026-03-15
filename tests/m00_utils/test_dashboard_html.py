@@ -615,9 +615,31 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
             }
         ],
         "data_dictionary": {
-            "status": "not_implemented",
+            "status": "warn",
             "template_path": "config/data_dictionary_request_template.yaml",
             "implementation_plan": "local_plans/DATA_DICTIONARY_IMPLEMENTATION_WAVE_2026-03-14.md",
+            "latest_run_id": "dictionary_001",
+            "latest_dashboard": "exports/reports/data_dictionary/dictionary_001.html",
+            "latest_export": "exports/reports/data_dictionary/dictionary_001.xlsx",
+            "cockpit_preview": {
+                "overview": {
+                    "rows": 344,
+                    "columns": 12,
+                    "expected_columns": 15,
+                    "metadata_gaps": 4,
+                },
+                "expected_schema_preview": [
+                    {"Column": "customer_id", "Expected Type": "int64", "Required": "True"},
+                    {"Column": "status", "Expected Type": "category", "Required": "True"},
+                ],
+                "readiness_preview": [
+                    {
+                        "Type": "missing_expected_column",
+                        "Column": "region",
+                        "Detail": "Column is expected by inferred validation contract but not present.",
+                    }
+                ],
+            },
         },
     }
 
@@ -641,8 +663,13 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "Missing Dashboard Or Artifact" in html
     assert "Resources For Reading, Planning, And Setup" in html
     assert "Launchpad For Moving From Review To Action" in html
-    assert "Data Dictionary Lane" in html
+    assert "Recent Dictionary Artifact" in html
+    assert "Expected Schema Preview" in html
+    assert "Top Readiness Items" in html
+    assert "customer_id" in html
+    assert "region" in html
     assert "run_001" in html
+    assert "dictionary_001" in html
     assert "tool:get_user_quickstart" in html
     assert "infer_configs" in html
     assert "config/data_dictionary_request_template.yaml" in html

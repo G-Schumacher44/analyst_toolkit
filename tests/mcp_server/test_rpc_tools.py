@@ -470,6 +470,7 @@ async def test_toolkit_get_cockpit_dashboard_denies_when_untrusted(mocker):
 
 
 def test_rpc_data_dictionary_tool(client, mocker, tmp_path):
+    """Verify tools/call data_dictionary returns artifact-first prelaunch output seeded by inference."""
     dataframe = pd.DataFrame(
         {
             "customer_id": [1, 2],
@@ -477,16 +478,22 @@ def test_rpc_data_dictionary_tool(client, mocker, tmp_path):
             "amount": [10.5, 12.0],
         }
     )
-    mocker.patch.object(data_dictionary_tool, "load_input", return_value=dataframe)
-    mocker.patch.object(data_dictionary_tool, "save_to_session", return_value="sess_dictionary")
-    mocker.patch.object(data_dictionary_tool, "append_to_run_history", return_value=None)
-    mocker.patch.object(data_dictionary_tool, "export_dataframes", return_value=None)
-    mocker.patch.object(
+    load_input = mocker.patch.object(data_dictionary_tool, "load_input", return_value=dataframe)
+    save_to_session = mocker.patch.object(
+        data_dictionary_tool, "save_to_session", return_value="sess_dictionary"
+    )
+    append_to_run_history = mocker.patch.object(
+        data_dictionary_tool, "append_to_run_history", return_value=None
+    )
+    export_dataframes = mocker.patch.object(
+        data_dictionary_tool, "export_dataframes", return_value=None
+    )
+    export_html_report = mocker.patch.object(
         data_dictionary_tool,
         "export_html_report",
         return_value=str(tmp_path / "dictionary.html"),
     )
-    mocker.patch.object(
+    deliver_artifact = mocker.patch.object(
         data_dictionary_tool,
         "deliver_artifact",
         side_effect=lambda local_path, *args, **kwargs: {
@@ -497,7 +504,7 @@ def test_rpc_data_dictionary_tool(client, mocker, tmp_path):
             "destinations": {},
         },
     )
-    mocker.patch.object(
+    infer_configs = mocker.patch.object(
         data_dictionary_tool,
         "_toolkit_infer_configs",
         mocker.AsyncMock(
@@ -545,7 +552,29 @@ def test_rpc_data_dictionary_tool(client, mocker, tmp_path):
     assert result["dashboard_label"] == "Data dictionary dashboard"
     assert result["artifact_url"] == "https://example.com/dictionary.html"
     assert result["xlsx_path"].endswith("dictionary_prelaunch_001_data_dictionary_report.xlsx")
+    assert result["cockpit_preview"]["overview"]["rows"] == 2
+    assert result["cockpit_preview"]["overview"]["expected_columns"] == 3
+    assert result["cockpit_preview"]["expected_schema_preview"][0]["Column"] == "customer_id"
     assert result["next_actions"][0]["tool"] == "get_cockpit_dashboard"
+    load_input.assert_called_once_with("gs://bucket/data.csv", session_id=None)
+    save_to_session.assert_called_once_with(dataframe, run_id="dictionary_prelaunch_001")
+    infer_configs.assert_awaited_once_with(
+        gcs_path="gs://bucket/data.csv",
+        session_id="sess_dictionary",
+        runtime=None,
+        run_id="dictionary_prelaunch_001",
+    )
+    export_dataframes.assert_called_once()
+    export_html_report.assert_called_once_with(
+        mocker.ANY,
+        "exports/reports/data_dictionary/dictionary_prelaunch_001_data_dictionary_report.html",
+        "Data Dictionary",
+        "dictionary_prelaunch_001",
+    )
+    assert deliver_artifact.call_count == 2
+    append_to_run_history.assert_called_once_with(
+        "dictionary_prelaunch_001", mocker.ANY, session_id="sess_dictionary"
+    )
 
 
 @pytest.mark.asyncio

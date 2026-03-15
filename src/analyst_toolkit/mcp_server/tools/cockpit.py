@@ -622,6 +622,7 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
                 "prelaunch report inside the cockpit so users can review structure expectations before "
                 "running the rest of the pipeline."
             ),
+            "cockpit_preview": latest_dictionary.get("cockpit_preview", {}),
         },
     }
 

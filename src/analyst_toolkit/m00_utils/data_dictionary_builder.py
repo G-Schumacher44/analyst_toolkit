@@ -63,6 +63,8 @@ def _semantic_type_for(series: pd.Series) -> str:
     non_null = series.dropna()
     if non_null.empty:
         return "unknown"
+    # Bound the categorical heuristic so tiny samples are not overfit while
+    # very high-cardinality text columns do not get mislabeled as categorical.
     if non_null.nunique() <= min(20, max(5, len(non_null) // 2)):
         return "categorical"
     if "date" in name or "time" in name:
@@ -75,7 +77,16 @@ def _semantic_type_for(series: pd.Series) -> str:
 def _example_values(series: pd.Series, limit: int, include_examples: bool) -> str:
     if not include_examples:
         return "Omitted"
-    values = [str(value) for value in series.dropna().astype(str).unique()[:limit]]
+    values: list[str] = []
+    seen: set[str] = set()
+    for value in series.dropna():
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+        if len(values) >= limit:
+            break
     return ", ".join(values) if values else "None"
 
 
@@ -130,6 +141,11 @@ def build_data_dictionary_report(
         and not schema_df.empty
         and "Column" in schema_df.columns
     ):
+        if schema_df["Column"].duplicated().any():
+            parse_warnings.append(
+                "Profile schema contained duplicate Column entries; later rows were kept when building the dictionary lookup."
+            )
+            schema_df = schema_df.drop_duplicates(subset=["Column"], keep="last")
         schema_lookup = schema_df.set_index("Column").to_dict(orient="index")
 
     column_rows: list[dict[str, Any]] = []
@@ -142,6 +158,7 @@ def build_data_dictionary_report(
             {
                 "Column": column,
                 "Observed": "Yes" if column in df.columns else "No",
+                "Contract Source": "infer_configs validation",
                 "Expected Dtype": dtype_rules.get(column, ""),
                 "Allowed Values Preview": ", ".join(
                     map(str, categorical_rules.get(column, [])[:5])
@@ -149,6 +166,20 @@ def build_data_dictionary_report(
                 "Numeric Rule": _format_numeric_rule(numeric_rules.get(column)),
             }
         )
+
+    if not expected_rows:
+        for column in df.columns:
+            series = df[column]
+            expected_rows.append(
+                {
+                    "Column": column,
+                    "Observed": "Yes",
+                    "Contract Source": "observed profile baseline",
+                    "Expected Dtype": str(dtype_rules.get(column, series.dtype)),
+                    "Allowed Values Preview": "",
+                    "Numeric Rule": "",
+                }
+            )
 
     for column in df.columns:
         series = df[column]
@@ -205,7 +236,7 @@ def build_data_dictionary_report(
                     "Detail": "Observed in dataset but not listed in inferred validation schema.",
                 }
             )
-        if not dtype_rules.get(column):
+        if (expected_columns or dtype_rules) and not dtype_rules.get(column):
             readiness_rows.append(
                 {
                     "Severity": "info",
@@ -241,6 +272,15 @@ def build_data_dictionary_report(
                 "Type": "no_validation_contract",
                 "Column": "",
                 "Detail": "Validation config was unavailable, so schema/rule expectations are partial.",
+            }
+        )
+    if not (expected_columns or dtype_rules or categorical_rules or numeric_rules):
+        readiness_rows.append(
+            {
+                "Severity": "info",
+                "Type": "business_metadata_needed",
+                "Column": "",
+                "Detail": "Only a profile-derived baseline contract is available. Add infer_configs or authored metadata to turn this into a stronger prelaunch contract.",
             }
         )
     if parse_warnings:
