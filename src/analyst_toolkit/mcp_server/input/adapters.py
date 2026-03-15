@@ -15,15 +15,25 @@ def detect_source_type(reference: str) -> InputSourceType:
         return "gcs"
     if parsed.scheme in {"gdrive", "drive"}:
         return "gdrive"
+    if parsed.scheme:
+        raise ValueError(
+            f"Unsupported input scheme '{parsed.scheme}'. Use a server-visible path, gs:// URI, or upload."
+        )
     return "server_path"
 
 
 def resolve_source_reference(
     reference: str, source_type: InputSourceType | None = None
 ) -> tuple[InputSourceType, str, str]:
-    resolved_type = source_type or detect_source_type(reference)
+    detected_type = detect_source_type(reference)
+    if source_type is not None and source_type != detected_type:
+        raise ValueError(
+            f"Explicit source_type '{source_type}' does not match reference '{reference}'."
+        )
+    resolved_type = source_type or detected_type
     if resolved_type == "gcs":
-        return resolved_type, reference, Path(reference).name or reference
+        filename = reference.rstrip("/").split("/")[-1] or reference
+        return resolved_type, reference, filename
     if resolved_type == "gdrive":
         raise NotImplementedError(
             "Google Drive inputs are not implemented yet. Upload the file, use a server-visible path, or use gs://."

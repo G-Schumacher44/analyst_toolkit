@@ -27,6 +27,8 @@ def get_descriptor(input_id: str) -> Optional[InputDescriptor]:
 
 def bind_session_input(session_id: str, input_id: str) -> None:
     with _LOCK:
+        if input_id not in _INPUTS:
+            raise ValueError(f"input_id '{input_id}' not found in registry")
         _SESSION_INPUTS[session_id] = input_id
 
 
