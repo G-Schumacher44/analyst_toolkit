@@ -101,6 +101,7 @@ def run_normalization_pipeline(
         module_name="normalization",
         run_id=run_id,
         export_config=settings,
+        preview_columns=module_cfg.get("rules", {}).get("preview_columns", []),
     )
 
     if settings.get("show_inline", True) and notebook:

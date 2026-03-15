@@ -275,14 +275,46 @@ def _render_normalization_changelog(changelog: dict[str, Any]) -> str:
     )
 
 
+def _render_normalization_column_value_analysis(column_value_analysis: Any) -> str:
+    if not isinstance(column_value_analysis, dict) or not column_value_analysis:
+        return "<p class='empty'>No column-level value analysis was recorded for this run.</p>"
+
+    sections: list[str] = []
+    for index, (column, payload) in enumerate(column_value_analysis.items()):
+        if not isinstance(payload, dict):
+            continue
+        normalized_values = payload.get("normalized_values", pd.DataFrame())
+        value_audit = payload.get("value_audit", pd.DataFrame())
+        if (
+            not isinstance(normalized_values, pd.DataFrame)
+            and not isinstance(value_audit, pd.DataFrame)
+        ):
+            continue
+        open_attr = " open" if index == 0 else ""
+        sections.append(
+            f"<details class='section'{open_attr}>"
+            f"<summary>Column Value Audit: {html.escape(str(column))}</summary>"
+            "<div class='card wide'>"
+            f"<h3>Column: <code>{html.escape(str(column))}</code></h3>"
+            "<p class='subtle'>Use this audit to compare how often each value appeared before normalization and what it became after the configured rules were applied.</p>"
+            "<div class='section-grid'>"
+            f"<div class='card'><h3>Normalized Values</h3>{_render_df(normalized_values, max_rows=20, wide_layout=True)}</div>"
+            f"<div class='card'><h3>Value Audit</h3>{_render_df(value_audit, max_rows=20, wide_layout=True)}</div>"
+            "</div>"
+            "</div>"
+            "</details>"
+        )
+    return "".join(sections) or "<p class='empty'>No column-level value analysis was recorded for this run.</p>"
+
+
 def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:
     row_summary_df = report.get("row_change_summary", pd.DataFrame())
     column_changes_df = report.get("column_changes_summary", pd.DataFrame())
     changed_preview_df = report.get("changed_rows_preview", pd.DataFrame())
-    diff_table_df = report.get("diff_table", pd.DataFrame())
     changelog = report.get("changelog", {})
     changelog_summary_df = report.get("changelog_summary", pd.DataFrame())
     meta_df = report.get("meta_info", pd.DataFrame())
+    column_value_analysis = report.get("column_value_analysis", {})
 
     rows_total = int(_safe_row_summary_value(row_summary_df, "rows_total", default=0))
     rows_changed = int(_safe_row_summary_value(row_summary_df, "rows_changed", default=0))
@@ -368,31 +400,33 @@ def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:
     if isinstance(column_changes_df, pd.DataFrame) and not column_changes_df.empty:
         sections.append(
             _render_section(
-                "Column Change Impact",
+                "Column Value Analysis",
                 (
-                    "<div class='section-grid'>"
-                    f"<div class='card'><h3>Column Change Summary</h3>{_render_df(column_changes_df, full_preview=True)}</div>"
-                    f"<div class='card'><h3>Changed Rows Preview</h3>{_render_df(changed_preview_df, max_rows=20)}</div>"
+                    "<div class='card wide'>"
+                    "<h3>Column Change Summary</h3>"
+                    "<p class='subtle'>This shows which columns absorbed the most normalization changes in this run.</p>"
+                    f"{_render_df(column_changes_df, full_preview=True, wide_layout=True)}"
                     "</div>"
+                    f"{_render_normalization_column_value_analysis(column_value_analysis)}"
                 ),
                 open_by_default=True,
             )
         )
-        toc.append(("Column Change Impact", "Column Change Impact"))
+        toc.append(("Column Value Analysis", "Column Value Analysis"))
 
-    if isinstance(diff_table_df, pd.DataFrame) and not diff_table_df.empty:
+    if isinstance(changed_preview_df, pd.DataFrame) and not changed_preview_df.empty:
         sections.append(
             _render_section(
-                "Value-Level Differences",
+                "Changed Rows Preview",
                 (
                     "<div class='card'>"
-                    "<h3>Normalized Value Diff Table</h3>"
-                    "<p class='subtle'>Row-level evidence showing original versus transformed values.</p>"
-                    f"{_render_df(diff_table_df, max_rows=50)}</div>"
+                    "<h3>Changed Rows Preview</h3>"
+                    "<p class='subtle'>Representative row-level examples showing the original and transformed values side by side.</p>"
+                    f"{_render_df(changed_preview_df, max_rows=20, wide_layout=True)}</div>"
                 ),
             )
         )
-        toc.append(("Value-Level Differences", "Value-Level Differences"))
+        toc.append(("Changed Rows Preview", "Changed Rows Preview"))
 
     return _assemble_page(
         module_name="Normalization",

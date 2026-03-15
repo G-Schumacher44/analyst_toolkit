@@ -269,6 +269,19 @@ def test_generate_normalization_dashboard_renders_transform_story():
         "diff_table": pd.DataFrame(
             [{"index": 1, "column": "sex", "original": "male", "transformed": "MALE"}]
         ),
+        "column_value_analysis": {
+            "sex": {
+                "normalized_values": pd.DataFrame(
+                    [{"Value": "MALE", "Count": 3}, {"Value": "FEMALE", "Count": 2}]
+                ),
+                "value_audit": pd.DataFrame(
+                    [
+                        {"Value": "male", "Original Count": 3, "Normalized Count": 0},
+                        {"Value": "MALE", "Original Count": 0, "Normalized Count": 3},
+                    ]
+                ),
+            }
+        },
         "changelog": {
             "renamed_columns": pd.DataFrame(
                 [{"Original Name": "bill length (mm)", "New Name": "bill_length_mm"}]
@@ -297,8 +310,10 @@ def test_generate_normalization_dashboard_renders_transform_story():
     assert "Transformation Log" in html
     assert "Columns Renamed" in html
     assert "Values Mapped" in html
-    assert "Column Change Impact" in html
-    assert "Value-Level Differences" in html
+    assert "Column Value Analysis" in html
+    assert "Normalized Values" in html
+    assert "Value Audit" in html
+    assert "Changed Rows Preview" in html
     assert "male" in html
     assert "MALE" in html
 
