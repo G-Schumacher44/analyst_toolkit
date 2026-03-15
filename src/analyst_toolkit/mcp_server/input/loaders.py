@@ -23,8 +23,12 @@ def load_dataframe_from_descriptor(descriptor: InputDescriptor) -> pd.DataFrame:
         raise InputNotSupportedError(
             "Google Drive inputs are not implemented yet. Upload the file, use a server-visible path, or use gs://."
         )
+    if descriptor.source_type not in {"upload", "server_path"}:
+        raise InputNotSupportedError(
+            f"Unsupported source type: {descriptor.source_type}. Supported source types are upload, server_path, and gcs."
+        )
 
-    path = Path(descriptor.resolved_reference)
+    path = Path(descriptor.resolved_reference).resolve(strict=False)
     if path.suffix == ".parquet":
         return pd.read_parquet(path)
     if path.suffix == ".csv":

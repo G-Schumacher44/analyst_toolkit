@@ -96,6 +96,7 @@ def test_auth_mode_allows_bearer_token(client, monkeypatch):
 
 
 def test_auth_mode_rejects_unauthorized_input_register(client, monkeypatch, tmp_path):
+    """Verify token auth mode blocks unauthenticated input registration."""
     monkeypatch.setattr(server_module, "AUTH_TOKEN", "test-token")
     source = tmp_path / "dirty_penguins.csv"
     source.write_text("species,bill_length_mm\nAdelie,39.1\n")
@@ -106,3 +107,23 @@ def test_auth_mode_rejects_unauthorized_input_register(client, monkeypatch, tmp_
     assert response.status_code == 401
     assert response.json()["detail"]["error"] == "Unauthorized"
     assert isinstance(response.json()["detail"]["trace_id"], str)
+
+
+def test_auth_mode_allows_authorized_input_register(client, monkeypatch, tmp_path):
+    """Verify token auth mode allows authorized input registration."""
+    monkeypatch.setattr(server_module, "AUTH_TOKEN", "test-token")
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    headers = {"Authorization": "Bearer test-token"}
+    source = tmp_path / "dirty_penguins.csv"
+    source.write_text("species,bill_length_mm\nAdelie,39.1\n")
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": str(source), "load_into_session": False},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pass"
+    assert isinstance(payload["trace_id"], str)
+    assert payload["input"]["resolved_reference"] == str(source.resolve())

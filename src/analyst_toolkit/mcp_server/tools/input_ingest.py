@@ -61,27 +61,39 @@ async def _toolkit_register_input(
         "status": "pass",
         "module": "register_input",
         "input": descriptor.to_dict(),
-        "session_id": effective_session_id or "",
+        "session_id": effective_session_id,
         "summary": summary,
     }
 
 
 async def _toolkit_get_input_descriptor(input_id: str) -> dict:
-    loop = asyncio.get_running_loop()
-    descriptor = await loop.run_in_executor(None, get_input_descriptor, input_id)
-    if descriptor is None:
+    try:
+        loop = asyncio.get_running_loop()
+        descriptor = await loop.run_in_executor(None, get_input_descriptor, input_id)
+        if descriptor is None:
+            trace_id = new_trace_id()
+            return {
+                "status": "error",
+                "module": "get_input_descriptor",
+                "code": "INPUT_NOT_FOUND",
+                "message": "Input descriptor not found.",
+                "trace_id": trace_id,
+            }
+        descriptor_payload = descriptor.to_dict()
+    except Exception:
         trace_id = new_trace_id()
+        logger.exception("Failed to retrieve input descriptor (trace_id=%s)", trace_id)
         return {
             "status": "error",
             "module": "get_input_descriptor",
-            "code": "INPUT_NOT_FOUND",
-            "message": "Input descriptor not found.",
+            "code": "INTERNAL_ERROR",
+            "message": "Internal server error.",
             "trace_id": trace_id,
         }
     return {
         "status": "pass",
         "module": "get_input_descriptor",
-        "input": descriptor.to_dict(),
+        "input": descriptor_payload,
     }
 
 

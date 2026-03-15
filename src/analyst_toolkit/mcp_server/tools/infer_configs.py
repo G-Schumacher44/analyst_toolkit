@@ -35,6 +35,15 @@ async def _toolkit_infer_configs(
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, _lifecycle = resolve_run_context(run_id, session_id)
     options = options or {}
+    provided_inputs = [gcs_path is not None, session_id is not None, input_id is not None]
+    if sum(provided_inputs) > 1:
+        return {
+            "status": "error",
+            "module": "infer_configs",
+            "error": "Provide exactly one of gcs_path, session_id, or input_id.",
+            "error_code": "AMBIGUOUS_INPUT_SOURCE",
+            "config_yaml": "",
+        }
     df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     # If it came from a path and we don't have a session, start one
@@ -147,7 +156,10 @@ _INPUT_SCHEMA = {
         },
         "input_id": {
             "type": "string",
-            "description": "Optional: Canonical server-managed input reference returned by ingest/register flows.",
+            "description": (
+                "Optional: Canonical server-managed input reference returned by ingest/register "
+                "flows. If provided, gcs_path and session_id are ignored."
+            ),
             "pattern": "^input_[a-f0-9]{12}$",
         },
         "runtime": {

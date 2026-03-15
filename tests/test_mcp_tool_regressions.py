@@ -216,6 +216,7 @@ async def test_toolkit_diagnostics_accepts_runtime_overrides(mocker):
     assert result["run_id"] == "diag_runtime"
     assert result["runtime_applied"] is True
     assert captured["input_path"] == "gs://bucket/runtime.csv"
+    assert captured["input_id"] is None
     assert result["artifact_path"].endswith("diag_runtime_diagnostics_report.html")
 
 
@@ -282,6 +283,7 @@ async def test_toolkit_infer_configs_accepts_runtime_overrides(monkeypatch, mock
     assert result["runtime_applied"] is True
     assert result["run_id"] == "infer_runtime"
     assert captured["input_path"] == "gs://bucket/runtime.csv"
+    assert captured["input_id"] is None
 
 
 @pytest.mark.asyncio
@@ -691,6 +693,7 @@ async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
 
     def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
+        captured["input_id"] = input_id
         return df
 
     mocker.patch.object(duplicates_tool, "load_input", side_effect=fake_load_input)
@@ -715,6 +718,7 @@ async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
     assert result["runtime_applied"] is True
     assert result["run_id"] == "dup_runtime"
     assert captured["input_path"] == "gs://bucket/dup.csv"
+    assert captured["input_id"] is None
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
 
 
@@ -725,6 +729,7 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
 
     def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
+        captured["input_id"] = input_id
         return df
 
     mocker.patch.object(final_audit_tool, "load_input", side_effect=fake_load_input)
@@ -759,6 +764,7 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
     assert result["runtime_applied"] is True
     assert result["run_id"] == "final_runtime"
     assert captured["input_path"] == "gs://bucket/final.csv"
+    assert captured["input_id"] is None
     assert "final_runtime" in result["artifact_path"]
 
 

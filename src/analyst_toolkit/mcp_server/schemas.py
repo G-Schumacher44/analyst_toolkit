@@ -38,6 +38,7 @@ _SESSION_ID_PROP = {
 _INPUT_ID_PROP = {
     "input_id": {
         "type": "string",
+        "pattern": "^input_[a-f0-9]{12}$",
         "description": (
             "Optional: Canonical server-managed input reference returned by input "
             "ingest/register flows. If provided, gcs_path and session_id are ignored."

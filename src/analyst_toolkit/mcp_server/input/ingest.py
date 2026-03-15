@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -51,15 +52,15 @@ def ingest_uploaded_bytes(
         session_id=session_id,
         run_id=run_id,
     )
-    descriptor = save_descriptor(descriptor)
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:
         df = load_dataframe_from_descriptor(descriptor)
         effective_session_id = StateStore.save(df, session_id=session_id, run_id=run_id)
+        descriptor = replace(descriptor, session_id=effective_session_id)
+    descriptor = save_descriptor(descriptor)
+    if load_into_session and effective_session_id is not None:
         bind_session_input(effective_session_id, descriptor.input_id)
-        descriptor = InputDescriptor(**{**descriptor.to_dict(), "session_id": effective_session_id})
-        descriptor = save_descriptor(descriptor)
     return descriptor, df, effective_session_id
 
 
@@ -84,15 +85,15 @@ def register_input_source(
         session_id=session_id,
         run_id=run_id,
     )
-    descriptor = save_descriptor(descriptor)
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:
         df = load_dataframe_from_descriptor(descriptor)
         effective_session_id = StateStore.save(df, session_id=session_id, run_id=run_id)
+        descriptor = replace(descriptor, session_id=effective_session_id)
+    descriptor = save_descriptor(descriptor)
+    if load_into_session and effective_session_id is not None:
         bind_session_input(effective_session_id, descriptor.input_id)
-        descriptor = InputDescriptor(**{**descriptor.to_dict(), "session_id": effective_session_id})
-        descriptor = save_descriptor(descriptor)
     return descriptor, df, effective_session_id
 
 
@@ -127,6 +128,4 @@ def load_dataframe(
         reference=path,
         load_into_session=False,
     )
-    if df is not None:
-        return df
     return load_dataframe_from_descriptor(descriptor)

@@ -193,12 +193,19 @@ def load_input(
         if path_warning:
             logger.warning(path_warning)
         if _looks_like_bucket_path(normalized_path):
-            raise FileNotFoundError(
-                f"Input path not found: '{normalized_path}'. Did you mean 'gs://{normalized_path}'?"
+            raise ValueError(
+                f"[INVALID_PATH_FORMAT] Path '{normalized_path}' looks like a bucket path "
+                f"but is missing the scheme. Did you mean 'gs://{normalized_path}'?"
             )
 
+    session_data_available = (
+        session_id is not None
+        and not normalized_path
+        and not input_id
+        and StateStore.get(session_id) is not None
+    )
     df = _load_input_dataframe(path=normalized_path, session_id=session_id, input_id=input_id)
-    if session_id and not normalized_path and not input_id and StateStore.get(session_id) is not None:
+    if session_data_available:
         logger.info(f"Loaded from session: {session_id}")
     return df
 
