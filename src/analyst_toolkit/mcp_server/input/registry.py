@@ -35,11 +35,13 @@ def _env_float(name: str, default: float) -> float:
         parsed = float(value)
     except ValueError:
         return default
-    return parsed if parsed > 0 else default
+    return parsed if parsed >= 0 else default
 
 
 _REGISTRY_MAX_ENTRIES = _env_int("ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES", 512)
 _REGISTRY_TTL_SEC = _env_float("ANALYST_MCP_INPUT_REGISTRY_TTL_SEC", 21600.0)
+
+
 @dataclass
 class _RegistryEntry:
     descriptor: InputDescriptor

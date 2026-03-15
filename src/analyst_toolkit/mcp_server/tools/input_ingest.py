@@ -130,6 +130,7 @@ register_tool(
             "idempotency_key": {
                 "type": "string",
                 "minLength": 1,
+                "maxLength": 255,
                 "pattern": "^.*\\S.*$",
                 "description": (
                     "Optional stable idempotency key. Provide this to reuse the same "

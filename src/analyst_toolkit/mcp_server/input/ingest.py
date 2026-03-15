@@ -142,7 +142,7 @@ def load_dataframe(
     if input_id:
         descriptor = get_descriptor(input_id)
         if descriptor is None:
-            raise InputNotFoundError("Input descriptor not found.")
+            raise InputNotFoundError(f"Input descriptor not found for input_id='{input_id}'.")
         return load_dataframe_from_descriptor(descriptor)
 
     if not path:

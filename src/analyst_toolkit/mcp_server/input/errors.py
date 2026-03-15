@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 
 class InputError(Exception):
     """Base error for input ingest and resolution surfaces."""
 
-    code = "INPUT_ERROR"
+    code: str = "INPUT_ERROR"
 
-    def __init__(self, message: str):
+    def __init__(self, message: str, *, trace_id: Optional[str] = None):
         super().__init__(message)
         self.message = message
+        self.trace_id = trace_id
 
 
 class InputNotSupportedError(InputError):
@@ -35,4 +38,3 @@ class InputConflictError(InputError):
 
 class InputNotFoundError(InputError):
     code = "INPUT_NOT_FOUND"
-

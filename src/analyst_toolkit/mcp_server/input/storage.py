@@ -61,12 +61,18 @@ def stage_uploaded_file(*, filename: str, payload: bytes) -> tuple[Path, str, in
     staged_dir.mkdir(parents=True, exist_ok=True)
     staged_path = staged_dir / f"{digest}_{safe_name}"
     if not staged_path.exists():
-        with tempfile.NamedTemporaryFile(dir=staged_dir, delete=False) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-            tmp_path = Path(handle.name)
-        os.replace(tmp_path, staged_path)
+        tmp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=staged_dir, delete=False) as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+                tmp_path = Path(handle.name)
+            os.replace(tmp_path, staged_path)
+        except BaseException:
+            if tmp_path is not None and tmp_path.exists():
+                tmp_path.unlink()
+            raise
     return staged_path.resolve(), digest, len(payload)
 
 
@@ -77,11 +83,11 @@ def validate_server_visible_path(path_text: str) -> Path:
         )
     roots = allowed_server_input_roots()
     candidate = Path(path_text).resolve(strict=False)
-    if not candidate.exists():
-        raise InputPathNotFoundError("Input path not found.")
     for root in roots:
         try:
             candidate.relative_to(root)
+            if not candidate.exists():
+                raise InputPathNotFoundError("Input path not found.")
             return candidate
         except ValueError:
             continue

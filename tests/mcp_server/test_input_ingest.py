@@ -1,10 +1,20 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from analyst_toolkit.mcp_server.input import registry as input_registry
 from analyst_toolkit.mcp_server.state import StateStore
 from analyst_toolkit.mcp_server.tools import diagnostics as diagnostics_tool
+
+
+@pytest.fixture
+def clean_input_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    StateStore.clear()
+    input_registry.clear()
+    return tmp_path
 
 
 def _write_sample_csv(path: Path) -> None:
@@ -16,12 +26,7 @@ def _write_sample_csv(path: Path) -> None:
     ).to_csv(path, index=False)
 
 
-def test_inputs_upload_creates_session_and_descriptor(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
-
+def test_inputs_upload_creates_session_and_descriptor(client, clean_input_env):
     response = client.post(
         "/inputs/upload",
         files={
@@ -38,15 +43,11 @@ def test_inputs_upload_creates_session_and_descriptor(client, monkeypatch, tmp_p
     assert payload["summary"]["column_count"] == 2
 
 
-def test_inputs_upload_rejects_payload_over_limit(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+def test_inputs_upload_rejects_payload_over_limit(client, monkeypatch, clean_input_env):
     monkeypatch.setattr(
         "analyst_toolkit.mcp_server.input.storage._MAX_UPLOAD_BYTES",
         8,
     )
-    StateStore.clear()
-    input_registry.clear()
 
     response = client.post(
         "/inputs/upload",
@@ -60,12 +61,7 @@ def test_inputs_upload_rejects_payload_over_limit(client, monkeypatch, tmp_path)
     assert isinstance(detail["trace_id"], str)
 
 
-def test_inputs_upload_reuses_input_id_for_same_payload(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
-
+def test_inputs_upload_reuses_input_id_for_same_payload(client, clean_input_env):
     response_one = client.post(
         "/inputs/upload",
         files={
@@ -88,11 +84,8 @@ def test_inputs_upload_reuses_input_id_for_same_payload(client, monkeypatch, tmp
     assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
 
 
-def test_inputs_register_server_path_loads_into_session(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
+def test_inputs_register_server_path_loads_into_session(client, clean_input_env):
+    tmp_path = clean_input_env
 
     source = tmp_path / "dirty_penguins.csv"
     _write_sample_csv(source)
@@ -109,11 +102,8 @@ def test_inputs_register_server_path_loads_into_session(client, monkeypatch, tmp
     assert payload["summary"]["row_count"] == 2
 
 
-def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
+def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, clean_input_env):
+    tmp_path = clean_input_env
 
     source = tmp_path / "dirty_penguins.csv"
     _write_sample_csv(source)
@@ -143,12 +133,9 @@ def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, mon
 
 
 def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(
-    client, monkeypatch, tmp_path
+    client, clean_input_env
 ):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
+    tmp_path = clean_input_env
 
     source = tmp_path / "dirty_penguins.csv"
     _write_sample_csv(source)
@@ -177,11 +164,9 @@ def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(
     assert response_one.json()["input"]["input_id"] != response_two.json()["input"]["input_id"]
 
 
-def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch, clean_input_env):
+    tmp_path = clean_input_env
     monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path / "allowed"))
-    StateStore.clear()
-    input_registry.clear()
 
     source = tmp_path / "dirty_penguins.csv"
     _write_sample_csv(source)
@@ -194,13 +179,8 @@ def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch,
     assert "not visible to the MCP runtime" in response.json()["detail"]["error"]
 
 
-def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(
-    client, monkeypatch, tmp_path
-):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
+def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(client, clean_input_env):
+    tmp_path = clean_input_env
 
     source_one = tmp_path / "dirty_penguins.csv"
     source_two = tmp_path / "clean_penguins.csv"
@@ -231,11 +211,8 @@ def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(
     assert isinstance(detail["trace_id"], str)
 
 
-def test_register_input_tool_and_diagnostics_input_id_flow(client, monkeypatch, mocker, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
-    StateStore.clear()
-    input_registry.clear()
+def test_register_input_tool_and_diagnostics_input_id_flow(client, mocker, clean_input_env):
+    tmp_path = clean_input_env
     mocker.patch.object(diagnostics_tool, "run_diag_pipeline", return_value=None)
     mocker.patch.object(diagnostics_tool, "save_output", return_value="gs://dummy/diagnostics.csv")
     mocker.patch.object(diagnostics_tool, "append_to_run_history", return_value=None)
