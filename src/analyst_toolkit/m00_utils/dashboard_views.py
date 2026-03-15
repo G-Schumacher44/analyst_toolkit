@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import html
+import posixpath
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -24,6 +26,7 @@ from analyst_toolkit.m00_utils.dashboard_tables import (
 )
 
 _TEMPLATES_GROUP_TITLE = "templates and contracts"
+_COCKPIT_REPORT_DIR = "exports/reports/cockpit"
 
 
 def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = True) -> str:
@@ -38,6 +41,34 @@ def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = Tr
         "<p class='subtle'><strong>Open With</strong></p>"
         f"{_render_reference_value(item.get('Reference', ''), empty_label='No reference recorded.')}"
         "</div>"
+    )
+
+
+def _render_cockpit_artifact_reference(value: Any, *, empty_label: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return f"<p class='empty'>{html.escape(empty_label)}</p>"
+    normalized = text
+    parsed = urlparse(normalized)
+    if parsed.scheme in {"http", "https"}:
+        rendered = html.escape(normalized)
+        return (
+            "<p class='subtle'><a href='"
+            f"{rendered}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
+        )
+    exports_index = normalized.rfind("exports/")
+    if not parsed.scheme and exports_index >= 0:
+        normalized = "/" + normalized[exports_index:]
+
+    rendered = html.escape(normalized)
+    if normalized.startswith("/exports/"):
+        relative = posixpath.relpath(normalized.lstrip("/"), _COCKPIT_REPORT_DIR)
+        href = html.escape(relative)
+    else:
+        return f"<p class='subtle'><code>{rendered}</code></p>"
+    return (
+        "<p class='subtle'><a href='"
+        f"{href}' target='_blank' rel='noopener noreferrer'>{rendered}</a></p>"
     )
 
 
@@ -66,7 +97,7 @@ def _render_cockpit_overview(
             "<div class='surface-item'>"
             f"<h4>{html.escape(label)}</h4>"
             f"<p class='subtle'><strong>Run:</strong> {html.escape(str((payload or {}).get('run_id') or 'Unavailable'))}</p>"
-            f"{_render_reference_value((payload or {}).get('reference', ''), empty_label='No artifact recorded.')}"
+            f"{_render_cockpit_artifact_reference((payload or {}).get('reference', ''), empty_label='No artifact recorded.')}"
             "</div>"
         )
 
@@ -173,9 +204,9 @@ def _render_cockpit_recent_runs(recent_runs: list[dict[str, Any]]) -> str:
             "<p class='subtle'><strong>Session:</strong> "
             f"{html.escape(str(run.get('session_id') or 'Unavailable'))}</p>"
             "<p class='subtle'><strong>Best Dashboard</strong></p>"
-            f"{_render_reference_value(dashboard_ref, empty_label='No dashboard recorded.')}"
+            f"{_render_cockpit_artifact_reference(dashboard_ref, empty_label='No dashboard recorded.')}"
             "<p class='subtle'><strong>Best Export</strong></p>"
-            f"{_render_reference_value(export_ref, empty_label='No export recorded.')}"
+            f"{_render_cockpit_artifact_reference(export_ref, empty_label='No export recorded.')}"
             "</div>"
         )
     return (
@@ -281,6 +312,20 @@ def _render_cockpit_artifacts(
     artifacts: list[dict[str, Any]], artifact_server: dict[str, Any]
 ) -> str:
     artifact_df = pd.DataFrame(artifacts)
+    if not artifact_df.empty:
+        # Table cells need file-relative links so the standalone cockpit HTML works from disk.
+        # The server info cards below are not artifact file targets, so normal reference rendering is fine.
+        for column, empty_label in (
+            ("Dashboard", "No dashboard recorded."),
+            ("Export", "No export recorded."),
+            ("Artifact Path", "No artifact path recorded."),
+        ):
+            if column in artifact_df.columns:
+                artifact_df[column] = artifact_df[column].map(
+                    lambda value, label=empty_label: _render_cockpit_artifact_reference(
+                        value, empty_label=label
+                    )
+                )
     server_running = bool(artifact_server.get("running"))
     server_base_url = str(artifact_server.get("base_url", ""))
     server_root = str(artifact_server.get("root", ""))
@@ -313,7 +358,7 @@ def _render_cockpit_artifacts(
         "<div class='readme-section'>"
         "<h3>Artifact Index</h3>"
         "<p class='subtle'>Use this page as the cockpit linkage shelf for recent dashboards, exports, and operator-facing review surfaces.</p>"
-        f"{_render_df(artifact_df, full_preview=True, wide_layout=True)}"
+        f"{_render_df(artifact_df, full_preview=True, wide_layout=True, allow_html_cols={'Dashboard', 'Export', 'Artifact Path'})}"
         "</div>"
         "</div>"
     )
@@ -350,11 +395,11 @@ def _render_cockpit_dictionary(data_dictionary: dict[str, Any]) -> str:
         "</div>"
         "<div class='terminal-slot'>"
         "<h4>Dashboard</h4>"
-        f"{_render_reference_value(latest_dashboard, empty_label='No dictionary dashboard recorded yet.')}"
+        f"{_render_cockpit_artifact_reference(latest_dashboard, empty_label='No dictionary dashboard recorded yet.')}"
         "</div>"
         "<div class='terminal-slot'>"
         "<h4>Workbook</h4>"
-        f"{_render_reference_value(latest_export, empty_label='No dictionary workbook recorded yet.')}"
+        f"{_render_cockpit_artifact_reference(latest_export, empty_label='No dictionary workbook recorded yet.')}"
         "</div>"
         "<div class='terminal-slot'>"
         "<h4>Template</h4>"

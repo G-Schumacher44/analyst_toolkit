@@ -748,6 +748,9 @@ def test_generate_cockpit_dashboard_renders_operator_hub():
     assert "Launchpad For Moving From Review To Action" in html
     assert "Artifact Index" in html
     assert "http://127.0.0.1:8765" in html
+    assert "href='http://127.0.0.1:8765/exports/reports/validation/run_001_validation.html'" in html
+    assert "<code>gs://bucket/run_001.csv</code>" in html
+    assert "href='../validation/run_001_validation.html'" in html
     assert "Recent Dictionary Artifact" in html
     assert "Expected Schema Preview" in html
     assert "Top Readiness Items" in html
