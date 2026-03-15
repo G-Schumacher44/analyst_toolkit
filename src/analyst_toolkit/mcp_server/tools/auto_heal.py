@@ -26,7 +26,7 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
     runtime_to_tool_overrides,
 )
-from analyst_toolkit.mcp_server.schemas import _INPUT_ID_PROP
+from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
 from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_configs
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
@@ -424,7 +424,7 @@ _INPUT_SCHEMA = {
             "type": "string",
             "description": "Optional: In-memory session identifier.",
         },
-        **_INPUT_ID_PROP,
+        **INPUT_ID_PROP,
         "run_id": {
             "type": "string",
             "description": "Optional run identifier.",

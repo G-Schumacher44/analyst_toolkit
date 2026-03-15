@@ -9,7 +9,7 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
     runtime_to_tool_overrides,
 )
-from analyst_toolkit.mcp_server.schemas import _INPUT_ID_PROP
+from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 
 
 async def _toolkit_infer_configs(
@@ -155,7 +155,7 @@ _INPUT_SCHEMA = {
             "type": "string",
             "description": "Optional: In-memory session identifier from a previous tool run.",
         },
-        **_INPUT_ID_PROP,
+        **INPUT_ID_PROP,
         "runtime": {
             "type": ["object", "string"],
             "description": (

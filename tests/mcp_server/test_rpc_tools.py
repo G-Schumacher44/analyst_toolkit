@@ -78,6 +78,7 @@ def test_rpc_tools_list_standardizes_input_id_pattern_across_tool_schemas(client
     tools = {tool["name"]: tool for tool in response.json()["result"]["tools"]}
 
     for tool_name in ("infer_configs", "auto_heal", "get_input_descriptor"):
+        assert tool_name in tools, f"Expected tool '{tool_name}' not found in tools/list response"
         input_id_schema = tools[tool_name]["inputSchema"]["properties"]["input_id"]
         assert input_id_schema["pattern"] == "^input_[a-f0-9]{12}$"
         assert "Canonical server-managed input reference" in input_id_schema["description"]
