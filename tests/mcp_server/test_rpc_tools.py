@@ -70,6 +70,19 @@ def test_rpc_tools_list_exposes_data_dictionary_input_id_schema(client):
     assert {"required": ["session_id"]} in input_schema["anyOf"]
 
 
+def test_rpc_tools_list_standardizes_input_id_pattern_across_tool_schemas(client):
+    """Verify all remaining bespoke tool schemas reuse the shared input_id contract."""
+    payload = {"jsonrpc": "2.0", "id": 34, "method": "tools/list", "params": {}}
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    tools = {tool["name"]: tool for tool in response.json()["result"]["tools"]}
+
+    for tool_name in ("infer_configs", "auto_heal", "get_input_descriptor"):
+        input_id_schema = tools[tool_name]["inputSchema"]["properties"]["input_id"]
+        assert input_id_schema["pattern"] == "^input_[a-f0-9]{12}$"
+        assert "Canonical server-managed input reference" in input_id_schema["description"]
+
+
 def test_rpc_capability_catalog_tool(client):
     """Verify capability catalog exposes editable knobs including fuzzy matching."""
     payload = {
