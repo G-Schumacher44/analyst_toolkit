@@ -1,5 +1,7 @@
 """Input schemas for cockpit MCP tools."""
 
+from analyst_toolkit.mcp_server.schemas import _GCS_PATH_PROP, _INPUT_ID_PROP, _RUN_ID_PROP
+
 CAPABILITY_CATALOG_INPUT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -80,17 +82,23 @@ DATA_HEALTH_REPORT_INPUT_SCHEMA = {
 DATA_DICTIONARY_INPUT_SCHEMA = {
     "type": "object",
     "properties": {
-        "gcs_path": {
-            "type": "string",
-            "description": "Optional input dataset path when no session_id exists yet.",
-        },
+        **_GCS_PATH_PROP,
         "session_id": {
             "type": "string",
-            "description": "Optional session scope when building from an existing run context.",
+            "description": (
+                "Optional in-memory session identifier to use as the primary input source "
+                "when building from an existing run context."
+            ),
         },
+        **_INPUT_ID_PROP,
         "run_id": {
             "type": "string",
-            "description": "Optional run identifier used for future artifact names.",
+            "description": (
+                "Optional run identifier used for output paths and artifact naming. "
+                "This does not resolve the input source by itself; provide gcs_path, "
+                "session_id, or input_id."
+            ),
+            "default": "data_dictionary_prelaunch",
         },
         "runtime": {
             "type": "object",
@@ -111,6 +119,11 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
             "description": "Reserve a prelaunch dictionary/readiness surface seeded from infer_configs.",
         },
     },
+    "anyOf": [
+        {"required": ["gcs_path"]},
+        {"required": ["session_id"]},
+        {"required": ["input_id"]},
+    ],
 }
 
 COCKPIT_DASHBOARD_INPUT_SCHEMA = {
