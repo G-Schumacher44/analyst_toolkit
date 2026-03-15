@@ -272,7 +272,7 @@ def agent_playbook_payload() -> dict:
                 "required_inputs": [],
                 "outputs": ["base_url", "running"],
                 "notes": [
-                    "Optional but recommended in trusted/local mode before promising direct dashboard links.",
+                    "Optional for any client; recommended in trusted/local mode before promising direct dashboard links.",
                 ],
                 "next": [offset + 1],
             },

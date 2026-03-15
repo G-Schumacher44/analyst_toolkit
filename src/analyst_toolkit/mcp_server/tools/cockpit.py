@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,8 @@ from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
 
 logger = logging.getLogger("analyst_toolkit.mcp_server.cockpit")
 _SAFE_RUN_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+MAX_ARTIFACT_ROWS = 24
+_WORKSPACE_ROOT = Path.cwd().resolve(strict=False)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -256,6 +259,17 @@ def _cockpit_artifact_key(limit: int) -> str:
     return f"cockpit_dashboard_limit_{int(limit)}"
 
 
+def _artifact_root_label(root: Any) -> str:
+    text = str(root or "").strip()
+    if not text:
+        return ""
+    path = Path(text).expanduser().resolve(strict=False)
+    try:
+        return path.relative_to(_WORKSPACE_ROOT).as_posix()
+    except ValueError:
+        return path.name or "artifacts"
+
+
 def _trusted_history_denial() -> dict[str, Any]:
     return {
         "status": "error",
@@ -442,7 +456,7 @@ def _build_recent_artifact_rows(limit: int) -> list[dict[str, Any]]:
                     "Artifact Path": artifact_path,
                 }
             )
-            if len(rows) >= 24:
+            if len(rows) >= MAX_ARTIFACT_ROWS:
                 return rows
     return rows
 
@@ -462,7 +476,11 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
     top_auto_heal = next((run for run in recent_runs if run.get("auto_heal_dashboard")), {})
     top_final_audit = next((run for run in recent_runs if run.get("final_audit_dashboard")), {})
     latest_dictionary = _latest_recent_module_entry("data_dictionary", limit)
-    artifact_server = get_local_artifact_server_status()
+    artifact_server_status = get_local_artifact_server_status()
+    artifact_server = {
+        **artifact_server_status,
+        "root": _artifact_root_label(artifact_server_status.get("root", "")),
+    }
     artifact_rows = _build_recent_artifact_rows(limit)
     blocker_runs = [
         {
@@ -930,21 +948,42 @@ async def _toolkit_ensure_artifact_server() -> dict:
             "warnings": [],
         }
 
-    result = ensure_local_artifact_server()
-    status = "pass" if result.get("running") else "warn"
-    return with_next_actions(
-        {
-            "status": status,
+    try:
+        result = ensure_local_artifact_server()
+    except ValueError as exc:
+        trace_id = str(uuid.uuid4())
+        logger.exception(
+            "Artifact server configuration invalid trace_id=%s",
+            trace_id,
+            exc_info=exc,
+        )
+        return {
+            "status": "error",
             "module": "artifact_server",
-            "summary": {
-                "running": bool(result.get("running")),
-                "enabled": bool(result.get("enabled")),
-                "already_running": bool(result.get("already_running")),
-            },
-            "base_url": str(result.get("base_url", "")),
-            "root": str(result.get("root", "")),
-            "warnings": ([] if result.get("running") else [str(result.get("message", ""))]),
+            "code": "ARTIFACT_SERVER_CONFIG_INVALID",
+            "trace_id": trace_id,
+            "message": "Artifact server configuration invalid; see trace_id.",
+            "warnings": [],
+        }
+    result_status = str(result.get("status", "")).lower()
+    status = "error" if result_status == "error" else ("pass" if result.get("running") else "warn")
+    message = str(result.get("message", "")).strip()
+    payload = {
+        "status": status,
+        "module": "artifact_server",
+        "summary": {
+            "running": bool(result.get("running")),
+            "enabled": bool(result.get("enabled")),
+            "already_running": bool(result.get("already_running")),
         },
+        "base_url": str(result.get("base_url", "")),
+        "root": _artifact_root_label(result.get("root", "")),
+        "warnings": [] if result.get("running") else ([message] if message else []),
+    }
+    if result.get("error_code"):
+        payload["code"] = str(result["error_code"])
+    return with_next_actions(
+        payload,
         [
             next_action(
                 "get_cockpit_dashboard",
