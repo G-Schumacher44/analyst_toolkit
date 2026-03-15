@@ -1,7 +1,7 @@
 # Dockerfile.mcp — analyst_toolkit MCP Server
 #
 # Build:  docker build -f Dockerfile.mcp -t analyst-toolkit-mcp .
-# Run:    docker-compose -f docker-compose.mcp.yml up
+# Run:    docker compose -f docker-compose.mcp.yml up
 #
 # The server exposes a JSON-RPC 2.0 /rpc endpoint on port 8001,
 # compatible with fridai-core's HTTPRemoteClient.
@@ -10,18 +10,18 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install dependencies first (layer cache)
-# vendor/ holds pre-built wheels for packages not pulled from PyPI
+# Install dependencies from project metadata.
+# requirements-mcp.txt is a thin compatibility shim that resolves to .[mcp].
+COPY pyproject.toml .
+COPY README.md .
 COPY requirements-mcp.txt .
-COPY vendor/ vendor/
-RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir vendor/analyst_toolkit_deploy-0.2.6-py3-none-any.whl \
-    && pip install --no-cache-dir -r requirements-mcp.txt
-
-# Copy toolkit source and config
 COPY src/ src/
 COPY config/ config/
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r requirements-mcp.txt
+
+# Runtime defaults
 ENV PYTHONPATH=/app/src
 ENV ANALYST_MCP_HOST=0.0.0.0
 

@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 # ----------------------------------------
 [project]
 name = "analyst_toolkit"
-version = "0.4.3"
+version = "0.4.4"
 description = "A comprehensive toolkit for data analysis, validation, and diagnostics."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,8 @@ classifiers = [
 # ----------------------------------------
 dependencies = [
   "pandas",
+  "numpy",
+  "scipy",
   "matplotlib",
   "seaborn",
   "joblib",
@@ -59,7 +61,9 @@ mcp = [
   "mcp>=1.2.1",
   "pyarrow>=14.0",
   "google-cloud-storage>=2.14",
+  "gcsfs>=2024.2.0",
   "pydantic>=2.0",
+  "analyst_toolkit_deploy @ git+https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility.git@b8127f990e1c7bd6b7fd6b66f4987e0bd86fbad6",
 ]
 dev = [
   "pytest>=7.0",

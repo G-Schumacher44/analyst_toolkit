@@ -2,7 +2,7 @@
         lint format format-check yaml-lint typecheck test precommit check \
         mcp-up mcp-down mcp-logs mcp-health \
         docker-build docker-pull \
-        pipeline clean
+        pipeline changelog clean
 
 # ─── Default ───────────────────────────────────────────────────────────────────
 help:
@@ -26,7 +26,7 @@ help:
 	@echo "    check            Full local quality gate"
 	@echo ""
 	@echo "  MCP server (Docker)"
-	@echo "    mcp-up           Start MCP server via docker-compose"
+	@echo "    mcp-up           Start MCP server via docker compose"
 	@echo "    mcp-down         Stop MCP server"
 	@echo "    mcp-logs         Tail MCP server logs"
 	@echo "    mcp-health       Hit /health endpoint"
@@ -35,6 +35,9 @@ help:
 	@echo ""
 	@echo "  Pipeline (CLI)"
 	@echo "    pipeline         Run full toolkit pipeline (set CONFIG= to override)"
+	@echo ""
+	@echo "  Release"
+	@echo "    changelog        Preview changelog entry (set FROM=, TO=, VERSION=)"
 	@echo ""
 	@echo "  Misc"
 	@echo "    clean            Remove build artifacts and caches"
@@ -45,14 +48,13 @@ install:
 	pip install -e .
 
 install-mcp:
-	pip install -r requirements-mcp.txt
-	pip install -e .
+	pip install -e ".[mcp]"
 
 install-notebook:
 	pip install -e ".[notebook]"
 
 install-dev:
-	pip install -e ".[dev]"
+	pip install -e ".[dev,notebook]"
 	pre-commit install
 
 # ─── Code quality ──────────────────────────────────────────────────────────────
@@ -83,13 +85,13 @@ check: lint format-check yaml-lint typecheck test precommit
 # ─── MCP server ────────────────────────────────────────────────────────────────
 mcp-up:
 	@if [ -z "$$GCP_CREDS_PATH" ]; then echo "⚠️  GCP_CREDS_PATH not set — starting without GCS support (local files only)"; fi
-	docker-compose -f docker-compose.mcp.yml up --build -d
+	docker compose -f docker-compose.mcp.yml up --build -d
 
 mcp-down:
-	docker-compose -f docker-compose.mcp.yml down
+	docker compose -f docker-compose.mcp.yml down
 
 mcp-logs:
-	docker-compose -f docker-compose.mcp.yml logs -f
+	docker compose -f docker-compose.mcp.yml logs -f
 
 mcp-health:
 	curl -s http://localhost:8001/health | python3 -m json.tool
@@ -105,6 +107,25 @@ CONFIG ?= config/run_toolkit_config.yaml
 
 pipeline:
 	python -m analyst_toolkit.run_toolkit_pipeline --config $(CONFIG)
+
+# ─── Release ──────────────────────────────────────────────────────────────────
+FROM ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~20")
+TO ?= HEAD
+VERSION ?=
+
+changelog:
+ifdef VERSION
+	python scripts/generate_changelog.py $(FROM) $(TO) --version $(VERSION)
+else
+	python scripts/generate_changelog.py $(FROM) $(TO)
+endif
+
+changelog-write:
+ifdef VERSION
+	python scripts/generate_changelog.py $(FROM) $(TO) --version $(VERSION) --write
+else
+	python scripts/generate_changelog.py $(FROM) $(TO) --write
+endif
 
 # ─── Misc ──────────────────────────────────────────────────────────────────────
 clean:

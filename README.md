@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.3-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -17,14 +17,14 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
-## 🆕 Version 0.4.3: Operability + Hardening
+## 🆕 Version 0.4.4: Full Dashboard Rollout
 
-This major update transforms the toolkit from a collection of utilities into a cohesive, autonomous auditing engine.
+Every pipeline module now produces a standalone, exportable HTML dashboard. The toolkit went from a few report surfaces to a complete, artifact-first audit trail — end to end.
 
-1. **Listen (Inference):** Predict data needs automatically using `infer_configs`.
-2. **Diagnose (Validation):** Detect holes (nulls) and bumps (outliers) with a single score.
-3. **Heal (Auto-Apply):** Automatically repair data based on inferred rules using `auto_heal`.
-4. **Certify (Audit):** Generate a tamper-proof health report and sequence ledger.
+1. **See Everything:** Cockpit, diagnostics, normalization, duplicates, outlier detection, outlier handling, imputation, final audit, auto-heal, and data dictionary — each as a self-contained HTML artifact.
+2. **Navigate with the Cockpit Hub:** A single landing page links every module dashboard for a run into one reviewable session view.
+3. **Browse Locally:** An optional artifact server turns cockpit artifact references into stable browser links — no manual file paths.
+4. **Share Templates:** MCP `resources/list` and `resources/read` now expose the full template and resource inventory directly to clients and agents.
 
 ---
 
@@ -33,10 +33,11 @@ This major update transforms the toolkit from a collection of utilities into a c
 Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or any JSON-RPC 2.0 client.
 
 - **⛓️ Pipeline Mode:** Chain multiple tools in memory using `session_id` — no intermediate saves.
-- **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score** and a detailed **Healing Ledger**.
+- **🕹️ Executive Cockpit:** Get a **0-100 Data Health Score**, artifact links, and a detailed **Healing Ledger**.
 - **📀 Golden Templates:** Example templates tuned for typical fraud/migration/compliance patterns.
 - **📚 Template Resources:** MCP `resources/list` + `resources/read` expose standard and golden YAML templates directly to clients/agents.
 - **🤖 Auto-Heal:** One-click inference and repair — from raw data to certified output in a single tool call.
+- **🧭 Artifact Server:** Optional local dashboard serving lets cockpit and module outputs open as stable browser links instead of raw file paths.
 - [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) — full setup, tool reference, and host integrations
 
 ---
@@ -49,8 +50,9 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 - YAML-configurable logic per module
 - Checkpointing and joblib persistence
 - MCP server — expose all toolkit modules as tools to any MCP-compatible host
+- Cockpit, diagnostics, final audit, and data dictionary dashboards as standalone HTML artifacts
 - 🐧 Built using synthetic data from the [dirty_birds_data_generator](https://github.com/G-Schumacher44/dirty_birds_data_generator)
-- 📂 [Sample output](exports/sample/) (plots, reports, cleaned dataset)
+- 📂 [Sample output](exports/sample/) (HTML dashboards, reports, plots, cleaned dataset)
 
 ---
 
@@ -85,17 +87,21 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 <div align="center">
   <table>
     <tr>
-      <td><img src="repo_files/db_screen_00.png" alt="Diagnostics dashboard" width="400"/></td>
-      <td><img src="repo_files/db_screen_1.png" alt="Validation dashboard" width="400"/></td>
+      <td><img src="repo_files/sample_cockpit_dashboard.png" alt="Cockpit dashboard" width="460"/></td>
+      <td><img src="repo_files/sample_diagnostics_dashboard.png" alt="Diagnostics dashboard" width="460"/></td>
     </tr>
     <tr>
-      <td><img src="repo_files/db_screen_2.png" alt="Outlier detection dashboard" width="400"/></td>
-      <td><img src="repo_files/db_screen_3.png" alt="Imputation dashboard" width="400"/></td>
+      <td colspan="2" align="center"><img src="repo_files/sample_final_audit_dashboard.png" alt="Final audit dashboard" width="640"/></td>
     </tr>
   </table>
 </div>
 
-<p align="center"><em>Inline dashboards rendered per-module — diagnostics, validation, outlier detection, and imputation.</em></p>
+<p align="center"><em>Cockpit hub, diagnostics, and final audit — three of the ten standalone HTML dashboards produced per run.</em></p>
+
+For full HTML examples instead of screenshots:
+- [Open the sample cockpit dashboard](exports/sample/reports/cockpit_dashboard.html)
+- [Open the sample diagnostics dashboard](exports/sample/reports/diagnostics_report.html)
+- [Open the sample final audit dashboard](exports/sample/reports/final_audit_report.html)
 
 ---
 
@@ -106,13 +112,13 @@ Ship the toolkit as an MCP server and plug it into Claude Desktop, FridAI, or an
 ```bash
 git clone https://github.com/G-Schumacher44/analyst_toolkit.git
 cd analyst_toolkit
-make install-dev       # editable install + pre-commit hooks
+make install-dev       # editable install + dev tooling + notebook extras
 ```
 
 **With MCP server deps**
 
 ```bash
-pip install "analyst_toolkit[mcp] @ git+https://github.com/G-Schumacher44/analyst_toolkit.git"
+pip install -e ".[mcp]"
 ```
 
 **With notebook extras**
@@ -133,6 +139,12 @@ pip install git+https://github.com/G-Schumacher44/analyst_toolkit.git
 
 The toolkit ships with a built-in MCP server that exposes every module as a tool callable by any MCP-compatible host — Claude Desktop, FridAI, VS Code, or any JSON-RPC 2.0 client.
 
+Recent MCP-facing additions include:
+- real MCP resources for quickstart, agent playbook, and capability catalog
+- explicit module/workflow/runtime template exposure
+- standalone data dictionary generation
+- optional local artifact serving for cockpit and dashboard links
+
 **Pull from GHCR:**
 
 ```bash
@@ -142,7 +154,7 @@ docker pull ghcr.io/g-schumacher44/analyst-toolkit-mcp:latest
 **Or build and start locally:**
 
 ```bash
-make mcp-up        # docker-compose up --build -d
+make mcp-up        # docker compose up --build -d
 make mcp-health    # curl /health and pretty-print response
 make mcp-logs      # tail logs
 make mcp-down      # stop
@@ -163,6 +175,7 @@ Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an op
 If template/resource reads are timing out under load, tune `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` and `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`.
 For structured request lifecycle logs, set `ANALYST_MCP_STRUCTURED_LOGS=true`.
 For token auth in networked deployments, set `ANALYST_MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>`.
+To enable stable browser links from cockpit and dashboard responses, set `ANALYST_MCP_ENABLE_ARTIFACT_SERVER=true` in trusted/local mode. See the MCP Server Guide for the full artifact server configuration.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
@@ -289,7 +302,7 @@ I built the Analyst Toolkit to eliminate the most frustrating part of the analyt
 - Total modularity — run stage by stage or all at once
 - YAML-driven control over everything from null handling to audit thresholds
 
-Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don't just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. This is **auditable automation** — the insights are always there when you need them.
+Every step leaves behind artifacts: dashboards, exports, warnings, checkpoints. You don't just *run* the pipeline — you *see* it working. You know what changed, where it changed, and what the implications are downstream. This is **auditable automation** — and the current dashboard set is meant to be reviewed, not just generated.
 
 It is overbuilt in the ways that matter: transparency, reproducibility, trust. It's designed for team collaboration, for portfolio projects, for production QA. It's for your current self — and your future self — when you need to revisit a workflow six months from now.
 
@@ -313,6 +326,17 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 
 <details>
 <summary><strong>🫆 Version Release Notes</strong></summary>
+
+**v0.4.4 — Full Dashboard Rollout**
+- **Complete Dashboard Surface:** All ten pipeline modules now produce standalone exportable HTML dashboards — cockpit, diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, and data dictionary.
+- **Cockpit Hub:** A unified landing page links every module dashboard for a run into a single navigable session view with run metadata, artifact links, and health score.
+- **Dashboard Renderer Modularization:** `dashboard_html.py` refactored from a monolith into a composable renderer stack (`dashboard_core`, `dashboard_shared`, per-module renderers) — easier to review, extend, and test.
+- **Local Artifact Server:** Optional server turns cockpit and module artifact file references into browser-openable links for local development and review.
+- **Data Dictionary Artifacts:** Standalone data dictionary generation, surfaced as an MCP tool and as an HTML artifact with column-level schema, type, and sample coverage.
+- **MCP Template + Resource Inventory:** `resources/list` and `resources/read` now expose the full template and resource inventory — quickstart, playbook, capability catalog, module YAML templates — directly to MCP clients and agents.
+- **Export Destination Routing:** Configurable artifact routing with explicit GCS, local, and (stubbed) Google Drive destinations.
+- **Observability + Auth Hardening:** Structured request lifecycle logging (`ANALYST_MCP_STRUCTURED_LOGS`), `/metrics` and `/ready` endpoints, and optional bearer token auth (`ANALYST_MCP_AUTH_TOKEN`).
+- **CI Hardening:** Tightened lint, mypy, and test gates; CodeRabbit review workflow added to PR process.
 
 **v0.4.0 — The Cockpit Upgrade**
 - **State Management:** Introduced `StateStore` for in-memory DataFrame persistence between tool calls via `session_id`.
@@ -400,7 +424,7 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 │   └── features/                          # Optional engineered features
 │
 ├── 📤 exports/
-│   └── sample/                            # Sample media from a QA run
+│   └── sample/                            # Sample HTML dashboards, reports, plots, and cleaned output
 │
 ├── tests/                                 # Pytest test suite (MCP smoke, unit tests)
 ├── resource_hub/                          # Reference, guidebooks, documentation
@@ -429,7 +453,7 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 
 ## 🤝 On Generative AI Use
 
-Generative AI tools (Gemini 2.5-PRO, ChatGPT 4o - 4.1, Claude Sonnet) were used throughout this project as part of an integrated workflow — supporting code generation, documentation refinement, and idea testing. These tools accelerated development, but the logic, structure, and documentation reflect intentional, human-led design. This repository reflects a collaborative process: where automation supports clarity, and iteration deepens understanding.
+Generative AI tools (Gemini 2.5-PRO, ChatGPT 4o - 4.1,Codex 5.4, Claude Sonnet 4.6) were used throughout this project as part of an integrated workflow — supporting code generation, documentation refinement, and idea testing. These tools accelerated development, but the logic, structure, and documentation reflect intentional, human-led design. This repository reflects a collaborative process: where automation supports clarity, and iteration deepens understanding.
 
 ---
 

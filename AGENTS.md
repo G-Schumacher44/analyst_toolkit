@@ -52,13 +52,14 @@ Merge policy:
 
 ### CodeRabbit Review Workflow
 
-When CodeRabbit reviews a PR, triage its feedback in this order:
+When CodeRabbit reviews a PR, triage each finding into one of these categories — in order:
 
-1. **Accept and fix** — issues that are within the PR's scope, valid, and actionable. Fix in the current PR before merge.
-2. **Log as GitHub issue** — issues that are valid but out of scope for the current PR. Open a GitHub issue so they are tracked and not lost. Do not let valid findings disappear because they were inconvenient to fix right now.
-3. **Discard** — issues that CodeRabbit has invalidated, misunderstood, or that are not applicable to this codebase. Dismiss with a brief explanation in the PR comment so reviewers know it was considered.
+1. **Fix in this PR** — the finding is valid, in scope, and actionable. Resolve it before merge.
+2. **Resolve in conversation** — you disagree with the finding or it does not apply. Reply in the PR thread explaining why, then mark the comment resolved so reviewers can see it was considered.
+3. **Log as a GitHub issue** — the finding is valid but out of scope for this PR. Open a GitHub issue so it is tracked and not lost. Link the issue in the PR thread. Do not let valid findings disappear because they are inconvenient to fix right now.
+4. **Dismiss** — CodeRabbit misunderstood the code or the suggestion is not applicable. Dismiss with a brief explanation in the PR comment.
 
-Do not merge with unresolved category-1 findings. Categories 2 and 3 must be explicitly triaged before merge — no silently ignoring feedback.
+Do not merge with unresolved category-1 findings. Every other finding must be explicitly triaged into one of the remaining categories before merge — no silently ignoring feedback.
 
 ## Local Quality Gate
 

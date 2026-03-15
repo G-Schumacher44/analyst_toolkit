@@ -19,20 +19,20 @@ make install-mcp
 
 ## Branch and PR Workflow
 
-1. Create a branch from `main`.
+1. Create a branch from `dev`.
 2. Keep changes scoped to one concern per PR.
-3. Open a pull request using the PR template.
+3. Open a pull request targeting `dev`.
 4. Link related issues in the PR description (`Closes #123`).
-5. If behavior, API, or docs meaningfully change, add an entry to `CHANGELOG.md` under `Unreleased`.
-6. If CodeRabbit is enabled for the repository, request CodeRabbit review on the PR and resolve or explicitly dismiss its feedback before merge.
-7. If behavior changes, add or update tests in the same PR.
+5. If CodeRabbit reviews the PR, triage every finding before merge (see [CodeRabbit Review Workflow](AGENTS.md#coderabbit-review-workflow)).
+6. If behavior changes, add or update tests in the same PR.
+7. Promote `dev` into `main` only after the integration slice is green and ready to release publicly.
 
 ## Quality Gates
 
 Before opening or updating a PR, run:
 
 ```bash
-ruff check src/
+ruff check src/ tests/
 ruff format --check src/ tests/
 yamllint .github/workflows .coderabbit.yaml
 mypy src/analyst_toolkit/mcp_server
@@ -51,7 +51,7 @@ Also run pre-commit hooks:
 pre-commit run --all-files
 ```
 
-If CodeRabbit is enabled for the repository, include it in the PR review loop in addition to normal human review. In this repo it is currently expected as a local review step, not a CI gate.
+CodeRabbit is included in the PR review loop. Triage its findings using the [CodeRabbit Review Workflow](AGENTS.md#coderabbit-review-workflow) before merge.
 
 CI enforces linting, type checks, tests, and Docker smoke tests.
 
@@ -77,15 +77,14 @@ Use clear, imperative commit messages. Example:
 - `feat: add strict preflight unknown-key validation`
 - `docs: add contribution and issue templates`
 
-## Changelog Policy (Deterministic)
+## Changelog Policy
 
-- `CHANGELOG.md` is the source of truth for release notes.
-- Keep section order fixed for every release:
-  - `Added`, `Changed`, `Fixed`, `Deprecated`, `Removed`, `Security`
-- Add entries under `## [Unreleased]`.
-- Write one bullet per atomic change.
-- Prefer user-visible behavior and contract changes over internal refactors.
-- Move `Unreleased` entries into a versioned section during release cut.
+`CHANGELOG.md` is generated deterministically from git history using `scripts/generate_changelog.py`. Commit prefixes (`feat:`, `fix:`, `refactor:`, etc.) map directly to changelog sections.
+
+- **Preview** the next entry: `make changelog`
+- **Write** a versioned entry: `make changelog-write VERSION=0.4.5`
+
+Because the changelog is derived from commits, keep commit messages clear and imperative — they become the release notes. No manual changelog edits are needed for individual PRs.
 
 ## Release Announcement Automation
 
