@@ -35,6 +35,12 @@ from mcp.server.stdio import stdio_server
 from pydantic import BaseModel
 
 from analyst_toolkit.mcp_server.auth import is_authorized
+from analyst_toolkit.mcp_server.input.errors import (
+    InputConflictError,
+    InputError,
+    InputNotSupportedError,
+    InputPayloadTooLargeError,
+)
 from analyst_toolkit.mcp_server.input.ingest import (
     get_input_descriptor,
     ingest_uploaded_bytes,
@@ -121,6 +127,24 @@ class RegisterInputRequest(BaseModel):
     run_id: str | None = None
     idempotency_key: str | None = None
     load_into_session: bool = True
+
+
+def _input_error_http_status(exc: InputError) -> int:
+    if isinstance(exc, InputPayloadTooLargeError):
+        return 413
+    if isinstance(exc, InputNotSupportedError):
+        return 400
+    if isinstance(exc, InputConflictError):
+        return 409
+    return 400
+
+
+def _input_error_detail(exc: InputError, trace_id: str) -> dict[str, str]:
+    return {
+        "error": exc.message,
+        "code": exc.code,
+        "trace_id": trace_id,
+    }
 
 
 def _require_http_auth(request: Request) -> str:
@@ -340,7 +364,11 @@ async def upload_input(
     if not payload:
         raise HTTPException(
             status_code=400,
-            detail={"error": "Empty upload payload.", "trace_id": trace_id},
+            detail={
+                "error": "Empty upload payload.",
+                "code": "INPUT_EMPTY_UPLOAD",
+                "trace_id": trace_id,
+            },
         )
     try:
         descriptor, df, effective_session_id = ingest_uploaded_bytes(
@@ -352,10 +380,21 @@ async def upload_input(
             idempotency_key=idempotency_key,
             load_into_session=load_into_session,
         )
-    except Exception as exc:
+    except InputError as exc:
+        logger.warning("upload_input failed (trace_id=%s, code=%s)", trace_id, exc.code)
         raise HTTPException(
-            status_code=400,
-            detail={"error": str(exc), "trace_id": trace_id},
+            status_code=_input_error_http_status(exc),
+            detail=_input_error_detail(exc, trace_id),
+        ) from exc
+    except Exception as exc:
+        logger.exception("upload_input unexpected failure (trace_id=%s)", trace_id)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Internal server error.",
+                "code": "INTERNAL_ERROR",
+                "trace_id": trace_id,
+            },
         ) from exc
 
     summary = {}
@@ -384,15 +423,21 @@ async def register_input(request: Request, payload: RegisterInputRequest) -> JSO
             idempotency_key=payload.idempotency_key,
             load_into_session=payload.load_into_session,
         )
-    except NotImplementedError as exc:
+    except InputError as exc:
+        logger.warning("register_input failed (trace_id=%s, code=%s)", trace_id, exc.code)
         raise HTTPException(
-            status_code=501,
-            detail={"error": str(exc), "trace_id": trace_id},
+            status_code=_input_error_http_status(exc),
+            detail=_input_error_detail(exc, trace_id),
         ) from exc
     except Exception as exc:
+        logger.exception("register_input unexpected failure (trace_id=%s)", trace_id)
         raise HTTPException(
-            status_code=400,
-            detail={"error": str(exc), "trace_id": trace_id},
+            status_code=500,
+            detail={
+                "error": "Internal server error.",
+                "code": "INTERNAL_ERROR",
+                "trace_id": trace_id,
+            },
         ) from exc
 
     summary = {}

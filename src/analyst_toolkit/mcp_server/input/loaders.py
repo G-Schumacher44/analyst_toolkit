@@ -6,14 +6,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from analyst_toolkit.mcp_server.input.errors import InputNotSupportedError
 from analyst_toolkit.mcp_server.input.models import InputDescriptor
 from analyst_toolkit.mcp_server.io_storage import load_from_gcs
-
-
-class InputNotSupportedError(Exception):
-    """Raised when a descriptor references an unsupported input source or format."""
-
-    code = "INPUT_NOT_SUPPORTED"
 
 
 def load_dataframe_from_descriptor(descriptor: InputDescriptor) -> pd.DataFrame:

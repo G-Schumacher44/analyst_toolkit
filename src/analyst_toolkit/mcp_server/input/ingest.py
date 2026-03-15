@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from analyst_toolkit.mcp_server.input.adapters import resolve_source_reference
+from analyst_toolkit.mcp_server.input.errors import InputNotFoundError
 from analyst_toolkit.mcp_server.input.loaders import load_dataframe_from_descriptor
 from analyst_toolkit.mcp_server.input.models import InputDescriptor, InputSourceType
 from analyst_toolkit.mcp_server.input.registry import (
@@ -141,7 +142,7 @@ def load_dataframe(
     if input_id:
         descriptor = get_descriptor(input_id)
         if descriptor is None:
-            raise FileNotFoundError(f"Input ID not found: '{input_id}'")
+            raise InputNotFoundError(f"Input descriptor not found for input_id='{input_id}'.")
         return load_dataframe_from_descriptor(descriptor)
 
     if not path:

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from math import inf
 from typing import Optional
 
+from analyst_toolkit.mcp_server.input.errors import InputConflictError, InputNotFoundError
 from analyst_toolkit.mcp_server.input.models import InputDescriptor
 
 _LOCK = threading.Lock()
@@ -34,13 +35,11 @@ def _env_float(name: str, default: float) -> float:
         parsed = float(value)
     except ValueError:
         return default
-    return parsed if parsed > 0 else default
+    return parsed if parsed >= 0 else default
 
 
 _REGISTRY_MAX_ENTRIES = _env_int("ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES", 512)
 _REGISTRY_TTL_SEC = _env_float("ANALYST_MCP_INPUT_REGISTRY_TTL_SEC", 21600.0)
-INPUT_DESCRIPTOR_CONFLICT_CODE = "INPUT_DESCRIPTOR_CONFLICT"
-INPUT_NOT_FOUND_CODE = "INPUT_NOT_FOUND"
 
 
 @dataclass
@@ -101,6 +100,9 @@ def _refresh_session_locked(session_id: str, input_id: str, now: float) -> None:
 
 
 def _prune_locked(now: float) -> None:
+    # Full scans are intentional here because the registry is strictly bounded by
+    # _REGISTRY_MAX_ENTRIES. Revisit amortized or timer-based pruning only if the cap
+    # or request frequency grows enough for this O(n) pass to matter in practice.
     expired_inputs = [
         input_id for input_id, entry in list(_INPUTS.items()) if entry.expires_at <= now
     ]
@@ -130,9 +132,8 @@ def save_descriptor(descriptor: InputDescriptor) -> InputDescriptor:
         if existing_entry is not None:
             existing_descriptor = existing_entry.descriptor
             if not existing_descriptor.same_canonical_input(descriptor):
-                raise ValueError(
-                    f"[{INPUT_DESCRIPTOR_CONFLICT_CODE}] Conflicting descriptor for input_id "
-                    f"'{descriptor.input_id}'."
+                raise InputConflictError(
+                    f"Conflicting descriptor for input_id '{descriptor.input_id}'."
                 )
             effective_descriptor = descriptor.with_runtime_binding(
                 session_id=descriptor.session_id or existing_descriptor.session_id,
@@ -169,9 +170,7 @@ def bind_session_input(session_id: str, input_id: str) -> None:
         _prune_locked(now)
         entry = _INPUTS.get(input_id)
         if entry is None:
-            raise ValueError(
-                f"[{INPUT_NOT_FOUND_CODE}] input_id '{input_id}' not found in registry"
-            )
+            raise InputNotFoundError(f"input_id '{input_id}' not found in registry")
         _refresh_input_locked(input_id, entry.descriptor, now)
         _refresh_session_locked(session_id, input_id, now)
 

@@ -28,6 +28,8 @@ class InputDescriptor:
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     def same_canonical_input(self, other: "InputDescriptor") -> bool:
+        if not isinstance(other, InputDescriptor):
+            return False
         return (
             self.input_id == other.input_id
             and self.source_type == other.source_type

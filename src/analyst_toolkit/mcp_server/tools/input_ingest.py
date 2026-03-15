@@ -4,8 +4,8 @@ import asyncio
 import logging
 from functools import partial
 
+from analyst_toolkit.mcp_server.input.errors import InputError
 from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor, register_input_source
-from analyst_toolkit.mcp_server.input.loaders import InputNotSupportedError
 from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.response_utils import new_trace_id
@@ -35,14 +35,14 @@ async def _toolkit_register_input(
                 load_into_session=load_into_session,
             ),
         )
-    except InputNotSupportedError:
+    except InputError as exc:
         trace_id = new_trace_id()
-        logger.exception("Input source unsupported (trace_id=%s)", trace_id)
+        logger.exception("Input registration failed (trace_id=%s, code=%s)", trace_id, exc.code)
         return {
             "status": "error",
             "module": "register_input",
-            "code": "INPUT_SOURCE_UNSUPPORTED",
-            "message": "The specified input source is not supported.",
+            "code": exc.code,
+            "message": exc.message,
             "trace_id": trace_id,
         }
     except Exception:
@@ -130,6 +130,7 @@ register_tool(
             "idempotency_key": {
                 "type": "string",
                 "minLength": 1,
+                "maxLength": 255,
                 "pattern": "^.*\\S.*$",
                 "description": (
                     "Optional stable idempotency key. Provide this to reuse the same "
