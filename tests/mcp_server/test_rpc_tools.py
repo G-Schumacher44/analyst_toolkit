@@ -183,6 +183,7 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, m
 
 
 def test_rpc_ensure_artifact_server_tool(client, monkeypatch):
+    artifact_server_module._reset_local_artifact_server_for_tests()
     monkeypatch.setenv("ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL", "true")
     monkeypatch.setattr(
         cockpit_module,
@@ -196,19 +197,21 @@ def test_rpc_ensure_artifact_server_tool(client, monkeypatch):
             "root": "exports",
         },
     )
-    artifact_server_module._reset_local_artifact_server_for_tests()
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 41,
-        "method": "tools/call",
-        "params": {"name": "ensure_artifact_server", "arguments": {}},
-    }
-    response = client.post("/rpc", json=payload)
-    assert response.status_code == 200
-    result = response.json()["result"]
-    assert result["status"] == "pass"
-    assert result["summary"]["running"] is True
-    assert result["base_url"] == "http://127.0.0.1:8765"
+    try:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 41,
+            "method": "tools/call",
+            "params": {"name": "ensure_artifact_server", "arguments": {}},
+        }
+        response = client.post("/rpc", json=payload)
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["status"] == "pass"
+        assert result["summary"]["running"] is True
+        assert result["base_url"] == "http://127.0.0.1:8765"
+    finally:
+        artifact_server_module._reset_local_artifact_server_for_tests()
 
 
 def test_rpc_get_config_schema_supports_final_audit(client):

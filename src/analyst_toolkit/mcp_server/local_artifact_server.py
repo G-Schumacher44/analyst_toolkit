@@ -195,6 +195,23 @@ def ensure_local_artifact_server() -> dict[str, Any]:
                 "root": str(_SERVER_ROOT),
             }
         time.sleep(0.05)
+    try:
+        server.shutdown()
+        server.server_close()
+    except Exception:
+        logger.exception("Failed to clean up local artifact server after startup timeout")
+    try:
+        thread.join(timeout=5)
+        if thread.is_alive():
+            logger.warning("Local artifact server thread did not exit after startup timeout")
+    except Exception:
+        logger.exception("Failed to join local artifact server thread after startup timeout")
+    with _SERVER_GUARD:
+        if _SERVER is server:
+            _SERVER = None
+            _SERVER_THREAD = None
+            _SERVER_BASE_URL = ""
+            _SERVER_ROOT = Path("exports").resolve(strict=False)
     raise RuntimeError("Artifact server failed to start.")
 
 
@@ -220,6 +237,13 @@ def _reset_local_artifact_server_for_tests() -> None:
                 _SERVER.server_close()
             except Exception:
                 logger.exception("Failed to stop local artifact server during test reset")
+        if _SERVER_THREAD is not None:
+            try:
+                _SERVER_THREAD.join(timeout=5)
+                if _SERVER_THREAD.is_alive():
+                    logger.warning("Local artifact server thread did not exit during test reset")
+            except Exception:
+                logger.exception("Failed to join local artifact server thread during test reset")
         _SERVER = None
         _SERVER_THREAD = None
         _SERVER_BASE_URL = ""
