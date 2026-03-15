@@ -61,6 +61,19 @@ def test_inputs_upload_rejects_payload_over_limit(client, monkeypatch, clean_inp
     assert isinstance(detail["trace_id"], str)
 
 
+def test_inputs_upload_rejects_empty_payload(client, clean_input_env):
+    response = client.post(
+        "/inputs/upload",
+        files={"file": ("empty.csv", b"", "text/csv")},
+        data={"load_into_session": "false"},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_EMPTY_UPLOAD"
+    assert isinstance(detail["trace_id"], str)
+
+
 def test_inputs_upload_reuses_input_id_for_same_payload(client, clean_input_env):
     response_one = client.post(
         "/inputs/upload",
@@ -100,6 +113,21 @@ def test_inputs_register_server_path_loads_into_session(client, clean_input_env)
     assert payload["input"]["source_type"] == "server_path"
     assert payload["session_id"].startswith("sess_")
     assert payload["summary"]["row_count"] == 2
+
+
+def test_inputs_register_gcs_source_without_session_load(client, clean_input_env):
+    response = client.post(
+        "/inputs/register",
+        json={"uri": "gs://bucket/dirty_penguins.csv", "load_into_session": False},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pass"
+    assert payload["input"]["source_type"] == "gcs"
+    assert payload["input"]["resolved_reference"] == "gs://bucket/dirty_penguins.csv"
+    assert payload["session_id"] == ""
+    assert payload["summary"] == {}
 
 
 def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, clean_input_env):
@@ -179,6 +207,36 @@ def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch,
     assert "not visible to the MCP runtime" in response.json()["detail"]["error"]
 
 
+def test_inputs_register_rejects_unsupported_local_format(client, clean_input_env):
+    tmp_path = clean_input_env
+    source = tmp_path / "dirty_penguins.json"
+    source.write_text('{"species":"Adelie"}', encoding="utf-8")
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": str(source), "load_into_session": True},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_NOT_SUPPORTED"
+    assert "Unsupported file format" in detail["error"]
+    assert isinstance(detail["trace_id"], str)
+
+
+def test_inputs_register_rejects_gdrive_source(client, clean_input_env):
+    response = client.post(
+        "/inputs/register",
+        json={"uri": "gdrive://folder/dirty_penguins.csv", "load_into_session": False},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_NOT_SUPPORTED"
+    assert "Google Drive inputs are not implemented yet" in detail["error"]
+    assert isinstance(detail["trace_id"], str)
+
+
 def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(client, clean_input_env):
     tmp_path = clean_input_env
 
@@ -209,6 +267,26 @@ def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(client, 
     detail = second.json()["detail"]
     assert detail["code"] == "INPUT_CONFLICT"
     assert isinstance(detail["trace_id"], str)
+
+
+def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(client):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 903,
+        "method": "tools/call",
+        "params": {
+            "name": "get_input_descriptor",
+            "arguments": {"input_id": "input_deadbeefcafe"},
+        },
+    }
+
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["module"] == "get_input_descriptor"
+    assert result["code"] == "INPUT_NOT_FOUND"
+    assert isinstance(result["trace_id"], str)
 
 
 def test_register_input_tool_and_diagnostics_input_id_flow(client, mocker, clean_input_env):
