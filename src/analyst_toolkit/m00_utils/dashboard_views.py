@@ -57,8 +57,6 @@ def _render_cockpit_artifact_reference(value: Any, *, empty_label: str) -> str:
     exports_index = normalized.rfind("exports/")
     if exports_index >= 0:
         normalized = "/" + normalized[exports_index:]
-    elif normalized.startswith("exports/"):
-        normalized = "/" + normalized
 
     rendered = html.escape(normalized)
     if normalized.startswith("/exports/"):

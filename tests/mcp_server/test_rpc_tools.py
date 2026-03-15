@@ -8,6 +8,13 @@ import analyst_toolkit.mcp_server.tools.data_dictionary as data_dictionary_tool
 from analyst_toolkit.mcp_server.server import TOOL_REGISTRY, app
 
 
+@pytest.fixture
+def reset_artifact_server():
+    artifact_server_module._reset_local_artifact_server_for_tests()
+    yield
+    artifact_server_module._reset_local_artifact_server_for_tests()
+
+
 def test_rpc_initialize(client):
     """Verify the MCP 'initialize' method via JSON-RPC."""
     payload = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
@@ -182,13 +189,12 @@ def test_rpc_agent_playbook_infer_configs_inputs_allow_path_or_session(client, m
     ]
 
 
-def test_rpc_ensure_artifact_server_tool(client, monkeypatch):
-    artifact_server_module._reset_local_artifact_server_for_tests()
+def test_rpc_ensure_artifact_server_tool(client, monkeypatch, mocker, reset_artifact_server):
     monkeypatch.setenv("ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL", "true")
-    monkeypatch.setattr(
+    mock_ensure = mocker.patch.object(
         cockpit_module,
         "ensure_local_artifact_server",
-        lambda: {
+        return_value={
             "status": "pass",
             "enabled": True,
             "running": True,
@@ -197,41 +203,35 @@ def test_rpc_ensure_artifact_server_tool(client, monkeypatch):
             "root": "exports",
         },
     )
-    try:
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 41,
-            "method": "tools/call",
-            "params": {"name": "ensure_artifact_server", "arguments": {}},
-        }
-        response = client.post("/rpc", json=payload)
-        assert response.status_code == 200
-        result = response.json()["result"]
-        assert result["status"] == "pass"
-        assert result["summary"]["running"] is True
-        assert result["summary"]["already_running"] is False
-        assert result["base_url"] == "http://127.0.0.1:8765"
-    finally:
-        artifact_server_module._reset_local_artifact_server_for_tests()
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {"name": "ensure_artifact_server", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "pass"
+    assert result["summary"]["running"] is True
+    assert result["summary"]["already_running"] is False
+    assert result["base_url"] == "http://127.0.0.1:8765"
+    mock_ensure.assert_called_once()
 
 
-def test_rpc_ensure_artifact_server_tool_disabled(client, monkeypatch):
-    artifact_server_module._reset_local_artifact_server_for_tests()
+def test_rpc_ensure_artifact_server_tool_disabled(client, monkeypatch, reset_artifact_server):
     monkeypatch.setenv("ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL", "false")
-    try:
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 42,
-            "method": "tools/call",
-            "params": {"name": "ensure_artifact_server", "arguments": {}},
-        }
-        response = client.post("/rpc", json=payload)
-        assert response.status_code == 200
-        result = response.json()["result"]
-        assert result["status"] == "error"
-        assert result["code"] == "ARTIFACT_SERVER_CONTROL_DISABLED"
-    finally:
-        artifact_server_module._reset_local_artifact_server_for_tests()
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "tools/call",
+        "params": {"name": "ensure_artifact_server", "arguments": {}},
+    }
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["code"] == "ARTIFACT_SERVER_CONTROL_DISABLED"
 
 
 def test_rpc_get_config_schema_supports_final_audit(client):

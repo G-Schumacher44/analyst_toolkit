@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -19,8 +20,10 @@ logger = logging.getLogger("analyst_toolkit.mcp_server.local_artifact_server")
 _SERVER_GUARD = threading.Lock()
 _SERVER: "_ArtifactHTTPServer | None" = None
 _SERVER_THREAD: threading.Thread | None = None
+_SERVER_STARTING = False
 _SERVER_BASE_URL = ""
 _SERVER_ROOT = Path("exports").resolve(strict=False)
+_WORKSPACE_ROOT = Path.cwd().resolve(strict=False)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -46,7 +49,22 @@ def artifact_server_enabled() -> bool:
 
 
 def _artifact_server_host() -> str:
-    return os.environ.get("ANALYST_MCP_ARTIFACT_SERVER_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    host = os.environ.get("ANALYST_MCP_ARTIFACT_SERVER_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    allow_bind_all = _env_bool("ANALYST_MCP_ALLOW_BIND_ALL", False)
+    try:
+        is_loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        is_loopback = host == "localhost"
+    if not is_loopback:
+        if not allow_bind_all:
+            logger.warning(
+                "Rejected non-loopback artifact server host %r; "
+                "set ANALYST_MCP_ALLOW_BIND_ALL=1 to enable remote binding. Falling back to 127.0.0.1.",
+                host,
+            )
+            return "127.0.0.1"
+        logger.warning("Artifact server binding to non-loopback host %r", host)
+    return host
 
 
 def _artifact_server_port() -> int:
@@ -57,8 +75,35 @@ def _artifact_server_port() -> int:
 
 
 def _artifact_server_root() -> Path:
+    """Resolve the artifact root with basic trust-boundary checks.
+
+    The default is the repository-local ``exports`` directory. Custom roots
+    outside the working tree are allowed but logged, and a small denylist of
+    known sensitive roots is rejected.
+    """
     raw_root = Path(os.environ.get("ANALYST_MCP_ARTIFACT_SERVER_ROOT", "exports")).expanduser()
-    return raw_root.resolve(strict=False)
+    candidate = raw_root.resolve(strict=False)
+    sensitive_roots = (
+        Path("/etc"),
+        Path("/root"),
+        Path("/var/run"),
+        Path.home() / ".ssh",
+    )
+    for sensitive_root in sensitive_roots:
+        sensitive_root = sensitive_root.resolve(strict=False)
+        if candidate == sensitive_root or sensitive_root in candidate.parents:
+            raise ValueError(
+                f"ANALYST_MCP_ARTIFACT_SERVER_ROOT points at a protected path: {candidate}"
+            )
+    try:
+        candidate.relative_to(_WORKSPACE_ROOT)
+    except ValueError:
+        logger.warning(
+            "Artifact server root %s is outside the working directory %s",
+            candidate,
+            _WORKSPACE_ROOT,
+        )
+    return candidate
 
 
 class _ArtifactRequestHandler(SimpleHTTPRequestHandler):
@@ -156,7 +201,7 @@ def ensure_local_artifact_server() -> dict[str, Any]:
         }
 
     with _SERVER_GUARD:
-        global _SERVER, _SERVER_THREAD, _SERVER_BASE_URL, _SERVER_ROOT
+        global _SERVER, _SERVER_THREAD, _SERVER_STARTING, _SERVER_BASE_URL, _SERVER_ROOT
         if (
             _SERVER
             and _SERVER_THREAD
@@ -171,59 +216,77 @@ def ensure_local_artifact_server() -> dict[str, Any]:
                 "base_url": _SERVER_BASE_URL,
                 "root": str(_SERVER_ROOT),
             }
-
-        root = _artifact_server_root()
-        root.mkdir(parents=True, exist_ok=True)
-        host = _artifact_server_host()
-        requested_port = _artifact_server_port()
-        server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
-        server.artifact_root = root
-        server.base_url = f"http://{host}:{server.server_address[1]}"
-        thread = threading.Thread(
-            target=server.serve_forever,
-            name="analyst-toolkit-artifact-server",
-            daemon=True,
-        )
-        thread.start()
-        _SERVER = server
-        _SERVER_THREAD = thread
-        _SERVER_BASE_URL = server.base_url
-        _SERVER_ROOT = root
+        if _SERVER_STARTING and _SERVER_BASE_URL:
+            base_url = _SERVER_BASE_URL
+            root = _SERVER_ROOT
+            created = False
+            server = None
+            thread = None
+        else:
+            root = _artifact_server_root()
+            root.mkdir(parents=True, exist_ok=True)
+            host = _artifact_server_host()
+            requested_port = _artifact_server_port()
+            server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
+            server.artifact_root = root
+            server.base_url = f"http://{host}:{server.server_address[1]}"
+            thread = threading.Thread(
+                target=server.serve_forever,
+                name="analyst-toolkit-artifact-server",
+                daemon=True,
+            )
+            _SERVER_STARTING = True
+            thread.start()
+            _SERVER = server
+            _SERVER_THREAD = thread
+            _SERVER_BASE_URL = server.base_url
+            _SERVER_ROOT = root
+            base_url = _SERVER_BASE_URL
+            created = True
 
     for _ in range(20):
-        if _probe_server(_SERVER_BASE_URL):
+        if _probe_server(base_url):
+            with _SERVER_GUARD:
+                if _SERVER_BASE_URL == base_url:
+                    _SERVER_STARTING = False
             return {
                 "status": "pass",
                 "enabled": True,
                 "running": True,
-                "already_running": False,
-                "base_url": _SERVER_BASE_URL,
-                "root": str(_SERVER_ROOT),
+                "already_running": not created,
+                "base_url": base_url,
+                "root": str(root),
             }
+        if not created:
+            with _SERVER_GUARD:
+                if not _SERVER_STARTING:
+                    break
         time.sleep(0.05)
-    try:
-        server.shutdown()
-        server.server_close()
-    except Exception:
-        logger.exception("Failed to clean up local artifact server after startup timeout")
-    try:
-        thread.join(timeout=5)
-        if thread.is_alive():
-            logger.warning("Local artifact server thread did not exit after startup timeout")
-    except Exception:
-        logger.exception("Failed to join local artifact server thread after startup timeout")
-    with _SERVER_GUARD:
-        if _SERVER is server:
-            _SERVER = None
-            _SERVER_THREAD = None
-            _SERVER_BASE_URL = ""
-            _SERVER_ROOT = Path("exports").resolve(strict=False)
+    if created and server is not None and thread is not None:
+        try:
+            server.shutdown()
+            server.server_close()
+        except Exception:
+            logger.exception("Failed to clean up local artifact server after startup timeout")
+        try:
+            thread.join(timeout=5)
+            if thread.is_alive():
+                logger.warning("Local artifact server thread did not exit after startup timeout")
+        except Exception:
+            logger.exception("Failed to join local artifact server thread after startup timeout")
+        with _SERVER_GUARD:
+            if _SERVER is server:
+                _SERVER = None
+                _SERVER_THREAD = None
+                _SERVER_STARTING = False
+                _SERVER_BASE_URL = ""
+                _SERVER_ROOT = Path("exports").resolve(strict=False)
     return {
         "status": "error",
         "error_code": "ARTIFACT_SERVER_STARTUP_TIMEOUT",
         "enabled": True,
         "running": False,
-        "already_running": False,
+        "already_running": not created,
         "base_url": "",
         "root": str(root),
         "message": "Artifact server failed to start within timeout.",
@@ -245,7 +308,7 @@ def build_local_artifact_url(local_path: str) -> str:
 
 def _reset_local_artifact_server_for_tests() -> None:
     with _SERVER_GUARD:
-        global _SERVER, _SERVER_THREAD, _SERVER_BASE_URL, _SERVER_ROOT
+        global _SERVER, _SERVER_THREAD, _SERVER_STARTING, _SERVER_BASE_URL, _SERVER_ROOT
         if _SERVER is not None:
             try:
                 _SERVER.shutdown()
@@ -261,5 +324,6 @@ def _reset_local_artifact_server_for_tests() -> None:
                 logger.exception("Failed to join local artifact server thread during test reset")
         _SERVER = None
         _SERVER_THREAD = None
+        _SERVER_STARTING = False
         _SERVER_BASE_URL = ""
         _SERVER_ROOT = Path("exports").resolve(strict=False)

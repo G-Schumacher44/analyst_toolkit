@@ -54,6 +54,7 @@ from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
 logger = logging.getLogger("analyst_toolkit.mcp_server.cockpit")
 _SAFE_RUN_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 MAX_ARTIFACT_ROWS = 24
+_WORKSPACE_ROOT = Path.cwd().resolve(strict=False)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -255,6 +256,17 @@ def _pipeline_dashboard_artifact_path(run_id: str, session_id: str | None = None
 
 def _cockpit_artifact_key(limit: int) -> str:
     return f"cockpit_dashboard_limit_{int(limit)}"
+
+
+def _artifact_root_label(root: Any) -> str:
+    text = str(root or "").strip()
+    if not text:
+        return ""
+    path = Path(text).expanduser().resolve(strict=False)
+    try:
+        return path.relative_to(_WORKSPACE_ROOT).as_posix()
+    except ValueError:
+        return path.name or "artifacts"
 
 
 def _trusted_history_denial() -> dict[str, Any]:
@@ -463,7 +475,11 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
     top_auto_heal = next((run for run in recent_runs if run.get("auto_heal_dashboard")), {})
     top_final_audit = next((run for run in recent_runs if run.get("final_audit_dashboard")), {})
     latest_dictionary = _latest_recent_module_entry("data_dictionary", limit)
-    artifact_server = get_local_artifact_server_status()
+    artifact_server_status = get_local_artifact_server_status()
+    artifact_server = {
+        **artifact_server_status,
+        "root": _artifact_root_label(artifact_server_status.get("root", "")),
+    }
     artifact_rows = _build_recent_artifact_rows(limit)
     blocker_runs = [
         {
@@ -947,15 +963,15 @@ async def _toolkit_ensure_artifact_server() -> dict:
     payload = {
         "status": status,
         "module": "artifact_server",
-        "summary": {
-            "running": bool(result.get("running")),
-            "enabled": bool(result.get("enabled")),
-            "already_running": bool(result.get("already_running")),
-        },
-        "base_url": str(result.get("base_url", "")),
-        "root": str(result.get("root", "")),
-        "warnings": [] if result.get("running") else ([message] if message else []),
-    }
+            "summary": {
+                "running": bool(result.get("running")),
+                "enabled": bool(result.get("enabled")),
+                "already_running": bool(result.get("already_running")),
+            },
+            "base_url": str(result.get("base_url", "")),
+            "root": _artifact_root_label(result.get("root", "")),
+            "warnings": [] if result.get("running") else ([message] if message else []),
+        }
     if result.get("error_code"):
         payload["code"] = str(result["error_code"])
     return with_next_actions(
