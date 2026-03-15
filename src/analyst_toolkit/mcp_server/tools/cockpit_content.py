@@ -195,11 +195,9 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
     }
     return {
         "status": "pass",
-        "content": {
-            "format": "markdown",
-            "title": "Analyst Toolkit Quickstart",
-            "markdown": guide.strip(),
-        },
+        "format": "markdown",
+        "title": "Analyst Toolkit Quickstart",
+        "markdown": guide.strip(),
         "machine_guide": machine_guide,
         "quick_actions": (
             [
