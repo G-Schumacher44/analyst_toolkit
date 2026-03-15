@@ -53,6 +53,7 @@ from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
 
 logger = logging.getLogger("analyst_toolkit.mcp_server.cockpit")
 _SAFE_RUN_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+MAX_ARTIFACT_ROWS = 24
 
 
 def _env_float(name: str, default: float) -> float:
@@ -442,7 +443,7 @@ def _build_recent_artifact_rows(limit: int) -> list[dict[str, Any]]:
                     "Artifact Path": artifact_path,
                 }
             )
-            if len(rows) >= 24:
+            if len(rows) >= MAX_ARTIFACT_ROWS:
                 return rows
     return rows
 
@@ -930,21 +931,35 @@ async def _toolkit_ensure_artifact_server() -> dict:
             "warnings": [],
         }
 
-    result = ensure_local_artifact_server()
-    status = "pass" if result.get("running") else "warn"
-    return with_next_actions(
-        {
-            "status": status,
+    try:
+        result = ensure_local_artifact_server()
+    except ValueError as exc:
+        return {
+            "status": "error",
             "module": "artifact_server",
-            "summary": {
-                "running": bool(result.get("running")),
-                "enabled": bool(result.get("enabled")),
-                "already_running": bool(result.get("already_running")),
-            },
-            "base_url": str(result.get("base_url", "")),
-            "root": str(result.get("root", "")),
-            "warnings": ([] if result.get("running") else [str(result.get("message", ""))]),
+            "code": "ARTIFACT_SERVER_CONFIG_INVALID",
+            "message": str(exc),
+            "warnings": [],
+        }
+    result_status = str(result.get("status", "")).lower()
+    status = "error" if result_status == "error" else ("pass" if result.get("running") else "warn")
+    message = str(result.get("message", "")).strip()
+    payload = {
+        "status": status,
+        "module": "artifact_server",
+        "summary": {
+            "running": bool(result.get("running")),
+            "enabled": bool(result.get("enabled")),
+            "already_running": bool(result.get("already_running")),
         },
+        "base_url": str(result.get("base_url", "")),
+        "root": str(result.get("root", "")),
+        "warnings": [] if result.get("running") else ([message] if message else []),
+    }
+    if result.get("error_code"):
+        payload["code"] = str(result["error_code"])
+    return with_next_actions(
+        payload,
         [
             next_action(
                 "get_cockpit_dashboard",

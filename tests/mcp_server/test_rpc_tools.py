@@ -209,7 +209,27 @@ def test_rpc_ensure_artifact_server_tool(client, monkeypatch):
         result = response.json()["result"]
         assert result["status"] == "pass"
         assert result["summary"]["running"] is True
+        assert result["summary"]["already_running"] is False
         assert result["base_url"] == "http://127.0.0.1:8765"
+    finally:
+        artifact_server_module._reset_local_artifact_server_for_tests()
+
+
+def test_rpc_ensure_artifact_server_tool_disabled(client, monkeypatch):
+    artifact_server_module._reset_local_artifact_server_for_tests()
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL", "false")
+    try:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 42,
+            "method": "tools/call",
+            "params": {"name": "ensure_artifact_server", "arguments": {}},
+        }
+        response = client.post("/rpc", json=payload)
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["status"] == "error"
+        assert result["code"] == "ARTIFACT_SERVER_CONTROL_DISABLED"
     finally:
         artifact_server_module._reset_local_artifact_server_for_tests()
 

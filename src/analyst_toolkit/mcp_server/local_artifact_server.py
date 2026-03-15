@@ -50,7 +50,10 @@ def _artifact_server_host() -> str:
 
 
 def _artifact_server_port() -> int:
-    return _env_int("ANALYST_MCP_ARTIFACT_SERVER_PORT", 8765)
+    port = _env_int("ANALYST_MCP_ARTIFACT_SERVER_PORT", 8765)
+    if port == 0:
+        raise ValueError("ANALYST_MCP_ARTIFACT_SERVER_PORT must be a positive, non-zero port.")
+    return port
 
 
 def _artifact_server_root() -> Path:
@@ -91,7 +94,10 @@ class _ArtifactRequestHandler(SimpleHTTPRequestHandler):
 
     def translate_path(self, path: str) -> str:
         parsed_path = urlparse(path).path
-        artifact_root = getattr(self.server, "artifact_root", _artifact_server_root())
+        artifact_root = getattr(self.server, "artifact_root", None)
+        if artifact_root is None:
+            logger.error("artifact_root not set on artifact server instance")
+            return str(Path("__missing__").resolve(strict=False))
         if parsed_path in {"/exports", "/exports/"}:
             relative = PurePosixPath(".")
         elif parsed_path.startswith("/exports/"):
@@ -212,7 +218,16 @@ def ensure_local_artifact_server() -> dict[str, Any]:
             _SERVER_THREAD = None
             _SERVER_BASE_URL = ""
             _SERVER_ROOT = Path("exports").resolve(strict=False)
-    raise RuntimeError("Artifact server failed to start.")
+    return {
+        "status": "error",
+        "error_code": "ARTIFACT_SERVER_STARTUP_TIMEOUT",
+        "enabled": True,
+        "running": False,
+        "already_running": False,
+        "base_url": "",
+        "root": str(root),
+        "message": "Artifact server failed to start within timeout.",
+    }
 
 
 def build_local_artifact_url(local_path: str) -> str:
