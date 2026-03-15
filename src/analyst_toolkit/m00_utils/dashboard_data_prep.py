@@ -285,9 +285,8 @@ def _render_normalization_column_value_analysis(column_value_analysis: Any) -> s
             continue
         normalized_values = payload.get("normalized_values", pd.DataFrame())
         value_audit = payload.get("value_audit", pd.DataFrame())
-        if (
-            not isinstance(normalized_values, pd.DataFrame)
-            and not isinstance(value_audit, pd.DataFrame)
+        if not isinstance(normalized_values, pd.DataFrame) and not isinstance(
+            value_audit, pd.DataFrame
         ):
             continue
         open_attr = " open" if index == 0 else ""
@@ -304,7 +303,10 @@ def _render_normalization_column_value_analysis(column_value_analysis: Any) -> s
             "</div>"
             "</details>"
         )
-    return "".join(sections) or "<p class='empty'>No column-level value analysis was recorded for this run.</p>"
+    return (
+        "".join(sections)
+        or "<p class='empty'>No column-level value analysis was recorded for this run.</p>"
+    )
 
 
 def render_normalization_dashboard(report: dict[str, Any], run_id: str) -> str:

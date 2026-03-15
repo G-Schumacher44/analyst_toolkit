@@ -13,7 +13,9 @@ def _lookup_original_column_name(changelog: dict[str, Any], normalized_col: str)
         and not renamed_columns.empty
         and {"Original Name", "New Name"}.issubset(renamed_columns.columns)
     ):
-        matched = renamed_columns.loc[renamed_columns["New Name"] == normalized_col, "Original Name"]
+        matched = renamed_columns.loc[
+            renamed_columns["New Name"] == normalized_col, "Original Name"
+        ]
         if not matched.empty:
             return str(matched.iloc[0])
     return normalized_col
@@ -119,7 +121,11 @@ def generate_transformation_report(
     report_tables["column_changes_summary"] = col_change_summary
 
     selected_preview_columns = list(preview_columns or [])
-    if not selected_preview_columns and not col_change_summary.empty and "column" in col_change_summary.columns:
+    if (
+        not selected_preview_columns
+        and not col_change_summary.empty
+        and "column" in col_change_summary.columns
+    ):
         selected_preview_columns = [
             str(value)
             for value in col_change_summary.sort_values("change_count", ascending=False)["column"]
