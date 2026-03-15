@@ -366,7 +366,9 @@ async def _toolkit_auto_heal(
         )
         try:
             asyncio.create_task(
-                _auto_heal_worker(job_id, gcs_path, session_id, normalized_runtime, run_id, input_id)
+                _auto_heal_worker(
+                    job_id, gcs_path, session_id, normalized_runtime, run_id, input_id
+                )
             )
         except Exception as exc:
             JobStore.mark_failed(

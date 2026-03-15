@@ -71,7 +71,9 @@ def register_input_source(
     run_id: str | None = None,
     load_into_session: bool = True,
 ) -> tuple[InputDescriptor, pd.DataFrame | None, str | None]:
-    resolved_type, resolved_reference, display_name = resolve_source_reference(reference, source_type)
+    resolved_type, resolved_reference, display_name = resolve_source_reference(
+        reference, source_type
+    )
     descriptor = InputDescriptor(
         input_id=_new_input_id(),
         source_type=resolved_type,

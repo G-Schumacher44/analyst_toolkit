@@ -100,7 +100,9 @@ def test_auth_mode_rejects_unauthorized_input_register(client, monkeypatch, tmp_
     source = tmp_path / "dirty_penguins.csv"
     source.write_text("species,bill_length_mm\nAdelie,39.1\n")
 
-    response = client.post("/inputs/register", json={"uri": str(source), "load_into_session": False})
+    response = client.post(
+        "/inputs/register", json={"uri": str(source), "load_into_session": False}
+    )
     assert response.status_code == 401
     assert response.json()["detail"]["error"] == "Unauthorized"
     assert isinstance(response.json()["detail"]["trace_id"], str)

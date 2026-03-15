@@ -178,6 +178,7 @@ async def test_toolkit_diagnostics_accepts_runtime_overrides(mocker):
     def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
         captured["input_session_id"] = session_id
+        captured["input_id"] = input_id
         return df
 
     mocker.patch.object(diagnostics_tool, "load_input", side_effect=fake_load_input)
@@ -258,6 +259,7 @@ async def test_toolkit_infer_configs_accepts_runtime_overrides(monkeypatch, mock
     def fake_load_input(path=None, session_id=None, input_id=None):
         captured["input_path"] = path
         captured["input_session_id"] = session_id
+        captured["input_id"] = input_id
         return df
 
     mocker.patch.object(infer_configs_tool, "load_input", side_effect=fake_load_input)
@@ -469,7 +471,14 @@ async def test_auto_heal_worker_marks_failed_when_result_status_is_error(mocker)
         return_value={"status": "error", "module": "auto_heal"},
     )
 
-    await auto_heal_tool._auto_heal_worker(job_id, None, "sess_test", None, "run_auto", None)
+    await auto_heal_tool._auto_heal_worker(
+        job_id=job_id,
+        gcs_path=None,
+        session_id="sess_test",
+        runtime=None,
+        run_id="run_auto",
+        input_id=None,
+    )
     job = auto_heal_tool.JobStore.get(job_id)
 
     assert job is not None

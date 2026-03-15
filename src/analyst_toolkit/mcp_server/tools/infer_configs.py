@@ -148,6 +148,7 @@ _INPUT_SCHEMA = {
         "input_id": {
             "type": "string",
             "description": "Optional: Canonical server-managed input reference returned by ingest/register flows.",
+            "pattern": "^input_[a-f0-9]{12}$",
         },
         "runtime": {
             "type": ["object", "string"],
