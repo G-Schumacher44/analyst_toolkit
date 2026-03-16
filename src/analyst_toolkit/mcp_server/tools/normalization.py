@@ -142,7 +142,11 @@ async def _toolkit_normalization(
     # are non-required.
     artifact_warnings: list = []
 
-    if should_export_html(config):
+    # Only expect report artifacts when the pipeline had work to report on
+    html_requested = should_export_html(config)
+    expect_reports = html_requested and changes_made > 0
+
+    if expect_reports:
         artifact_path = f"exports/reports/normalization/{run_id}_normalization_report.html"
         artifact_delivery = deliver_artifact(
             artifact_path,
@@ -173,8 +177,8 @@ async def _toolkit_normalization(
         artifact_url=artifact_url,
         xlsx_path=xlsx_delivery["local_path"],
         xlsx_url=xlsx_url,
-        expect_html=should_export_html(config),
-        expect_xlsx=should_export_html(config),
+        expect_html=expect_reports,
+        expect_xlsx=expect_reports,
         required_html=False,
         probe_local_paths=True,
     )
