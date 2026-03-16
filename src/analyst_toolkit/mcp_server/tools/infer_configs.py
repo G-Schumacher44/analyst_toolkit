@@ -265,6 +265,7 @@ async def _toolkit_infer_configs(
             os.unlink(temp_file.name)
 
     module_order = [
+        "diagnostics",
         "normalization",
         "duplicates",
         "outliers",
@@ -304,6 +305,14 @@ async def _toolkit_infer_configs(
     else:
         next_steps = apply_actions + [capability_action]
 
+    covered_modules = sorted(configs.keys())
+    requested_modules = sorted(set(modules)) if modules else sorted(_SUPPORTED_INFER_MODULES)
+    unsupported_modules = sorted(set(requested_modules) - set(covered_modules))
+    if unsupported_modules:
+        external_warnings.append(
+            f"Configs were not generated for: {', '.join(unsupported_modules)}."
+        )
+
     return with_next_actions(
         {
             "status": "pass",
@@ -311,6 +320,8 @@ async def _toolkit_infer_configs(
             "run_id": run_id,
             "session_id": session_id,
             "configs": configs,
+            "covered_modules": covered_modules,
+            "unsupported_modules": unsupported_modules,
             "config_dir": generated_config_dir or "",
             "runtime_applied": runtime_applied,
             "warnings": runtime_warnings + external_warnings,
