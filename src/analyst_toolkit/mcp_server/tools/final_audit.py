@@ -3,6 +3,7 @@
 import logging
 import os
 import tempfile
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -44,6 +45,25 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     runtime_to_tool_overrides,
 )
 from analyst_toolkit.mcp_server.schemas import base_input_schema
+
+_TRANSIENT_PATH_KEYS = ("raw_data_path", "input_path", "input_df_path")
+
+
+def _is_transient_path(value: str | None) -> bool:
+    """Return True if the path looks like a temp file that won't survive across tool calls."""
+    if not value or not isinstance(value, str):
+        return False
+    return value.startswith("/tmp/") or value.startswith(tempfile.gettempdir())
+
+
+def _strip_transient_paths(cfg: dict) -> list[str]:
+    """Remove transient filesystem paths from a config dict. Returns list of stripped keys."""
+    stripped = []
+    for key in _TRANSIENT_PATH_KEYS:
+        if key in cfg and _is_transient_path(cfg[key]):
+            del cfg[key]
+            stripped.append(key)
+    return stripped
 
 
 def _has_effective_certification_rules(rules: dict) -> bool:
@@ -126,10 +146,12 @@ async def _toolkit_final_audit(
                 else:
                     inferred_config.setdefault(key, value)
 
-    # Strip transient filesystem paths injected by infer_configs — these reference
-    # temp files that no longer exist by the time final_audit runs.
-    for stale_key in ("raw_data_path", "input_path", "input_df_path"):
-        inferred_config.pop(stale_key, None)
+    # Strip transient filesystem paths from both inferred and provided configs.
+    # infer_configs embeds /tmp paths that expire after the inference call returns;
+    # agents often pass those same stale paths back as explicit config.
+    _strip_transient_paths(inferred_config)
+    if isinstance(config, dict):
+        _strip_transient_paths(config)
 
     config, runtime_meta = resolve_layered_config(
         inferred=inferred_config,
@@ -143,6 +165,8 @@ async def _toolkit_final_audit(
     # Write the current df to a temp CSV as the "raw" snapshot if not provided.
     tmp_raw = None
     raw_data_path = base_cfg.get("raw_data_path")
+    if _is_transient_path(raw_data_path):
+        raw_data_path = None
     if not raw_data_path:
         tmp_raw = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         df.to_csv(tmp_raw.name, index=False)
@@ -170,6 +194,14 @@ async def _toolkit_final_audit(
             },
         }
     }
+
+    # Ensure output directories exist — the M10 pipeline does not create them.
+    for path_value in module_cfg["final_audit"].get("settings", {}).get("paths", {}).values():
+        if isinstance(path_value, str) and path_value:
+            resolved = path_value.replace("{run_id}", run_id)
+            parent = Path(resolved).parent
+            if not parent.is_absolute() or str(parent).startswith(os.getcwd()):
+                parent.mkdir(parents=True, exist_ok=True)
 
     try:
         # run_final_audit_pipeline returns the certified dataframe

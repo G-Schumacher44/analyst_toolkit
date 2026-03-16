@@ -1833,3 +1833,111 @@ async def test_final_audit_resolves_session_from_input_id(mocker, monkeypatch):
     rules = schema_cfg.get("rules", {})
     assert rules.get("expected_columns") == ["id", "value"]
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_strips_stale_paths_from_provided_config(mocker, monkeypatch):
+    """When the agent passes raw inferred YAML as explicit config, stale /tmp paths
+    should still be stripped so final_audit doesn't crash with FileNotFoundError."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_provided")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", True)
+
+    # Agent passes inferred YAML verbatim as explicit config with stale temp paths
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_provided",
+        run_id="fa_provided_stale",
+        config={
+            "raw_data_path": "/tmp/tmpABCDEF.csv",
+            "input_path": "/tmp/tmpGHIJKL.csv",
+            "input_df_path": "/tmp/tmpMNOPQR.csv",
+            "certification": {
+                "schema_validation": {
+                    "rules": {"expected_columns": ["id", "value"]},
+                },
+            },
+        },
+    )
+
+    # Should not crash; stale paths stripped before pipeline runs
+    assert result["status"] != "error"
+    assert result["effective_config"].get("raw_data_path") is None or not result[
+        "effective_config"
+    ].get("raw_data_path", "").startswith("/tmp/")
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_creates_output_directories(mocker, monkeypatch, tmp_path):
+    """final_audit should auto-create directories referenced in settings.paths."""
+    df = pd.DataFrame({"id": [1], "value": ["a"]})
+    StateStore.clear()
+
+    # Track the module_cfg that run_final_audit_pipeline receives
+    captured_cfg = {}
+
+    def fake_pipeline(config, df, run_id, notebook):
+        captured_cfg.update(config)
+        return df
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", side_effect=fake_pipeline)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_dirs")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", True)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_dirs",
+        run_id="fa_dirs_test",
+        config={},
+    )
+
+    assert result["status"] != "error"
+    # The default paths should have their parent directories created
+    paths = captured_cfg.get("final_audit", {}).get("settings", {}).get("paths", {})
+    for path_template in paths.values():
+        resolved = path_template.replace("{run_id}", "fa_dirs_test")
+        parent = Path(resolved).parent
+        assert parent.exists(), f"Expected directory {parent} to be auto-created"
+    StateStore.clear()
