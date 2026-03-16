@@ -12,6 +12,7 @@ from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
     run_final_audit_pipeline,
 )
 from analyst_toolkit.mcp_server.config_normalizers import normalize_final_audit_config
+from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor
 from analyst_toolkit.mcp_server.io import (
     ALLOW_EMPTY_CERT_RULES,
     append_to_run_history,
@@ -90,6 +91,12 @@ async def _toolkit_final_audit(
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "final_audit")
+
+    # Resolve session_id from input_id so config discovery can find inferred configs
+    if not session_id and input_id:
+        descriptor = get_input_descriptor(input_id)
+        if descriptor and descriptor.session_id:
+            session_id = descriptor.session_id
 
     # Auto-discover inferred configs from session when no explicit config is provided
     inferred_config: dict = {}
