@@ -18,6 +18,7 @@ from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 _SUPPORTED_INFER_MODULES = {
     "diagnostics",
     "validation",
+    "certification",
     "normalization",
     "duplicates",
     "outliers",
@@ -30,7 +31,6 @@ _INFER_MODULE_ALIASES = {
     "duplicate": "duplicates",
     "outlier": "outliers",
     "handling": "outliers",
-    "certification": "final_audit",
 }
 
 
@@ -271,6 +271,7 @@ async def _toolkit_infer_configs(
         "outliers",
         "imputation",
         "validation",
+        "certification",
         "final_audit",
     ]
     apply_actions = [
@@ -306,8 +307,11 @@ async def _toolkit_infer_configs(
         next_steps = apply_actions + [capability_action]
 
     covered_modules = sorted(configs.keys())
-    requested_modules = sorted(set(modules)) if modules else sorted(_SUPPORTED_INFER_MODULES)
-    unsupported_modules = sorted(set(requested_modules) - set(covered_modules))
+    if modules:
+        normalized_requested = {_INFER_MODULE_ALIASES.get(m, m) for m in modules}
+    else:
+        normalized_requested = set(_SUPPORTED_INFER_MODULES)
+    unsupported_modules = sorted(normalized_requested - set(covered_modules))
     if unsupported_modules:
         external_warnings.append(
             f"Configs were not generated for: {', '.join(unsupported_modules)}."
