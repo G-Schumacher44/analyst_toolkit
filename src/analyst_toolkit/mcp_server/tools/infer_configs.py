@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor
 from analyst_toolkit.mcp_server.io import (
     load_input,
     resolve_run_context,
@@ -211,8 +212,14 @@ async def _toolkit_infer_configs(
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, _lifecycle = resolve_run_context(run_id, session_id)
     options = options or {}
-    provided_inputs = [gcs_path is not None, session_id is not None, input_id is not None]
-    if sum(provided_inputs) > 1:
+
+    # When input_id is provided with session_id, use input_id as the data source
+    # and session_id as the config storage target (not a competing data source).
+    if input_id and session_id:
+        data_sources = [gcs_path is not None, True]  # input_id counts as data source
+    else:
+        data_sources = [gcs_path is not None, session_id is not None, input_id is not None]
+    if sum(data_sources) > 1:
         return {
             "status": "error",
             "module": "infer_configs",
@@ -220,8 +227,11 @@ async def _toolkit_infer_configs(
             "error_code": "AMBIGUOUS_INPUT_SOURCE",
             "config_yaml": "",
         }
+
+    # Load data from the single data source
+    load_session = session_id if not input_id else None
     try:
-        df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+        df = load_input(gcs_path, session_id=load_session, input_id=input_id)
     except Exception as exc:
         return {
             "status": "error",
@@ -231,7 +241,13 @@ async def _toolkit_infer_configs(
             "config_yaml": "",
         }
 
-    # If it came from a path and we don't have a session, start one
+    # Resolve session_id from input descriptor if not provided
+    if not session_id and input_id:
+        descriptor = get_input_descriptor(input_id)
+        if descriptor and descriptor.session_id:
+            session_id = descriptor.session_id
+
+    # If we still don't have a session, start one
     if not session_id:
         session_id = save_to_session(df, run_id=run_id)
 

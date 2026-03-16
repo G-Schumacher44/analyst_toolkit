@@ -1450,6 +1450,79 @@ async def test_infer_configs_persists_configs_to_session(monkeypatch, mocker):
 
 
 @pytest.mark.asyncio
+async def test_infer_configs_accepts_input_id_with_session_id(monkeypatch, mocker):
+    """infer_configs should accept input_id + session_id together."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {"normalization": "normalization:\n  rules: {}\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        input_id="input_test_combo",
+        session_id="sess_combo_test",
+        run_id="combo_run",
+        modules=["normalization"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["session_id"] == "sess_combo_test"
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_resolves_session_from_input_id(monkeypatch, mocker):
+    """infer_configs should resolve session_id from input_id descriptor."""
+    from analyst_toolkit.mcp_server.input.models import InputDescriptor
+
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+    session_id = StateStore.save(df, run_id="infer_resolve_run")
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+    descriptor = InputDescriptor(
+        input_id="input_resolve_test",
+        source_type="server_path",
+        original_reference="/tmp/test.csv",
+        resolved_reference="/tmp/test.csv",
+        display_name="test.csv",
+        media_type="text/csv",
+        session_id=session_id,
+        run_id="infer_resolve_run",
+    )
+    mocker.patch.object(infer_configs_tool, "get_input_descriptor", return_value=descriptor)
+
+    def fake_infer_configs(**kwargs):
+        return {"normalization": "normalization:\n  rules: {}\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        input_id="input_resolve_test",
+        run_id="infer_resolve_run",
+        modules=["normalization"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["session_id"] == session_id
+    stored = StateStore.get_config(session_id, "normalization")
+    assert stored is not None
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
 async def test_final_audit_auto_discovers_inferred_cert_config(mocker, monkeypatch):
     """final_audit should use inferred certification config from session when none provided."""
     df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
