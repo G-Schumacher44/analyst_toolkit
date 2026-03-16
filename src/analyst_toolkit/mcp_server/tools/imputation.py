@@ -149,7 +149,11 @@ async def _toolkit_imputation(
 
     artifact_warnings: list = []
 
-    if should_export_html(config):
+    # Only expect report artifacts when imputation actually filled nulls
+    html_requested = should_export_html(config)
+    expect_reports = html_requested and nulls_filled > 0
+
+    if expect_reports:
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
         artifact_delivery = deliver_artifact(
             artifact_path,
@@ -204,9 +208,9 @@ async def _toolkit_imputation(
             name: item["local_path"] for name, item in plot_delivery.items() if item["local_path"]
         },
         plot_urls=plot_urls,
-        expect_html=should_export_html(config),
-        expect_xlsx=should_export_html(config),
-        expect_plots=should_export_html(config),
+        expect_html=expect_reports,
+        expect_xlsx=expect_reports,
+        expect_plots=expect_reports,
         required_html=False,
         probe_local_paths=True,
     )
