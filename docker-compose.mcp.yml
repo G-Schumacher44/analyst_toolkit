@@ -4,17 +4,15 @@
 #   docker compose -f docker-compose.mcp.yml up --build
 #
 # Environment:
-#   ANALYST_MCP_PORT               — override default port 8001 (optional)
-#   ANALYST_REPORT_BUCKET          — GCS bucket for HTML report upload, e.g. gs://data-reporting
-#                                    If unset, reports are written to ./exports only (local dev)
-#   ANALYST_REPORT_PREFIX          — blob path prefix, default "analyst_toolkit/reports"
-#                                    Reports land at: {bucket}/{prefix}/{run_id}/{module}/{filename}
-#   ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES
-#                                  — if true, resources/templates/list returns URI templates
-#                                    (default false to avoid duplicate resource/template listings in some clients)
-#   GCP_CREDS_PATH                 — path to GCS service account key on host (optional)
-#                                    e.g. export GCP_CREDS_PATH=~/.secrets/analyst-toolkit-mcp.json
-#                                    If unset, GCS upload is disabled (local-only mode)
+#   All ANALYST_* variables are read from your shell or .envrc.
+#   See .envrc.example for the full list with descriptions.
+#
+#   Key variables:
+#     GCP_CREDS_PATH                 — path to GCS service account key on host
+#     ANALYST_REPORT_BUCKET          — GCS bucket for report upload (e.g. gs://data-reporting)
+#     ANALYST_MCP_PORT               — override default port 8001
+#     ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL — enable cockpit/history tools
+#     ANALYST_MCP_ENABLE_ARTIFACT_SERVER      — serve reports over local HTTP
 #
 # fridai-core integration:
 #   Set FRIDAI_ANALYST_MCP_ENABLED=true and FRIDAI_ANALYST_MCP_URL=http://127.0.0.1:8001
@@ -28,14 +26,42 @@ services:
     ports:
       - "${ANALYST_MCP_PORT:-8001}:8001"
     environment:
+      # --- Server ---
       - ANALYST_MCP_PORT=${ANALYST_MCP_PORT:-8001}
       - ANALYST_MCP_HOST=0.0.0.0
-      # GCS auth — only set if GCP_CREDS_PATH is provided
+      - ANALYST_MCP_AUTH_TOKEN=${ANALYST_MCP_AUTH_TOKEN:-}
+      - ANALYST_MCP_STRUCTURED_LOGS=${ANALYST_MCP_STRUCTURED_LOGS:-false}
+      # --- GCS auth ---
       - GOOGLE_APPLICATION_CREDENTIALS=${GCP_CREDS_PATH:+/run/secrets/gcp_creds}
-      # Report upload — set ANALYST_REPORT_BUCKET to enable GCS upload of HTML reports
+      # --- Report output ---
       - ANALYST_REPORT_BUCKET=${ANALYST_REPORT_BUCKET:-}
       - ANALYST_REPORT_PREFIX=${ANALYST_REPORT_PREFIX:-analyst_toolkit/reports}
+      # --- Resources/Templates ---
+      - ANALYST_MCP_RESOURCE_TIMEOUT_SEC=${ANALYST_MCP_RESOURCE_TIMEOUT_SEC:-8}
       - ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES=${ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES:-false}
+      - ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=${ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC:-8}
+      # --- Cockpit & History ---
+      - ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL=${ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL:-false}
+      - ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT=${ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT:-true}
+      - ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT=${ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT:-50}
+      # --- Local Artifact Server ---
+      - ANALYST_MCP_ENABLE_ARTIFACT_SERVER=${ANALYST_MCP_ENABLE_ARTIFACT_SERVER:-false}
+      - ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL=${ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL:-false}
+      - ANALYST_MCP_ARTIFACT_SERVER_HOST=${ANALYST_MCP_ARTIFACT_SERVER_HOST:-127.0.0.1}
+      - ANALYST_MCP_ARTIFACT_SERVER_PORT=${ANALYST_MCP_ARTIFACT_SERVER_PORT:-8765}
+      - ANALYST_MCP_ARTIFACT_SERVER_ROOT=${ANALYST_MCP_ARTIFACT_SERVER_ROOT:-exports}
+      - ANALYST_MCP_ALLOW_BIND_ALL=${ANALYST_MCP_ALLOW_BIND_ALL:-false}
+      # --- Artifact Routing ---
+      - ANALYST_MCP_LOCAL_OUTPUT_BASE=${ANALYST_MCP_LOCAL_OUTPUT_BASE:-.}
+      # --- Run Identity ---
+      - ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=${ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE:-false}
+      - ANALYST_MCP_DEDUP_RUN_ID_WARNINGS=${ANALYST_MCP_DEDUP_RUN_ID_WARNINGS:-true}
+      # --- Final Audit ---
+      - ANALYST_MCP_ALLOW_EMPTY_CERT_RULES=${ANALYST_MCP_ALLOW_EMPTY_CERT_RULES:-false}
+      # --- Input Registry ---
+      - ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES=${ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES:-512}
+      - ANALYST_MCP_INPUT_REGISTRY_TTL_SEC=${ANALYST_MCP_INPUT_REGISTRY_TTL_SEC:-21600}
+      - ANALYST_MCP_MAX_UPLOAD_BYTES=${ANALYST_MCP_MAX_UPLOAD_BYTES:-52428800}
     volumes:
       # Mount GCS service account key — requires GCP_CREDS_PATH to be set in shell/.envrc
       - ${GCP_CREDS_PATH:-/dev/null}:/run/secrets/gcp_creds:ro
