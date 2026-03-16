@@ -1,8 +1,11 @@
 """MCP tool: toolkit_final_audit — final certification and big HTML report via M10."""
 
+import logging
 import os
 import tempfile
 from typing import Any
+
+import yaml
 
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
@@ -19,6 +22,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_session_config,
     get_session_metadata,
     load_input,
     make_json_safe,
@@ -86,7 +90,37 @@ async def _toolkit_final_audit(
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "final_audit")
+
+    # Auto-discover inferred configs from session when no explicit config is provided
+    inferred_config: dict = {}
+    if session_id:
+        for config_key in ("final_audit", "certification"):
+            raw_yaml = get_session_config(session_id, config_key)
+            if not raw_yaml:
+                continue
+            try:
+                parsed = yaml.safe_load(raw_yaml)
+            except yaml.YAMLError:
+                logging.getLogger(__name__).warning(
+                    "Failed to parse inferred %s config from session %s",
+                    config_key,
+                    session_id,
+                )
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            # Unwrap module-level key so the structure matches provided config
+            if "final_audit" in parsed and isinstance(parsed["final_audit"], dict):
+                parsed = parsed["final_audit"]
+            # Merge each discovered config layer (final_audit first, certification second)
+            for key, value in parsed.items():
+                if isinstance(value, dict) and isinstance(inferred_config.get(key), dict):
+                    inferred_config[key] = {**inferred_config[key], **value}
+                else:
+                    inferred_config.setdefault(key, value)
+
     config, runtime_meta = resolve_layered_config(
+        inferred=inferred_config,
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )

@@ -217,6 +217,16 @@ def save_to_session(
     return StateStore.save(df, session_id, run_id=run_id)
 
 
+def save_session_config(session_id: str, module: str, config_yaml: str) -> None:
+    """Persist an inferred config YAML string for a module in session scope."""
+    StateStore.save_config(session_id, module, config_yaml)
+
+
+def get_session_config(session_id: str, module: str) -> Optional[str]:
+    """Retrieve a previously stored inferred config for a module."""
+    return StateStore.get_config(session_id, module)
+
+
 def get_session_run_id(session_id: str) -> Optional[str]:
     return StateStore.get_run_id(session_id)
 

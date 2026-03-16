@@ -1404,3 +1404,152 @@ async def test_auto_heal_returns_error_when_infer_configs_load_fails(monkeypatch
 
     assert result["status"] == "error"
     assert result["error_code"] == "INPUT_LOAD_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_persists_configs_to_session(monkeypatch, mocker):
+    """infer_configs should store inferred configs in StateStore for downstream tools."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "final_audit": "final_audit:\n  certification:\n    schema_validation:\n      rules:\n        expected_columns: [id, value]\n",
+            "certification": "validation:\n  schema_validation:\n    rules:\n      expected_columns: [id, value]\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_persist_test",
+        run_id="persist_run",
+    )
+
+    assert result["status"] == "pass"
+
+    # Configs should now be persisted in StateStore
+    stored_fa = StateStore.get_config("sess_persist_test", "final_audit")
+    stored_cert = StateStore.get_config("sess_persist_test", "certification")
+    assert stored_fa is not None
+    assert "expected_columns" in stored_fa
+    assert stored_cert is not None
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_auto_discovers_inferred_cert_config(mocker, monkeypatch):
+    """final_audit should use inferred certification config from session when none provided."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    # Pre-populate session with inferred certification config
+    session_id = StateStore.save(df, run_id="fa_inferred_run")
+    StateStore.save_config(
+        session_id,
+        "final_audit",
+        "final_audit:\n  certification:\n    schema_validation:\n      rules:\n        expected_columns:\n          - id\n          - value\n",
+    )
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value=session_id)
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id=session_id,
+        run_id="fa_inferred_run",
+        config={},  # No explicit config — should auto-discover from session
+    )
+
+    # With inferred rules discovered, should NOT fail with rule_contract_missing
+    assert "rule_contract_missing" not in result.get("violations_found", [])
+    # The effective config should contain the inferred certification rules
+    cert_cfg = result["effective_config"].get("certification", {})
+    schema_cfg = cert_cfg.get("schema_validation", {})
+    rules = schema_cfg.get("rules", {})
+    assert rules.get("expected_columns") == ["id", "value"]
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_explicit_config_overrides_inferred(mocker, monkeypatch):
+    """Explicit config should take precedence over inferred session config."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    session_id = StateStore.save(df, run_id="fa_override_run")
+    # Store inferred config with expected_columns: [x, y]
+    StateStore.save_config(
+        session_id,
+        "final_audit",
+        "final_audit:\n  certification:\n    schema_validation:\n      rules:\n        expected_columns: [x, y]\n",
+    )
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value=session_id)
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
+
+    # Explicit config with expected_columns: [id, value]
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id=session_id,
+        run_id="fa_override_run",
+        config={
+            "certification": {
+                "schema_validation": {
+                    "rules": {"expected_columns": ["id", "value"]},
+                }
+            }
+        },
+    )
+
+    # Explicit config should win over inferred
+    cert_cfg = result["effective_config"].get("certification", {})
+    schema_cfg = cert_cfg.get("schema_validation", {})
+    rules = schema_cfg.get("rules", {})
+    assert rules.get("expected_columns") == ["id", "value"]
+    StateStore.clear()

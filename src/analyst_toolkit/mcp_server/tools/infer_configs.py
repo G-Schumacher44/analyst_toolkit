@@ -7,7 +7,12 @@ from pathlib import Path
 
 import yaml
 
-from analyst_toolkit.mcp_server.io import load_input, resolve_run_context, save_to_session
+from analyst_toolkit.mcp_server.io import (
+    load_input,
+    resolve_run_context,
+    save_session_config,
+    save_to_session,
+)
 from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
 from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
@@ -272,6 +277,10 @@ async def _toolkit_infer_configs(
     finally:
         if temp_file:
             os.unlink(temp_file.name)
+
+    # Persist inferred configs to session so downstream tools can auto-discover them
+    for module_name, config_yaml in configs.items():
+        save_session_config(session_id, module_name, config_yaml)
 
     module_order = [
         "diagnostics",
