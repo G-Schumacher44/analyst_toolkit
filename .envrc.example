@@ -21,6 +21,23 @@ export ANALYST_REPORT_BUCKET=gs://your-bucket-name
 # Reports land at: {bucket}/{prefix}/{session_ts}/{run_id}/{module}/
 export ANALYST_REPORT_PREFIX=analyst_toolkit/reports
 
+# --- MCP Server ---
+# Port and host for the HTTP MCP server.
+# export ANALYST_MCP_PORT=8001
+# export ANALYST_MCP_HOST=127.0.0.1
+
+# Run in stdio mode instead of HTTP (used by MCP clients like Claude Desktop).
+# export ANALYST_MCP_STDIO=true
+
+# Bearer token for HTTP mode authentication. Leave unset to disable auth.
+# export ANALYST_MCP_AUTH_TOKEN=
+
+# Emit structured JSON logs instead of plain text.
+# export ANALYST_MCP_STRUCTURED_LOGS=false
+
+# Fallback version string when package metadata is unavailable.
+# export ANALYST_MCP_VERSION_FALLBACK=0.0.0+local
+
 # --- MCP Resource/Template Timeout Guards ---
 # Timeout (seconds) for resources/list and resources/read filesystem operations.
 export ANALYST_MCP_RESOURCE_TIMEOUT_SEC=8
@@ -31,3 +48,68 @@ export ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES=false
 
 # Timeout (seconds) for cockpit template loading calls.
 export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8
+
+# --- MCP Cockpit & History ---
+# Enable the cockpit dashboard and run history tools.
+# Defaults to the value of ANALYST_MCP_STDIO (true in stdio mode, false in HTTP).
+# export ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL=false
+
+# Default summary_only flag for run history queries.
+# export ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT=true
+
+# Default limit for run history queries.
+# export ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT=50
+
+# --- MCP Local Artifact Server ---
+# Serve report artifacts over a local HTTP endpoint for MCP clients.
+# export ANALYST_MCP_ENABLE_ARTIFACT_SERVER=false
+
+# Enable the artifact server control tool (start/stop/status).
+# Defaults to the value of ANALYST_MCP_STDIO.
+# export ANALYST_MCP_ENABLE_ARTIFACT_SERVER_TOOL=false
+
+# Host and port for the local artifact server.
+# export ANALYST_MCP_ARTIFACT_SERVER_HOST=127.0.0.1
+# export ANALYST_MCP_ARTIFACT_SERVER_PORT=8765
+
+# Root directory to serve artifacts from.
+# export ANALYST_MCP_ARTIFACT_SERVER_ROOT=exports
+
+# Allow binding to 0.0.0.0 (remote access). Default false restricts to localhost.
+# export ANALYST_MCP_ALLOW_BIND_ALL=false
+
+# --- MCP Artifact Routing ---
+# Base directory for local artifact output (used by deliver_artifact and local probe).
+# export ANALYST_MCP_LOCAL_OUTPUT_BASE=.
+
+# --- MCP Run Identity ---
+# Allow overriding a session-bound run_id with a different value.
+# export ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=false
+
+# Deduplicate repeated run_id coercion warnings within a session.
+# export ANALYST_MCP_DEDUP_RUN_ID_WARNINGS=true
+
+# --- MCP Final Audit ---
+# Allow final_audit to pass with empty certification rules.
+# Default false enforces fail-closed posture.
+# export ANALYST_MCP_ALLOW_EMPTY_CERT_RULES=false
+
+# --- MCP Input Registry ---
+# Maximum number of registered inputs to keep in memory.
+# export ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES=512
+
+# TTL (seconds) for registered inputs before eviction.
+# export ANALYST_MCP_INPUT_REGISTRY_TTL_SEC=21600
+
+# Maximum upload size (bytes) for inline input ingestion.
+# export ANALYST_MCP_MAX_UPLOAD_BYTES=52428800
+
+# Root directory for persisted input files.
+# export ANALYST_MCP_INPUT_ROOT=
+
+# Comma-separated list of allowed filesystem roots for input resolution.
+# export ANALYST_MCP_ALLOWED_INPUT_ROOTS=
+
+# --- MCP Job State ---
+# Path to the job state persistence file for async auto_heal jobs.
+# export ANALYST_MCP_JOB_STATE_PATH=
