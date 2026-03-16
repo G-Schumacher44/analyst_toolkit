@@ -196,18 +196,25 @@ async def _toolkit_final_audit(
     }
 
     # Ensure output directories exist — the M10 pipeline does not create them.
+    # Also strip any paths that resolve outside the project root to prevent
+    # the downstream pipeline from writing to untrusted locations.
     project_root = Path(os.getcwd()).resolve()
-    for path_value in module_cfg["final_audit"].get("settings", {}).get("paths", {}).values():
-        if isinstance(path_value, str) and path_value:
-            resolved = path_value.replace("{run_id}", run_id)
-            parent = (project_root / resolved).resolve().parent
-            try:
-                parent.relative_to(project_root)
-                parent.mkdir(parents=True, exist_ok=True)
-            except ValueError:
-                logging.getLogger(__name__).warning(
-                    "Refusing to create directory outside project root: %s", parent
-                )
+    paths_cfg = module_cfg["final_audit"].get("settings", {}).get("paths", {})
+    for path_key, path_value in list(paths_cfg.items()):
+        if not isinstance(path_value, str) or not path_value:
+            continue
+        resolved = path_value.replace("{run_id}", run_id)
+        target = (project_root / resolved).resolve()
+        try:
+            target.relative_to(project_root)
+            target.parent.mkdir(parents=True, exist_ok=True)
+        except ValueError:
+            logging.getLogger(__name__).warning(
+                "Refusing to use output path outside project root (%s): %s",
+                path_key,
+                target,
+            )
+            del paths_cfg[path_key]
 
     try:
         # run_final_audit_pipeline returns the certified dataframe

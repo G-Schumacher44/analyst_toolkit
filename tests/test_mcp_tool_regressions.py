@@ -1998,4 +1998,9 @@ async def test_final_audit_rejects_path_traversal(mocker, monkeypatch, tmp_path)
     assert not traversal_target.exists(), (
         f"Path traversal created directory outside project root: {traversal_target}"
     )
+    # The traversal path must be stripped from the config passed to the pipeline
+    pipeline_paths = captured_cfg.get("final_audit", {}).get("settings", {}).get("paths", {})
+    assert "checkpoint_csv" not in pipeline_paths, (
+        "Traversal path was not removed from pipeline config"
+    )
     StateStore.clear()
