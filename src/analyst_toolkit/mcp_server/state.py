@@ -28,6 +28,7 @@ class StateStore:
     _last_accessed: Dict[str, float] = {}
     _session_run_ids: Dict[str, str] = {}
     _session_start_times: Dict[str, str] = {}
+    _session_configs: Dict[str, Dict[str, str]] = {}
 
     @classmethod
     def save(
@@ -83,6 +84,26 @@ class StateStore:
             return cls._metadata.get(session_id)
 
     @classmethod
+    def save_config(cls, session_id: str, module: str, config_yaml: str) -> None:
+        """Store an inferred config YAML string for a module in session scope."""
+        with cls._lock:
+            if session_id not in cls._session_configs:
+                cls._session_configs[session_id] = {}
+            cls._session_configs[session_id][module] = config_yaml
+
+    @classmethod
+    def get_config(cls, session_id: str, module: str) -> Optional[str]:
+        """Retrieve a previously stored inferred config for a module."""
+        with cls._lock:
+            return cls._session_configs.get(session_id, {}).get(module)
+
+    @classmethod
+    def get_configs(cls, session_id: str) -> Dict[str, str]:
+        """Retrieve all stored inferred configs for a session."""
+        with cls._lock:
+            return dict(cls._session_configs.get(session_id, {}))
+
+    @classmethod
     def list_sessions(cls) -> Dict[str, dict]:
         """List available sessions and their metadata."""
         with cls._lock:
@@ -103,6 +124,7 @@ class StateStore:
             cls._last_accessed.pop(sid, None)
             cls._session_run_ids.pop(sid, None)
             cls._session_start_times.pop(sid, None)
+            cls._session_configs.pop(sid, None)
             logger.info(f"Evicted expired session {sid} (TTL reached)")
 
     @classmethod
@@ -121,9 +143,11 @@ class StateStore:
                 cls._last_accessed.pop(session_id, None)
                 cls._session_run_ids.pop(session_id, None)
                 cls._session_start_times.pop(session_id, None)
+                cls._session_configs.pop(session_id, None)
             else:
                 cls._sessions.clear()
                 cls._metadata.clear()
                 cls._last_accessed.clear()
                 cls._session_run_ids.clear()
                 cls._session_start_times.clear()
+                cls._session_configs.clear()
