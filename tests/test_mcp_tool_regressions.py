@@ -451,8 +451,9 @@ async def test_toolkit_infer_configs_normalizes_dict_module_aliases(monkeypatch,
 
     def fake_infer_configs(**kwargs):
         return {
-            "certification": "final_audit:\n  summary:\n    run: true\n",
+            "certification": "validation:\n  schema_validation:\n    run: true\n",
             "outlier": "outlier_detection:\n  run: true\n",
+            "dups": "duplicates:\n  subset: []\n",
         }
 
     infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
@@ -464,13 +465,17 @@ async def test_toolkit_infer_configs_normalizes_dict_module_aliases(monkeypatch,
 
     result = await infer_configs_tool._toolkit_infer_configs(
         session_id="sess_alias_dict",
-        modules=["final_audit", "outliers"],
+        modules=["certification", "outliers", "duplicates"],
     )
 
     assert result["status"] == "pass"
-    assert "final_audit" in result["configs"]
+    # certification is its own supported module, not aliased
+    assert "certification" in result["configs"]
+    # outlier → outliers alias still works
     assert "outliers" in result["configs"]
-    assert result["warnings"] == []
+    # dups → duplicates alias still works
+    assert "duplicates" in result["configs"]
+    assert result["unsupported_modules"] == []
 
 
 @pytest.mark.asyncio
@@ -820,6 +825,7 @@ async def test_infer_configs_surfaces_covered_and_unsupported_modules(monkeypatc
     assert "covered_modules" in result
     assert "unsupported_modules" in result
     assert set(result["covered_modules"]) == {
+        "certification",
         "diagnostics",
         "duplicates",
         "final_audit",
@@ -858,6 +864,36 @@ async def test_infer_configs_reports_unsupported_when_partial(monkeypatch, mocke
     assert result["covered_modules"] == ["outliers", "validation"]
     assert result["unsupported_modules"] == ["normalization"]
     assert any("not generated for" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_aliased_requests_resolve_before_unsupported_check(monkeypatch, mocker):
+    """Requesting 'handling' (alias for outliers) should not appear unsupported."""
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "outliers": "outlier_detection:\n  run: true\n",
+            "certification": "validation:\n  schema_validation:\n    run: true\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_alias_req",
+        modules=["handling", "certification"],
+    )
+
+    assert result["status"] == "pass"
+    assert "certification" in result["configs"]
+    assert "outliers" in result["configs"]
+    # handling resolves to outliers, certification is its own module — neither unsupported
+    assert result["unsupported_modules"] == []
 
 
 @pytest.mark.asyncio
