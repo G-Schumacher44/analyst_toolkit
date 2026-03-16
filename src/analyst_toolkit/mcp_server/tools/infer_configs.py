@@ -215,11 +215,20 @@ async def _toolkit_infer_configs(
             "error_code": "AMBIGUOUS_INPUT_SOURCE",
             "config_yaml": "",
         }
-    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+    try:
+        df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "module": "infer_configs",
+            "error": f"Failed to load input: {type(exc).__name__}: {exc}",
+            "error_code": "INPUT_LOAD_FAILED",
+            "config_yaml": "",
+        }
 
     # If it came from a path and we don't have a session, start one
     if not session_id:
-        session_id = save_to_session(df)
+        session_id = save_to_session(df, run_id=run_id)
 
     # Always materialize an input snapshot locally for inference.
     # This avoids path-construction drift between modules and ensures deterministic reads.
