@@ -1941,3 +1941,66 @@ async def test_final_audit_creates_output_directories(mocker, monkeypatch, tmp_p
         parent = Path(resolved).parent
         assert parent.exists(), f"Expected directory {parent} to be auto-created"
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_rejects_path_traversal(mocker, monkeypatch, tmp_path):
+    """Paths that traverse outside the project root must not create directories."""
+    df = pd.DataFrame({"id": [1], "value": ["a"]})
+    StateStore.clear()
+
+    traversal_target = tmp_path / "escaped"
+    captured_cfg = {}
+
+    def fake_pipeline(config, df, run_id, notebook):
+        captured_cfg.update(config)
+        return df
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", side_effect=fake_pipeline)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_trav")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", True)
+
+    # Inject a traversal path into the config
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_trav",
+        run_id="fa_traversal",
+        config={
+            "settings": {
+                "paths": {
+                    "checkpoint_csv": f"../../../{traversal_target}/evil.csv",
+                },
+            },
+        },
+    )
+
+    assert result["status"] != "error"
+    # The traversal target must NOT have been created
+    assert not traversal_target.exists(), (
+        f"Path traversal created directory outside project root: {traversal_target}"
+    )
+    # The traversal path must be stripped from the config passed to the pipeline
+    pipeline_paths = captured_cfg.get("final_audit", {}).get("settings", {}).get("paths", {})
+    assert "checkpoint_csv" not in pipeline_paths, (
+        "Traversal path was not removed from pipeline config"
+    )
+    StateStore.clear()
