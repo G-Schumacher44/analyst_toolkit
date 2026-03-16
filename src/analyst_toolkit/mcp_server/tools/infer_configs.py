@@ -15,6 +15,24 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
 )
 from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 
+_SUPPORTED_INFER_MODULES = {
+    "diagnostics",
+    "validation",
+    "normalization",
+    "duplicates",
+    "outliers",
+    "imputation",
+    "final_audit",
+}
+
+_INFER_MODULE_ALIASES = {
+    "dups": "duplicates",
+    "duplicate": "duplicates",
+    "outlier": "outliers",
+    "handling": "outliers",
+    "certification": "final_audit",
+}
+
 
 def _call_external_infer_configs(
     infer_configs_fn,
@@ -64,24 +82,8 @@ def _module_name_from_generated_file(path: Path) -> str | None:
             stem = stem[: -len(suffix)]
             break
 
-    aliases = {
-        "dups": "duplicates",
-        "duplicate": "duplicates",
-        "outlier": "outliers",
-        "handling": "outliers",
-        "certification": "final_audit",
-    }
-    normalized = aliases.get(stem, stem)
-    supported = {
-        "diagnostics",
-        "validation",
-        "normalization",
-        "duplicates",
-        "outliers",
-        "imputation",
-        "final_audit",
-    }
-    return normalized if normalized in supported else None
+    normalized = _INFER_MODULE_ALIASES.get(stem, stem)
+    return normalized if normalized in _SUPPORTED_INFER_MODULES else None
 
 
 def _module_name_from_generated_yaml(raw_yaml: str) -> str | None:
@@ -100,35 +102,67 @@ def _module_name_from_generated_yaml(raw_yaml: str) -> str | None:
     return None
 
 
+def _is_relative_to(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
+def _trusted_generated_config_root() -> Path:
+    return (Path.cwd() / "config").resolve()
+
+
 def _normalize_external_configs_result(
     configs_result,
+    *,
+    trusted_config_root: Path,
 ) -> tuple[dict[str, str], list[str], str | None]:
     """Normalize external infer_configs output into module->yaml mapping."""
     if isinstance(configs_result, dict):
-        normalized = {
-            str(module): str(config_yaml)
-            for module, config_yaml in configs_result.items()
-            if config_yaml is not None
-        }
-        return normalized, [], None
+        normalized: dict[str, str] = {}
+        warnings: list[str] = []
+        for module, config_yaml in configs_result.items():
+            if config_yaml is None:
+                continue
+            module_name = _module_name_from_generated_file(Path(f"{module}.yaml"))
+            if module_name is None and isinstance(config_yaml, str):
+                module_name = _module_name_from_generated_yaml(config_yaml)
+            if module_name is None:
+                warnings.append(f"Ignored unsupported inferred module key: {module}.")
+                continue
+            normalized[module_name] = str(config_yaml)
+        return normalized, warnings, None
 
     if isinstance(configs_result, str):
-        config_dir = Path(configs_result)
-        if not config_dir.is_dir():
+        config_dir = Path(configs_result).resolve()
+        if config_dir.is_symlink() or not config_dir.is_dir():
             return (
                 {},
                 [f"External infer_configs returned non-directory path: {configs_result}."],
                 None,
             )
+        if not _is_relative_to(config_dir, trusted_config_root):
+            return (
+                {},
+                [f"Rejected untrusted generated config directory: {configs_result}."],
+                None,
+            )
 
         configs: dict[str, str] = {}
         for path in sorted(config_dir.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in {".yaml", ".yml"}:
+            if path.is_symlink():
                 continue
-            raw_yaml = path.read_text(encoding="utf-8")
-            module_name = _module_name_from_generated_yaml(raw_yaml) or _module_name_from_generated_file(
-                path
-            )
+            resolved_path = path.resolve()
+            if not _is_relative_to(resolved_path, trusted_config_root):
+                continue
+            if not resolved_path.is_file() or resolved_path.suffix.lower() not in {".yaml", ".yml"}:
+                continue
+            raw_yaml = resolved_path.read_text(encoding="utf-8")
+            module_name = _module_name_from_generated_yaml(
+                raw_yaml
+            ) or _module_name_from_generated_file(resolved_path)
             if module_name is None:
                 continue
             configs[module_name] = raw_yaml
@@ -192,6 +226,7 @@ async def _toolkit_infer_configs(
     temp_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
     df.to_csv(temp_file.name, index=False)
     input_path = temp_file.name
+    trusted_config_root = _trusted_generated_config_root()
 
     try:
         try:
@@ -221,7 +256,8 @@ async def _toolkit_infer_configs(
             sample_rows=sample_rows,
         )
         configs, normalization_warnings, generated_config_dir = _normalize_external_configs_result(
-            raw_configs
+            raw_configs,
+            trusted_config_root=trusted_config_root,
         )
         external_warnings.extend(normalization_warnings)
     finally:

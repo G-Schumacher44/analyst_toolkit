@@ -292,8 +292,9 @@ async def test_toolkit_infer_configs_reads_generated_directory_results(
 
     mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
 
-    generated_dir = tmp_path / "generated"
-    generated_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    generated_dir = tmp_path / "config" / "generated"
+    generated_dir.mkdir(parents=True)
     (generated_dir / "normalization_config.yaml").write_text(
         "normalization:\n  rules: {}\n",
         encoding="utf-8",
@@ -327,15 +328,14 @@ async def test_toolkit_infer_configs_reads_generated_directory_results(
 
 
 @pytest.mark.asyncio
-async def test_toolkit_infer_configs_maps_generated_yaml_by_root_key(
-    monkeypatch, mocker, tmp_path
-):
+async def test_toolkit_infer_configs_maps_generated_yaml_by_root_key(monkeypatch, mocker, tmp_path):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
 
     mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
 
-    generated_dir = tmp_path / "generated_by_content"
-    generated_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    generated_dir = tmp_path / "config" / "generated_by_content"
+    generated_dir.mkdir(parents=True)
     (generated_dir / "penguins_profile.yaml").write_text(
         "normalization:\n  rules: {}\n",
         encoding="utf-8",
@@ -370,8 +370,9 @@ async def test_toolkit_infer_configs_maps_autofill_files_with_metadata_prefix(
 
     mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
 
-    generated_dir = tmp_path / "generated_autofill"
-    generated_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    generated_dir = tmp_path / "config" / "generated_autofill"
+    generated_dir.mkdir(parents=True)
     (generated_dir / "outlier_config_autofill.yaml").write_text(
         "notebook: true\nrun_id: ''\nlogging: auto\noutlier_detection:\n  run: true\n",
         encoding="utf-8",
@@ -400,6 +401,75 @@ async def test_toolkit_infer_configs_maps_autofill_files_with_metadata_prefix(
     assert result["config_dir"] == str(generated_dir)
     assert "outliers" in result["configs"]
     assert "validation" in result["configs"]
+    assert result["warnings"] == []
+
+
+@pytest.mark.asyncio
+async def test_toolkit_infer_configs_rejects_untrusted_generated_directory(
+    monkeypatch, mocker, tmp_path
+):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    monkeypatch.chdir(tmp_path)
+    generated_dir = tmp_path / "outside_generated"
+    generated_dir.mkdir()
+    (generated_dir / "validation_config.yaml").write_text(
+        "validation:\n  schema_validation:\n    run: true\n",
+        encoding="utf-8",
+    )
+
+    def fake_infer_configs(**kwargs):
+        return str(generated_dir)
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_untrusted_generated",
+        modules=["validation"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["configs"] == {}
+    assert result["config_dir"] == ""
+    assert any(
+        "Rejected untrusted generated config directory" in warning for warning in result["warnings"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_infer_configs_normalizes_dict_module_aliases(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "certification": "final_audit:\n  summary:\n    run: true\n",
+            "outlier": "outlier_detection:\n  run: true\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_alias_dict",
+        modules=["final_audit", "outliers"],
+    )
+
+    assert result["status"] == "pass"
+    assert "final_audit" in result["configs"]
+    assert "outliers" in result["configs"]
     assert result["warnings"] == []
 
 
