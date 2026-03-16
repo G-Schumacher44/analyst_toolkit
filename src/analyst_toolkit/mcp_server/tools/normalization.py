@@ -170,7 +170,7 @@ async def _toolkit_normalization(
         xlsx_url=xlsx_url,
         expect_html=should_export_html(config),
         expect_xlsx=should_export_html(config),
-        required_html=should_export_html(config),
+        required_html=False,
         probe_local_paths=True,
     )
     warnings.extend(artifact_contract["artifact_warnings"])

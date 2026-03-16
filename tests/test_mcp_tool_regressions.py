@@ -933,22 +933,137 @@ async def test_normalization_reports_artifact_contract(mocker):
         config={},
     )
 
-    assert result["status"] == "warn"
     assert "artifact_matrix" in result
     assert "html_report" in result["artifact_matrix"]
-    assert "html_report" in result["missing_required_artifacts"]
+    # HTML/XLSX are expected but not required — missing ones do not force warn
+    assert "html_report" not in result["missing_required_artifacts"]
     assert "xlsx_report" in result["artifact_matrix"]
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "missing"
-    assert any(
-        "exports/reports/normalization/norm_artifact_contract_normalization_report.xlsx" in warning
-        for warning in result["warnings"]
-    )
     assert (
         result["dashboard_path"]
         == "exports/reports/normalization/norm_artifact_contract_normalization_report.html"
     )
     assert result["dashboard_url"] == ""
     assert result["dashboard_label"] == "Normalization dashboard"
+
+
+@pytest.mark.asyncio
+async def test_normalization_pass_when_html_missing_but_export_present(mocker):
+    """When data export succeeds but HTML/XLSX are not generated, status should be pass."""
+    df = pd.DataFrame({"name": ["Alice"]})
+
+    mocker.patch.object(normalization_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        normalization_tool,
+        "run_normalization_pipeline",
+        return_value=(df, {"changelog": {}, "changes_made": 0}),
+    )
+    mocker.patch.object(normalization_tool, "save_to_session", return_value="sess_norm")
+    mocker.patch.object(normalization_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(normalization_tool, "save_output", return_value="gs://bucket/norm.csv")
+    mocker.patch.object(normalization_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(normalization_tool, "should_export_html", return_value=True)
+    mocker.patch.object(
+        normalization_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await normalization_tool._toolkit_normalization(
+        session_id="sess_norm",
+        run_id="norm_html_missing",
+        config={},
+    )
+
+    # data_export is available via GCS URL so no required artifacts are missing
+    assert result["status"] == "pass"
+    assert result["missing_required_artifacts"] == []
+    assert result["artifact_matrix"]["html_report"]["expected"] is True
+    assert result["artifact_matrix"]["html_report"]["required"] is False
+
+
+@pytest.mark.asyncio
+async def test_imputation_pass_when_html_missing_but_export_present(mocker):
+    """Imputation should not warn solely because HTML artifacts are missing."""
+    df = pd.DataFrame({"value": [1.0, 2.0]})
+
+    mocker.patch.object(imputation_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        imputation_tool,
+        "run_imputation_pipeline",
+        return_value=df,
+    )
+    mocker.patch.object(imputation_tool, "save_to_session", return_value="sess_imp")
+    mocker.patch.object(imputation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(imputation_tool, "save_output", return_value="gs://bucket/imp.csv")
+    mocker.patch.object(imputation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(imputation_tool, "should_export_html", return_value=True)
+    mocker.patch.object(
+        imputation_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await imputation_tool._toolkit_imputation(
+        session_id="sess_imp",
+        run_id="imp_html_missing",
+        config={},
+    )
+
+    assert result["status"] == "pass"
+    assert result["missing_required_artifacts"] == []
+    assert result["artifact_matrix"]["html_report"]["required"] is False
+
+
+@pytest.mark.asyncio
+async def test_outliers_pass_when_html_missing_but_export_present(mocker):
+    """Outliers should not warn solely because HTML artifacts are missing."""
+    df = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
+
+    mocker.patch.object(outliers_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        outliers_tool,
+        "run_outlier_detection_pipeline",
+        return_value=(df, {"outlier_log": pd.DataFrame()}),
+    )
+    mocker.patch.object(outliers_tool, "save_to_session", return_value="sess_out")
+    mocker.patch.object(outliers_tool, "get_session_metadata", return_value={"row_count": 3})
+    mocker.patch.object(outliers_tool, "save_output", return_value="gs://bucket/out.csv")
+    mocker.patch.object(outliers_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(outliers_tool, "should_export_html", return_value=True)
+    mocker.patch.object(
+        outliers_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await outliers_tool._toolkit_outliers(
+        session_id="sess_out",
+        run_id="out_html_missing",
+        config={},
+    )
+
+    assert result["status"] == "pass"
+    assert result["missing_required_artifacts"] == []
+    assert result["artifact_matrix"]["html_report"]["required"] is False
 
 
 @pytest.mark.asyncio

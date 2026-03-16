@@ -234,8 +234,17 @@ async def _run_auto_heal_pipeline(
     else:
         artifact_path = ""
 
+    final_export_url = imp_res.get("export_url") or norm_res.get("export_url", "")
+    final_export_path = ""
+    for child in (imp_res, norm_res):
+        if child.get("export_url"):
+            matrix = child.get("artifact_matrix", {})
+            final_export_path = matrix.get("data_export", {}).get("path", "")
+            break
+
     artifact_contract = build_artifact_contract(
-        imp_res.get("export_url") or norm_res.get("export_url", ""),
+        final_export_url,
+        export_path=final_export_path,
         artifact_path=artifact_path,
         artifact_url=artifact_url,
         expect_html=export_html,
@@ -253,7 +262,7 @@ async def _run_auto_heal_pipeline(
         "summary": {**summary, "row_count": row_count},
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
-        "export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
+        "export_url": final_export_url,
         "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
         "failed_steps": failed_steps,
         "destination_delivery": {
