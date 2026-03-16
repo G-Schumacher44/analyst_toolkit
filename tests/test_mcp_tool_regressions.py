@@ -790,6 +790,77 @@ async def test_infer_configs_gcs_path_uses_local_snapshot(monkeypatch, mocker):
 
 
 @pytest.mark.asyncio
+async def test_infer_configs_surfaces_covered_and_unsupported_modules(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "validation": "validation:\n  schema_validation:\n    run: true\n",
+            "normalization": "normalization:\n  rules: {}\n",
+            "outliers": "outlier_detection:\n  run: true\n",
+            "imputation": "imputation:\n  rules: {}\n",
+            "diagnostics": "diagnostics:\n  run: true\n",
+            "duplicates": "duplicates:\n  subset: []\n",
+            "certification": "validation:\n  schema_validation:\n    run: true\n",
+            "handling": "outlier_detection:\n  run: true\n",
+            "final_audit": "final_audit:\n  certification_rules: {}\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(session_id="sess_full")
+
+    assert result["status"] == "pass"
+    assert "covered_modules" in result
+    assert "unsupported_modules" in result
+    assert set(result["covered_modules"]) == {
+        "diagnostics",
+        "duplicates",
+        "final_audit",
+        "imputation",
+        "normalization",
+        "outliers",
+        "validation",
+    }
+    assert result["unsupported_modules"] == []
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_reports_unsupported_when_partial(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "validation": "validation:\n  schema_validation:\n    run: true\n",
+            "outliers": "outlier_detection:\n  run: true\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_partial",
+        modules=["validation", "outliers", "normalization"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["covered_modules"] == ["outliers", "validation"]
+    assert result["unsupported_modules"] == ["normalization"]
+    assert any("not generated for" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
 async def test_final_audit_fails_closed_when_cert_rules_empty(mocker, monkeypatch):
     df = pd.DataFrame({"value": [1]})
 
