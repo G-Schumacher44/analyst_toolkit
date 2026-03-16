@@ -132,11 +132,13 @@ async def _toolkit_outliers(
     artifact_delivery: dict[str, Any] = empty_delivery_state()
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
     plot_delivery: dict[str, dict] = {}
-    warnings: list = []
-    warnings.extend(lifecycle["warnings"])
-    warnings.extend(runtime_warnings)
-    warnings.extend(runtime_meta["runtime_warnings"])
-    warnings.extend(export_delivery["warnings"])
+    status_warnings: list = []
+    status_warnings.extend(lifecycle["warnings"])
+    status_warnings.extend(runtime_warnings)
+    status_warnings.extend(runtime_meta["runtime_warnings"])
+    status_warnings.extend(export_delivery["warnings"])
+
+    artifact_warnings: list = []
     if should_export_html(config):
         # Path where the pipeline runner saves its report
         artifact_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
@@ -149,7 +151,7 @@ async def _toolkit_outliers(
         )
         artifact_path = artifact_delivery["local_path"]
         artifact_url = artifact_delivery["url"]
-        warnings.extend(artifact_delivery["warnings"])
+        artifact_warnings.extend(artifact_delivery["warnings"])
 
         xlsx_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.xlsx"
         xlsx_delivery = deliver_artifact(
@@ -160,7 +162,7 @@ async def _toolkit_outliers(
             session_id=session_id,
         )
         xlsx_url = xlsx_delivery["url"]
-        warnings.extend(xlsx_delivery["warnings"])
+        artifact_warnings.extend(xlsx_delivery["warnings"])
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [
@@ -178,7 +180,7 @@ async def _toolkit_outliers(
                         session_id=session_id,
                     )
                     plot_delivery[plot_file.name] = delivered
-                    warnings.extend(delivered["warnings"])
+                    artifact_warnings.extend(delivered["warnings"])
                     if delivered["url"]:
                         plot_urls[plot_file.name] = delivered["url"]
 
@@ -199,9 +201,10 @@ async def _toolkit_outliers(
         required_html=False,
         probe_local_paths=True,
     )
-    warnings.extend(artifact_contract["artifact_warnings"])
+    artifact_warnings.extend(artifact_contract["artifact_warnings"])
+    warnings = status_warnings + artifact_warnings
     base_status = "pass" if outlier_count == 0 else "warn"
-    if warnings and base_status == "pass":
+    if status_warnings and base_status == "pass":
         base_status = "warn"
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]

@@ -131,11 +131,16 @@ async def _toolkit_normalization(
     artifact_delivery: dict[str, Any] = empty_delivery_state()
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
 
-    warnings: list = []
-    warnings.extend(lifecycle["warnings"])
-    warnings.extend(runtime_warnings)
-    warnings.extend(runtime_meta["runtime_warnings"])
-    warnings.extend(export_delivery["warnings"])
+    status_warnings: list = []
+    status_warnings.extend(lifecycle["warnings"])
+    status_warnings.extend(runtime_warnings)
+    status_warnings.extend(runtime_meta["runtime_warnings"])
+    status_warnings.extend(export_delivery["warnings"])
+
+    # Artifact delivery warnings are informational — collected separately so they
+    # appear in the response but do not escalate base_status when the artifacts
+    # are non-required.
+    artifact_warnings: list = []
 
     if should_export_html(config):
         artifact_path = f"exports/reports/normalization/{run_id}_normalization_report.html"
@@ -148,7 +153,7 @@ async def _toolkit_normalization(
         )
         artifact_path = artifact_delivery["local_path"]
         artifact_url = artifact_delivery["url"]
-        warnings.extend(artifact_delivery["warnings"])
+        artifact_warnings.extend(artifact_delivery["warnings"])
 
         xlsx_path = f"exports/reports/normalization/{run_id}_normalization_report.xlsx"
         xlsx_delivery = deliver_artifact(
@@ -159,7 +164,7 @@ async def _toolkit_normalization(
             session_id=session_id,
         )
         xlsx_url = xlsx_delivery["url"]
-        warnings.extend(xlsx_delivery["warnings"])
+        artifact_warnings.extend(xlsx_delivery["warnings"])
 
     artifact_contract = build_artifact_contract(
         export_url,
@@ -173,8 +178,9 @@ async def _toolkit_normalization(
         required_html=False,
         probe_local_paths=True,
     )
-    warnings.extend(artifact_contract["artifact_warnings"])
-    base_status = "warn" if warnings else "pass"
+    artifact_warnings.extend(artifact_contract["artifact_warnings"])
+    warnings = status_warnings + artifact_warnings
+    base_status = "warn" if status_warnings else "pass"
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]
     )

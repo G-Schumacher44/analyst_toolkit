@@ -862,12 +862,16 @@ async def test_normalization_reports_artifact_contract(mocker):
         config={},
     )
 
+    # Artifact delivery warnings are informational and do not escalate status
+    assert result["status"] == "pass"
     assert "artifact_matrix" in result
     assert "html_report" in result["artifact_matrix"]
     # HTML/XLSX are expected but not required — missing ones do not force warn
     assert "html_report" not in result["missing_required_artifacts"]
     assert "xlsx_report" in result["artifact_matrix"]
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "missing"
+    # Delivery warnings still appear in the response for client visibility
+    assert any("Upload failed" in w for w in result["warnings"])
     assert (
         result["dashboard_path"]
         == "exports/reports/normalization/norm_artifact_contract_normalization_report.html"
