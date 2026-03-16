@@ -77,6 +77,11 @@ def normalize_final_audit_config(config: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(nested_rules, dict):
         nested_rules = {}
 
+    # Lift certification.rules into schema_validation.rules (common agent shorthand)
+    cert_shorthand_rules = cert_cfg.get("rules", {})
+    if isinstance(cert_shorthand_rules, dict) and cert_shorthand_rules:
+        nested_rules = {**nested_rules, **cert_shorthand_rules}
+
     shorthand_rules = base_cfg.get("rules", {})
     if isinstance(shorthand_rules, dict) and shorthand_rules:
         nested_rules = {**nested_rules, **shorthand_rules}
@@ -94,6 +99,7 @@ def normalize_final_audit_config(config: dict[str, Any]) -> dict[str, Any]:
 
     cert_cfg.setdefault("run", True)
     cert_cfg["schema_validation"] = schema_cfg
+    cert_cfg.pop("rules", None)
 
     base_cfg["certification"] = cert_cfg
     base_cfg.pop("rules", None)

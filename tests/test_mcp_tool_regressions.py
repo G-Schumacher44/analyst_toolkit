@@ -1560,3 +1560,62 @@ async def test_final_audit_explicit_config_overrides_inferred(mocker, monkeypatc
     rules = schema_cfg.get("rules", {})
     assert rules.get("expected_columns") == ["id", "value"]
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_accepts_certification_rules_shorthand(mocker, monkeypatch):
+    """certification.rules shorthand should be lifted into schema_validation.rules."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_cert_rules")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
+
+    # Pass rules inside certification (common agent shorthand) rather than
+    # the canonical certification.schema_validation.rules path.
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_cert_rules",
+        run_id="cert_rules_shorthand",
+        config={
+            "final_audit": {
+                "certification": {
+                    "run": True,
+                    "fail_on_error": True,
+                    "rules": {
+                        "expected_columns": ["id", "value"],
+                        "expected_types": {"id": "int64", "value": "str"},
+                    },
+                }
+            }
+        },
+    )
+
+    cert_cfg = result["effective_config"].get("certification", {})
+    schema_cfg = cert_cfg.get("schema_validation", {})
+    rules = schema_cfg.get("rules", {})
+    assert rules.get("expected_columns") == ["id", "value"]
+    assert rules.get("expected_types") == {"id": "int64", "value": "str"}
+    # Should not have rule_contract_missing violation
+    assert "rule_contract_missing" not in result.get("violations_found", [])
+    StateStore.clear()

@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir -r requirements-mcp.txt
 
 # Runtime defaults
+ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV ANALYST_MCP_HOST=0.0.0.0
 

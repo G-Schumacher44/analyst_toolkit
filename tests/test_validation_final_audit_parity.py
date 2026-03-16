@@ -33,6 +33,32 @@ def test_normalizers_align_on_shared_rule_contract():
     )
 
 
+def test_normalize_final_audit_lifts_certification_rules_shorthand():
+    """certification.rules should be lifted into certification.schema_validation.rules."""
+    config = {
+        "final_audit": {
+            "run": True,
+            "certification": {
+                "run": True,
+                "fail_on_error": True,
+                "rules": {
+                    "expected_columns": ["id", "score"],
+                    "expected_types": {"id": "int64", "score": "float64"},
+                    "categorical_values": {"label": ["ok", "bad"]},
+                },
+            },
+        }
+    }
+    result = normalize_final_audit_config(config)
+    rules = result["certification"]["schema_validation"]["rules"]
+
+    assert rules["expected_columns"] == ["id", "score"]
+    assert rules["expected_types"] == {"id": "int64", "score": "float64"}
+    assert rules["categorical_values"] == {"label": ["ok", "bad"]}
+    # certification.rules should be cleaned up after lifting
+    assert "rules" not in result["certification"] or result["certification"].get("rules") is None
+
+
 def test_validation_and_final_audit_have_check_level_parity():
     shorthand = _shorthand_contract()
     df = pd.DataFrame(
