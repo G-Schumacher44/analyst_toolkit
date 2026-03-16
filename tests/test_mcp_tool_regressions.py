@@ -1325,3 +1325,82 @@ async def test_other_modules_report_dashboard_artifact_contract(
     assert result["dashboard_path"] == expected_path
     assert result["dashboard_url"] == ""
     assert result["dashboard_label"] == expected_label
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_returns_structured_error_on_load_failure(monkeypatch, mocker):
+    """infer_configs should return a structured error, not raise, when load_input fails."""
+    mocker.patch.object(
+        infer_configs_tool, "load_input", side_effect=ValueError("Session not found")
+    )
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        input_id="input_nonexistent",
+        run_id="infer_load_fail",
+    )
+
+    assert result["status"] == "error"
+    assert result["error_code"] == "INPUT_LOAD_FAILED"
+    assert "Session not found" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_passes_run_id_to_save_to_session(monkeypatch, mocker):
+    """When infer_configs creates a new session it should associate the run_id."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    captured_save_args: list[dict] = []
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    original_save = infer_configs_tool.save_to_session
+
+    def tracking_save(df, session_id=None, run_id=None):
+        captured_save_args.append({"session_id": session_id, "run_id": run_id})
+        return original_save(df, session_id=session_id, run_id=run_id)
+
+    mocker.patch.object(infer_configs_tool, "save_to_session", side_effect=tracking_save)
+
+    def fake_infer_configs(**kwargs):
+        return {"validation": "validation:\n  schema_validation:\n    run: true\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        input_id="input_test_run_id",
+        run_id="my_explicit_run",
+    )
+
+    assert result["status"] == "pass"
+    assert len(captured_save_args) >= 1
+    # The save_to_session call for the new session should include run_id
+    assert captured_save_args[0]["run_id"] == "my_explicit_run"
+
+
+@pytest.mark.asyncio
+async def test_auto_heal_returns_error_when_infer_configs_load_fails(monkeypatch, mocker):
+    """auto_heal should propagate infer_configs load errors, not crash with -32603."""
+
+    async def failing_infer_configs(**kwargs):
+        return {
+            "status": "error",
+            "module": "infer_configs",
+            "error": "Failed to load input: InputNotFoundError: not found",
+            "error_code": "INPUT_LOAD_FAILED",
+            "config_yaml": "",
+        }
+
+    monkeypatch.setattr(auto_heal_tool, "_toolkit_infer_configs", failing_infer_configs)
+    monkeypatch.setattr(auto_heal_tool, "append_to_run_history", lambda *a, **kw: None)
+    monkeypatch.setattr(auto_heal_tool, "get_session_metadata", lambda sid: {"row_count": 0})
+
+    result = await auto_heal_tool._toolkit_auto_heal(
+        input_id="input_nonexistent",
+        run_id="auto_heal_load_fail",
+    )
+
+    assert result["status"] == "error"
+    assert result["error_code"] == "INPUT_LOAD_FAILED"
