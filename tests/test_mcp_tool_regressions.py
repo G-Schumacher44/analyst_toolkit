@@ -1619,3 +1619,68 @@ async def test_final_audit_accepts_certification_rules_shorthand(mocker, monkeyp
     # Should not have rule_contract_missing violation
     assert "rule_contract_missing" not in result.get("violations_found", [])
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_strips_stale_inferred_paths(mocker, monkeypatch):
+    """Inferred config with stale raw_data_path/input_path should not crash final_audit."""
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    session_id = StateStore.save(df, run_id="fa_stale_path")
+    # Simulate infer_configs output that embeds a temp file path (now deleted)
+    StateStore.save_config(
+        session_id,
+        "final_audit",
+        (
+            "final_audit:\n"
+            "  raw_data_path: /tmp/does_not_exist.csv\n"
+            "  input_path: /tmp/also_gone.csv\n"
+            "  input_df_path: exports/joblib/{run_id}/gone.joblib\n"
+            "  certification:\n"
+            "    schema_validation:\n"
+            "      rules:\n"
+            "        expected_columns:\n"
+            "          - id\n"
+            "          - value\n"
+        ),
+    )
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value=session_id)
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
+
+    # Should not crash with FileNotFoundError on the stale temp path
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id=session_id,
+        run_id="fa_stale_path",
+        config={},
+    )
+
+    assert result["status"] != "error"
+    # Stale paths should be stripped; effective config should not contain them
+    assert "raw_data_path" not in result["effective_config"]
+    assert "input_path" not in result["effective_config"]
+    # Certification rules should still be discovered
+    assert "rule_contract_missing" not in result.get("violations_found", [])
+    StateStore.clear()

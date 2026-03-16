@@ -119,6 +119,11 @@ async def _toolkit_final_audit(
                 else:
                     inferred_config.setdefault(key, value)
 
+    # Strip transient filesystem paths injected by infer_configs — these reference
+    # temp files that no longer exist by the time final_audit runs.
+    for stale_key in ("raw_data_path", "input_path", "input_df_path"):
+        inferred_config.pop(stale_key, None)
+
     config, runtime_meta = resolve_layered_config(
         inferred=inferred_config,
         provided=config,
