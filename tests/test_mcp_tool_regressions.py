@@ -988,8 +988,8 @@ async def test_normalization_reports_artifact_contract(mocker):
 
 
 @pytest.mark.asyncio
-async def test_normalization_pass_when_html_missing_but_export_present(mocker):
-    """When data export succeeds but HTML/XLSX are not generated, status should be pass."""
+async def test_normalization_disabled_html_when_no_changes(mocker):
+    """When normalization makes 0 changes, HTML/XLSX should be disabled, not missing."""
     df = pd.DataFrame({"name": ["Alice"]})
 
     mocker.patch.object(normalization_tool, "load_input", return_value=df)
@@ -1017,20 +1017,21 @@ async def test_normalization_pass_when_html_missing_but_export_present(mocker):
 
     result = await normalization_tool._toolkit_normalization(
         session_id="sess_norm",
-        run_id="norm_html_missing",
+        run_id="norm_no_changes",
         config={},
     )
 
-    # data_export is available via GCS URL so no required artifacts are missing
     assert result["status"] == "pass"
     assert result["missing_required_artifacts"] == []
-    assert result["artifact_matrix"]["html_report"]["expected"] is True
-    assert result["artifact_matrix"]["html_report"]["required"] is False
+    # With 0 changes, reports should be disabled, not missing
+    assert result["artifact_matrix"]["html_report"]["expected"] is False
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+    assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
 
 
 @pytest.mark.asyncio
-async def test_imputation_pass_when_html_missing_but_export_present(mocker):
-    """Imputation should not warn solely because HTML artifacts are missing."""
+async def test_imputation_disabled_html_when_no_nulls_filled(mocker):
+    """When imputation fills 0 nulls, HTML/XLSX should be disabled, not missing."""
     df = pd.DataFrame({"value": [1.0, 2.0]})
 
     mocker.patch.object(imputation_tool, "load_input", return_value=df)
@@ -1058,18 +1059,21 @@ async def test_imputation_pass_when_html_missing_but_export_present(mocker):
 
     result = await imputation_tool._toolkit_imputation(
         session_id="sess_imp",
-        run_id="imp_html_missing",
+        run_id="imp_no_nulls",
         config={},
     )
 
     assert result["status"] == "pass"
     assert result["missing_required_artifacts"] == []
-    assert result["artifact_matrix"]["html_report"]["required"] is False
+    # With 0 nulls filled, reports should be disabled, not missing
+    assert result["artifact_matrix"]["html_report"]["expected"] is False
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+    assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
 
 
 @pytest.mark.asyncio
-async def test_outliers_pass_when_html_missing_but_export_present(mocker):
-    """Outliers should not warn solely because HTML artifacts are missing."""
+async def test_outliers_disabled_html_when_no_outliers(mocker):
+    """When outlier detection finds 0 outliers, HTML/XLSX should be disabled, not missing."""
     df = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
 
     mocker.patch.object(outliers_tool, "load_input", return_value=df)
@@ -1097,13 +1101,16 @@ async def test_outliers_pass_when_html_missing_but_export_present(mocker):
 
     result = await outliers_tool._toolkit_outliers(
         session_id="sess_out",
-        run_id="out_html_missing",
+        run_id="out_no_outliers",
         config={},
     )
 
     assert result["status"] == "pass"
     assert result["missing_required_artifacts"] == []
-    assert result["artifact_matrix"]["html_report"]["required"] is False
+    # With 0 outliers, reports should be disabled, not missing
+    assert result["artifact_matrix"]["html_report"]["expected"] is False
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+    assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
 
 
 @pytest.mark.asyncio
@@ -1251,7 +1258,7 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
             "run_outlier_detection_pipeline",
             (
                 pd.DataFrame({"value": [1]}),
-                {"outlier_log": pd.DataFrame(columns=["column"])},
+                {"outlier_log": pd.DataFrame({"column": ["value"], "score": [3.5]})},
             ),
             "outlier_artifact_contract",
             "exports/reports/outliers/detection/outlier_artifact_contract_outlier_report.html",
@@ -1261,7 +1268,7 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
             imputation_tool,
             "_toolkit_imputation",
             "run_imputation_pipeline",
-            pd.DataFrame({"value": [1.0]}),
+            pd.DataFrame({"value": [1.0, 0.0]}),
             "imputation_artifact_contract",
             "exports/reports/imputation/imputation_artifact_contract_imputation_report.html",
             "Imputation dashboard",
@@ -1288,7 +1295,7 @@ async def test_other_modules_report_dashboard_artifact_contract(
     expected_path,
     expected_label,
 ):
-    df = pd.DataFrame({"value": [1]})
+    df = pd.DataFrame({"value": [1, None]})
     mocker.patch.object(tool_module, "load_input", return_value=df)
     mocker.patch.object(tool_module, "save_to_session", return_value="sess_dash")
     mocker.patch.object(tool_module, "save_output", return_value="gs://dummy/out.csv")

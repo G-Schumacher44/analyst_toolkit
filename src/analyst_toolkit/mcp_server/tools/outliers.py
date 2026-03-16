@@ -139,7 +139,11 @@ async def _toolkit_outliers(
     status_warnings.extend(export_delivery["warnings"])
 
     artifact_warnings: list = []
-    if should_export_html(config):
+    # Only expect report artifacts when outliers were actually detected
+    html_requested = should_export_html(config)
+    expect_reports = html_requested and outlier_count > 0
+
+    if expect_reports:
         # Path where the pipeline runner saves its report
         artifact_path = f"exports/reports/outliers/detection/{run_id}_outlier_report.html"
         artifact_delivery = deliver_artifact(
@@ -195,9 +199,9 @@ async def _toolkit_outliers(
             name: item["local_path"] for name, item in plot_delivery.items() if item["local_path"]
         },
         plot_urls=plot_urls,
-        expect_html=should_export_html(config),
-        expect_xlsx=should_export_html(config),
-        expect_plots=should_export_html(config),
+        expect_html=expect_reports,
+        expect_xlsx=expect_reports,
+        expect_plots=expect_reports,
         required_html=False,
         probe_local_paths=True,
     )
