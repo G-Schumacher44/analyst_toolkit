@@ -1684,3 +1684,79 @@ async def test_final_audit_strips_stale_inferred_paths(mocker, monkeypatch):
     # Certification rules should still be discovered
     assert "rule_contract_missing" not in result.get("violations_found", [])
     StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_final_audit_resolves_session_from_input_id(mocker, monkeypatch):
+    """final_audit should discover inferred configs via input_id's session_id."""
+    from analyst_toolkit.mcp_server.input.models import InputDescriptor
+
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    # Pre-populate session with inferred certification config
+    session_id = StateStore.save(df, run_id="fa_input_id_run")
+    StateStore.save_config(
+        session_id,
+        "final_audit",
+        (
+            "final_audit:\n"
+            "  certification:\n"
+            "    schema_validation:\n"
+            "      rules:\n"
+            "        expected_columns:\n"
+            "          - id\n"
+            "          - value\n"
+        ),
+    )
+
+    # Mock input descriptor that points back to the session
+    descriptor = InputDescriptor(
+        input_id="input_test_resolve",
+        source_type="server_path",
+        original_reference="/tmp/test.csv",
+        resolved_reference="/tmp/test.csv",
+        display_name="test.csv",
+        media_type="text/csv",
+        session_id=session_id,
+        run_id="fa_input_id_run",
+    )
+    mocker.patch.object(final_audit_tool, "get_input_descriptor", return_value=descriptor)
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value=session_id)
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", False)
+
+    # Call with input_id only — no session_id provided
+    result = await final_audit_tool._toolkit_final_audit(
+        input_id="input_test_resolve",
+        run_id="fa_input_id_run",
+        config={},
+    )
+
+    # Should discover cert rules from the input_id's linked session
+    assert "rule_contract_missing" not in result.get("violations_found", [])
+    cert_cfg = result["effective_config"].get("certification", {})
+    schema_cfg = cert_cfg.get("schema_validation", {})
+    rules = schema_cfg.get("rules", {})
+    assert rules.get("expected_columns") == ["id", "value"]
+    StateStore.clear()
