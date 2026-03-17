@@ -1,3 +1,4 @@
+import base64
 import sys
 import types
 from pathlib import Path
@@ -14,7 +15,9 @@ import analyst_toolkit.mcp_server.tools.imputation as imputation_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
 import analyst_toolkit.mcp_server.tools.outliers as outliers_tool
+import analyst_toolkit.mcp_server.tools.read_artifact as read_artifact_tool
 import analyst_toolkit.mcp_server.tools.session as session_tool
+import analyst_toolkit.mcp_server.tools.upload_input as upload_input_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -2158,3 +2161,143 @@ async def test_manage_session_unknown_action():
     result = await session_tool._toolkit_manage_session(action="delete")
     assert result["status"] == "error"
     assert result["error_code"] == "UNKNOWN_ACTION"
+
+
+# ── upload_input tests ──
+
+
+@pytest.mark.asyncio
+async def test_upload_input_accepts_base64_csv(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    StateStore.clear()
+
+    csv_content = b"species,bill_length_mm\nAdelie,39.1\nGentoo,46.5\n"
+    encoded = base64.b64encode(csv_content).decode("ascii")
+
+    result = await upload_input_tool._toolkit_upload_input(
+        filename="penguins.csv",
+        content_base64=encoded,
+        load_into_session=True,
+    )
+    assert result["status"] == "pass"
+    assert result["module"] == "upload_input"
+    assert result["input"]["source_type"] == "upload"
+    assert result["session_id"].startswith("sess_")
+    assert result["summary"]["row_count"] == 2
+    assert result["summary"]["column_count"] == 2
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_upload_input_rejects_empty_base64():
+    result = await upload_input_tool._toolkit_upload_input(
+        filename="data.csv",
+        content_base64="",
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "INPUT_EMPTY_UPLOAD"
+
+
+@pytest.mark.asyncio
+async def test_upload_input_rejects_invalid_base64():
+    result = await upload_input_tool._toolkit_upload_input(
+        filename="data.csv",
+        content_base64="not!!!valid!!!base64",
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "INPUT_INVALID_BASE64"
+
+
+# ── read_artifact tests ──
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_returns_text_html(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "exports" / "reports" / "diagnostics"
+    artifact_dir.mkdir(parents=True)
+    artifact = artifact_dir / "run1_diagnostics_report.html"
+    artifact.write_text("<html><body>Dashboard</body></html>", encoding="utf-8")
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(artifact),
+    )
+    assert result["status"] == "pass"
+    assert result["encoding"] == "text"
+    assert "<html>" in result["content"]
+    assert result["filename"] == "run1_diagnostics_report.html"
+    assert result["media_type"] == "text/html"
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_returns_base64_for_binary(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "exports" / "plots"
+    artifact_dir.mkdir(parents=True)
+    artifact = artifact_dir / "chart.png"
+    raw_bytes = b"\x89PNG\r\n\x1a\nfake_png_data"
+    artifact.write_bytes(raw_bytes)
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(artifact),
+    )
+    assert result["status"] == "pass"
+    assert result["encoding"] == "base64"
+    decoded = base64.b64decode(result["content_base64"])
+    assert decoded == raw_bytes
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_rejects_traversal():
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path="../../../etc/passwd",
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "ARTIFACT_PATH_DENIED"
+    assert "traversal" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_rejects_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(tmp_path / "exports" / "reports" / "nonexistent.html"),
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "ARTIFACT_PATH_DENIED"
+    assert "not found" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_http_mode_rejects_cwd_path(tmp_path, monkeypatch):
+    """In HTTP mode (non-stdio), only _ARTIFACT_ROOT is allowed — not CWD."""
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+    monkeypatch.delenv("ANALYST_MCP_STDIO", raising=False)
+
+    # Create a file under CWD but outside artifact root
+    secret = tmp_path / "src" / "secret.py"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("SECRET_KEY = 'oops'")
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(secret),
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "ARTIFACT_PATH_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_stdio_mode_allows_cwd_path(tmp_path, monkeypatch):
+    """In stdio mode, CWD is an allowed root (client is local)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+    monkeypatch.setenv("ANALYST_MCP_STDIO", "true")
+
+    report = tmp_path / "my_report.html"
+    report.write_text("<html>local</html>")
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(report),
+    )
+    assert result["status"] == "pass"
+    assert result["encoding"] == "text"

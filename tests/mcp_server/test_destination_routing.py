@@ -24,7 +24,8 @@ def test_deliver_artifact_mirrors_to_local_root(tmp_path, monkeypatch):
     routed = Path(delivery["local_path"])
     assert routed.exists()
     assert routed.read_text(encoding="utf-8") == "<html>diag</html>"
-    assert routed == tmp_path / "routed" / "exports" / "reports" / "diag.html"
+    # _local_relative_path strips the "exports" prefix to avoid doubled paths
+    assert routed == tmp_path / "routed" / "reports" / "diag.html"
     assert delivery["reference"] == str(routed)
     assert delivery["destinations"]["local"]["status"] == "available"
 
@@ -154,3 +155,47 @@ def test_deliver_artifact_uploads_to_gcs_when_configured(tmp_path, monkeypatch):
     assert delivery["url"] == "https://storage.googleapis.com/bucket/diag.html"
     assert delivery["reference"] == "https://storage.googleapis.com/bucket/diag.html"
     assert delivery["destinations"]["gcs"]["status"] == "available"
+
+
+def test_local_relative_path_no_doubled_exports():
+    """Regression: _local_relative_path must not produce exports/exports/... paths."""
+    from analyst_toolkit.mcp_server.destination_routing import _local_relative_path
+
+    # Simulate an absolute path containing "exports" that is outside CWD
+    fake_abs = Path("/app/exports/reports/auto_heal/run1_report.html")
+    result = _local_relative_path(str(fake_abs))
+    # Should NOT start with "exports" — that prefix is stripped
+    assert result.parts[0] != "exports", f"Doubled prefix: {result}"
+    assert result == Path("reports/auto_heal/run1_report.html")
+
+
+def test_local_relative_path_preserves_relative_input():
+    """Relative paths should pass through unchanged."""
+    from analyst_toolkit.mcp_server.destination_routing import _local_relative_path
+
+    result = _local_relative_path("reports/diag.html")
+    assert result == Path("reports/diag.html")
+
+
+def test_deliver_artifact_no_doubled_exports_path(tmp_path, monkeypatch):
+    """End-to-end: routing to an 'exports' local root must not double the prefix."""
+    source = tmp_path / "exports" / "reports" / "run1_report.html"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("<html>report</html>", encoding="utf-8")
+    monkeypatch.setenv("ANALYST_MCP_LOCAL_OUTPUT_BASE", str(tmp_path))
+
+    delivery = deliver_artifact(
+        str(source),
+        run_id="run1",
+        module="auto_heal",
+        config={"local_output_root": "exports"},
+        session_id=None,
+        resolve_path_root=lambda run_id, session_id: f"paths/{run_id}",
+        logger=logging.getLogger("test"),
+    )
+
+    routed = Path(delivery["local_path"])
+    assert routed.exists()
+    # The routed path should be under exports/reports, not exports/exports/reports
+    assert "exports/exports" not in str(routed)
+    assert routed == tmp_path / "exports" / "reports" / "run1_report.html"

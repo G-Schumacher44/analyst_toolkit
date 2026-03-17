@@ -62,7 +62,11 @@ def _local_relative_path(local_path: str) -> Path:
     except ValueError:
         if "exports" in resolved.parts:
             exports_index = resolved.parts.index("exports")
-            return Path(*resolved.parts[exports_index:])
+            # Return path *after* "exports" to avoid doubled prefix when the
+            # local_output_root already resolves to an exports directory.
+            after_exports = resolved.parts[exports_index + 1 :]
+            if after_exports:
+                return Path(*after_exports)
     return Path(resolved.name)
 
 

@@ -4,6 +4,8 @@ import pandas as pd
 import pytest
 
 from analyst_toolkit.mcp_server.input import registry as input_registry
+from analyst_toolkit.mcp_server.input.errors import InputPathDeniedError
+from analyst_toolkit.mcp_server.input.storage import validate_server_visible_path
 from analyst_toolkit.mcp_server.state import StateStore
 from analyst_toolkit.mcp_server.tools import diagnostics as diagnostics_tool
 
@@ -194,7 +196,8 @@ def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(
 
 def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch, clean_input_env):
     tmp_path = clean_input_env
-    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path / "allowed"))
+    allowed_dir = tmp_path / "allowed"
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(allowed_dir))
 
     source = tmp_path / "dirty_penguins.csv"
     _write_sample_csv(source)
@@ -204,7 +207,10 @@ def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch,
         json={"uri": str(source), "load_into_session": True},
     )
     assert response.status_code == 400
-    assert "not visible to the MCP runtime" in response.json()["detail"]["error"]
+    error_msg = response.json()["detail"]["error"]
+    assert "not visible to the MCP runtime" in error_msg
+    # By default, allowed roots are NOT disclosed in the client-facing error
+    assert str(allowed_dir) not in error_msg
 
 
 def test_inputs_register_rejects_unsupported_local_format(client, clean_input_env):
@@ -332,3 +338,34 @@ def test_register_input_tool_and_diagnostics_input_id_flow(client, mocker, clean
     assert diagnostics_result["status"] in {"pass", "warn"}
     assert diagnostics_result["module"] == "diagnostics"
     assert diagnostics_result["summary"]["row_count"] == 2
+
+
+def test_validate_server_visible_path_redacts_roots_by_default(monkeypatch, tmp_path):
+    allowed = tmp_path / "my_inputs"
+    allowed.mkdir()
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(allowed))
+    monkeypatch.delenv("ANALYST_MCP_DISCLOSE_INPUT_ROOTS", raising=False)
+
+    with pytest.raises(InputPathDeniedError) as exc_info:
+        validate_server_visible_path("/some/other/path/data.csv")
+
+    msg = str(exc_info.value)
+    assert "not visible to the MCP runtime" in msg
+    assert "ANALYST_MCP_ALLOWED_INPUT_ROOTS" in msg
+    # Roots must NOT be disclosed in the client error by default
+    assert str(allowed) not in msg
+    assert "Allowed input roots" not in msg
+
+
+def test_validate_server_visible_path_discloses_roots_when_opted_in(monkeypatch, tmp_path):
+    allowed = tmp_path / "my_inputs"
+    allowed.mkdir()
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(allowed))
+    monkeypatch.setenv("ANALYST_MCP_DISCLOSE_INPUT_ROOTS", "1")
+
+    with pytest.raises(InputPathDeniedError) as exc_info:
+        validate_server_visible_path("/some/other/path/data.csv")
+
+    msg = str(exc_info.value)
+    assert "Allowed input roots" in msg
+    assert str(allowed) in msg

@@ -110,6 +110,14 @@ export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8
 # Comma-separated list of allowed filesystem roots for input resolution.
 # export ANALYST_MCP_ALLOWED_INPUT_ROOTS=
 
+# Opt-in to disclose allowed input roots in INPUT_PATH_DENIED client errors.
+# Default false redacts paths; server-side logs always include them.
+# export ANALYST_MCP_DISCLOSE_INPUT_ROOTS=false
+
+# --- MCP Artifact Reading ---
+# Maximum artifact size (bytes) readable through the read_artifact MCP tool.
+# export ANALYST_MCP_MAX_ARTIFACT_READ_BYTES=10485760
+
 # --- MCP Job State ---
 # Path to the job state persistence file for async auto_heal jobs.
 # export ANALYST_MCP_JOB_STATE_PATH=

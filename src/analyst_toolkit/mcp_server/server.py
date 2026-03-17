@@ -510,8 +510,12 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     normalization,
     outliers,
     preflight_config,
+    read_artifact,
     session,
     validation,
+)
+from analyst_toolkit.mcp_server.tools import (
+    upload_input as upload_input_tool,
 )
 
 # --- Entry point and transport selection ---
