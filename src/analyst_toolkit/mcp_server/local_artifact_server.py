@@ -233,7 +233,10 @@ def ensure_local_artifact_server() -> dict[str, Any]:
             requested_port = _artifact_server_port()
             server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
             server.artifact_root = root
-            server.base_url = f"http://{host}:{server.server_address[1]}"
+            # Advertise 127.0.0.1 in URLs even when bound to 0.0.0.0 —
+            # 0.0.0.0 is not a valid browsable address.
+            advertised_host = "127.0.0.1" if host == "0.0.0.0" else host
+            server.base_url = f"http://{advertised_host}:{server.server_address[1]}"
             thread = threading.Thread(
                 target=server.serve_forever,
                 name="analyst-toolkit-artifact-server",
