@@ -604,6 +604,11 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
             "Tool": "get_run_history",
             "Why": "Read the prescription and healing ledger behind dashboard surfaces.",
         },
+        {
+            "Action": "Fork Session",
+            "Tool": "manage_session",
+            "Why": "Clone the current session into a new run context without re-downloading data or re-running infer_configs.",
+        },
     ]
     launch_sequences = [
         {
@@ -628,6 +633,14 @@ def _build_cockpit_dashboard_report(limit: int) -> dict[str, Any]:
                 "Start from infer_configs so the data dictionary inherits inferred types, rules, and high-signal column hints.",
                 "Use the data_dictionary request template to keep the prelaunch contract consistent.",
                 "Treat the prelaunch report as a cockpit-linked surface, not a disconnected export.",
+            ],
+        },
+        {
+            "title": "Second Pass With New Run Context",
+            "steps": [
+                "Use manage_session(action='fork') to clone the current session and its inferred configs into a fresh run_id.",
+                "Adjust configs on the forked session as needed — the original session stays untouched.",
+                "Run modules on the forked session and compare results via the pipeline dashboard.",
             ],
         },
     ]
@@ -910,6 +923,11 @@ async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
                     "ensure_artifact_server",
                     "Start the local artifact server so cockpit and module dashboard links resolve as local URLs.",
                     {},
+                ),
+                next_action(
+                    "manage_session",
+                    "List or fork sessions to start a new run context from existing data.",
+                    {"action": "list"},
                 ),
             ],
         )

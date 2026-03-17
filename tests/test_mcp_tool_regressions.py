@@ -14,6 +14,7 @@ import analyst_toolkit.mcp_server.tools.imputation as imputation_tool
 import analyst_toolkit.mcp_server.tools.infer_configs as infer_configs_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
 import analyst_toolkit.mcp_server.tools.outliers as outliers_tool
+import analyst_toolkit.mcp_server.tools.session as session_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -2004,3 +2005,156 @@ async def test_final_audit_rejects_path_traversal(mocker, monkeypatch, tmp_path)
         "Traversal path was not removed from pipeline config"
     )
     StateStore.clear()
+
+
+# ── manage_session tool tests ──
+
+
+@pytest.mark.asyncio
+async def test_manage_session_list():
+    StateStore.clear()
+    df = pd.DataFrame({"a": [1, 2]})
+    sid1 = StateStore.save(df, run_id="run_1")
+    sid2 = StateStore.save(df, run_id="run_2")
+
+    result = await session_tool._toolkit_manage_session(action="list")
+    assert result["status"] == "pass"
+    assert result["session_count"] == 2
+    session_ids = {s["session_id"] for s in result["sessions"]}
+    assert sid1 in session_ids
+    assert sid2 in session_ids
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_inspect():
+    StateStore.clear()
+    df = pd.DataFrame({"x": [1, 2, 3]})
+    sid = StateStore.save(df, run_id="inspect_run")
+    StateStore.save_config(sid, "validation", "validation:\n  run: true\n")
+
+    result = await session_tool._toolkit_manage_session(action="inspect", session_id=sid)
+    assert result["status"] == "pass"
+    assert result["session"]["session_id"] == sid
+    assert result["session"]["run_id"] == "inspect_run"
+    assert result["session"]["row_count"] == 3
+    assert "validation" in result["session"]["stored_configs"]
+    assert "next_actions" in result
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_inspect_missing():
+    StateStore.clear()
+    result = await session_tool._toolkit_manage_session(
+        action="inspect", session_id="sess_nonexistent"
+    )
+    assert result["status"] == "error"
+    assert result["error_code"] == "SESSION_NOT_FOUND"
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_fork():
+    StateStore.clear()
+    df = pd.DataFrame({"col": [10, 20, 30]})
+    sid = StateStore.save(df, run_id="original_run")
+    StateStore.save_config(sid, "diagnostics", "diagnostics:\n  run: true\n")
+
+    result = await session_tool._toolkit_manage_session(
+        action="fork", session_id=sid, run_id="forked_run"
+    )
+    assert result["status"] == "pass"
+    assert result["source_session_id"] == sid
+    new_sid = result["new_session_id"]
+    assert new_sid != sid
+    assert result["run_id"] == "forked_run"
+    assert result["configs_copied"] is True
+
+    # Verify the forked session has the data and configs
+    forked_df = StateStore.get(new_sid)
+    assert forked_df is not None
+    assert len(forked_df) == 3
+    assert StateStore.get_run_id(new_sid) == "forked_run"
+    assert StateStore.get_config(new_sid, "diagnostics") is not None
+
+    # Verify source session is unchanged
+    assert StateStore.get_run_id(sid) == "original_run"
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_fork_without_configs():
+    StateStore.clear()
+    df = pd.DataFrame({"v": [1]})
+    sid = StateStore.save(df, run_id="r1")
+    StateStore.save_config(sid, "validation", "yaml")
+
+    result = await session_tool._toolkit_manage_session(
+        action="fork", session_id=sid, run_id="r2", copy_configs=False
+    )
+    assert result["status"] == "pass"
+    new_sid = result["new_session_id"]
+    assert StateStore.get_configs(new_sid) == {}
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_fork_generates_run_id():
+    StateStore.clear()
+    df = pd.DataFrame({"v": [1]})
+    sid = StateStore.save(df)
+
+    result1 = await session_tool._toolkit_manage_session(action="fork", session_id=sid)
+    result2 = await session_tool._toolkit_manage_session(action="fork", session_id=sid)
+    assert result1["status"] == "pass"
+    assert result2["status"] == "pass"
+    assert result1["run_id"]  # auto-generated, non-empty
+    assert result2["run_id"]
+    assert result1["run_id"] != result2["run_id"]  # unique even within same second
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_fork_missing_source():
+    StateStore.clear()
+    result = await session_tool._toolkit_manage_session(
+        action="fork", session_id="sess_gone", run_id="new"
+    )
+    assert result["status"] == "error"
+    assert result["error_code"] == "SESSION_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_manage_session_rebind():
+    StateStore.clear()
+    df = pd.DataFrame({"v": [1]})
+    sid = StateStore.save(df, run_id="old_run")
+
+    result = await session_tool._toolkit_manage_session(
+        action="rebind", session_id=sid, run_id="new_run"
+    )
+    assert result["status"] == "pass"
+    assert result["previous_run_id"] == "old_run"
+    assert result["new_run_id"] == "new_run"
+    assert StateStore.get_run_id(sid) == "new_run"
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_rebind_missing_run_id():
+    StateStore.clear()
+    df = pd.DataFrame({"v": [1]})
+    sid = StateStore.save(df, run_id="r1")
+
+    result = await session_tool._toolkit_manage_session(action="rebind", session_id=sid)
+    assert result["status"] == "error"
+    assert result["error_code"] == "MISSING_RUN_ID"
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_unknown_action():
+    result = await session_tool._toolkit_manage_session(action="delete")
+    assert result["status"] == "error"
+    assert result["error_code"] == "UNKNOWN_ACTION"

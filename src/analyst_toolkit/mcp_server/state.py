@@ -104,9 +104,65 @@ class StateStore:
             return dict(cls._session_configs.get(session_id, {}))
 
     @classmethod
+    def fork(
+        cls,
+        source_session_id: str,
+        *,
+        run_id: Optional[str] = None,
+        copy_configs: bool = True,
+    ) -> Optional[str]:
+        """Clone a session's DataFrame (and optionally configs) into a new session.
+
+        Returns the new session_id, or None if the source session does not exist.
+        """
+        with cls._lock:
+            cls._cleanup_unsafe()
+            df = cls._sessions.get(source_session_id)
+            if df is None:
+                return None
+
+            new_session_id = f"sess_{uuid.uuid4().hex[:8]}"
+            now_ts = pd.Timestamp.now()
+            cls._sessions[new_session_id] = df.copy()
+            cls._metadata[new_session_id] = {
+                "row_count": len(df),
+                "col_count": len(df.columns),
+                "updated_at": now_ts.isoformat(),
+            }
+            cls._last_accessed[new_session_id] = time.time()
+            cls._session_start_times[new_session_id] = now_ts.strftime("%Y%m%d_%H%M%S")
+
+            if run_id:
+                cls._session_run_ids[new_session_id] = run_id
+
+            if copy_configs and source_session_id in cls._session_configs:
+                cls._session_configs[new_session_id] = dict(cls._session_configs[source_session_id])
+
+        logger.info(
+            "Forked session %s → %s (run_id: %s, copy_configs: %s)",
+            source_session_id,
+            new_session_id,
+            run_id,
+            copy_configs,
+        )
+        return new_session_id
+
+    @classmethod
+    def rebind_run_id(cls, session_id: str, run_id: str) -> bool:
+        """Rebind a session to a new run_id. Returns False if session does not exist."""
+        with cls._lock:
+            cls._cleanup_unsafe()
+            if session_id not in cls._sessions:
+                return False
+            cls._session_run_ids[session_id] = run_id
+        logger.info("Rebound session %s to run_id %s", session_id, run_id)
+        return True
+
+    @classmethod
     def list_sessions(cls) -> Dict[str, dict]:
         """List available sessions and their metadata."""
         with cls._lock:
+            cls._cleanup_unsafe()
             return {k: cls._metadata.get(k, {}) for k in cls._sessions.keys()}
 
     @classmethod

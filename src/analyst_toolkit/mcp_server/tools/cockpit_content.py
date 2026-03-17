@@ -34,6 +34,13 @@ def user_quickstart_payload() -> dict:
 - If the user only has a local file on their machine, use the `/inputs/upload` ingest path (or a client helper built on top of it) to obtain an `input_id` before running analysis tools.
 - Use `get_input_descriptor` to inspect the resolved canonical input reference when needed.
 
+## Session Management
+- Use `manage_session` to control session lifecycle without re-downloading data or re-running `infer_configs`.
+- `manage_session(action="list")` — see all active sessions.
+- `manage_session(action="inspect", session_id="...")` — view session details and stored configs.
+- `manage_session(action="fork", session_id="...", run_id="new_run")` — clone a session into a new run context. The forked session gets its own run_id and optionally inherits inferred configs.
+- `manage_session(action="rebind", session_id="...", run_id="new_run")` — change the run_id bound to an existing session.
+
 ## Recommended Order (Manual Pipeline)
 1. `register_input` or upload to `/inputs/upload`
 2. `diagnostics`
@@ -42,6 +49,7 @@ def user_quickstart_payload() -> dict:
 5. `normalization` -> `duplicates` -> `outliers` -> `imputation` -> `validation`
 6. `final_audit`
 7. `get_run_history` + `get_data_health_report`
+8. (Optional) `manage_session(action="fork")` to start a second pass with a new run_id
 
 ## Dashboard Artifacts
 - In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
@@ -191,6 +199,14 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                     "runtime": {"artifacts": {"export_html": True}},
                 },
             },
+            {
+                "tool": "manage_session",
+                "arguments": {
+                    "action": "fork",
+                    "session_id": "<session_id_from_previous_run>",
+                    "run_id": "second_pass_001",
+                },
+            },
         ],
     }
     return {
@@ -248,6 +264,11 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "tool": "data_dictionary",
                 "arguments_schema_hint": {"required": []},
             },
+            {
+                "label": "Manage sessions",
+                "tool": "manage_session",
+                "arguments_schema_hint": {"required": ["action"]},
+            },
         ],
     }
 
@@ -265,6 +286,7 @@ def agent_playbook_payload() -> dict:
             "Stable run_id used across calls",
             "Optional output bucket/prefix overrides",
             "Optional runtime overlay for cross-cutting execution control",
+            "Use manage_session(action='fork') to start a new run context from an existing session without re-downloading data or re-running infer_configs",
         ],
         "ordered_steps": (
             [

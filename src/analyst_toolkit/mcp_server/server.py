@@ -510,6 +510,7 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     normalization,
     outliers,
     preflight_config,
+    session,
     validation,
 )
 

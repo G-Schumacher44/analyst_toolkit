@@ -123,8 +123,19 @@ _WORKFLOW_TOOL_METADATA: dict[str, dict[str, Any]] = {
         "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
     },
     "data_dictionary": {
-        "description": "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts.",
+        "description": (
+            "Artifact-first prelaunch dictionary flow seeded by infer_configs "
+            "and surfaced through cockpit/dashboard artifacts."
+        ),
         "outputs": ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"],
+    },
+    "manage_session": {
+        "description": (
+            "Session lifecycle management: list, inspect, fork, or rebind. "
+            "Use fork to start a new run context from an existing session "
+            "without re-downloading data or re-running infer_configs."
+        ),
+        "outputs": ["session_id", "new_session_id?", "run_id", "sessions?"],
     },
 }
 
