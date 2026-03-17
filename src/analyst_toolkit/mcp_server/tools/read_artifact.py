@@ -149,7 +149,7 @@ async def _toolkit_read_artifact(
                 "media_type": media_type,
                 "encoding": "text",
                 "size_bytes": file_size,
-                "content": content,
+                "artifact_content": content,
                 "trace_id": trace_id,
             }
         else:

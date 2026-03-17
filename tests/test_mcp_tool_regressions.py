@@ -2224,7 +2224,7 @@ async def test_read_artifact_returns_text_html(tmp_path, monkeypatch):
     )
     assert result["status"] == "pass"
     assert result["encoding"] == "text"
-    assert "<html>" in result["content"]
+    assert "<html>" in result["artifact_content"]
     assert result["filename"] == "run1_diagnostics_report.html"
     assert result["media_type"] == "text/html"
 

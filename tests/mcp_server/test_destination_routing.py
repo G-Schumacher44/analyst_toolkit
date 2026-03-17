@@ -170,11 +170,20 @@ def test_local_relative_path_no_doubled_exports():
 
 
 def test_local_relative_path_preserves_relative_input():
-    """Relative paths should pass through unchanged."""
+    """Relative paths without exports prefix should pass through unchanged."""
     from analyst_toolkit.mcp_server.destination_routing import _local_relative_path
 
     result = _local_relative_path("reports/diag.html")
     assert result == Path("reports/diag.html")
+
+
+def test_local_relative_path_strips_exports_from_relative():
+    """Relative paths starting with exports/ must strip the prefix to avoid doubling."""
+    from analyst_toolkit.mcp_server.destination_routing import _local_relative_path
+
+    result = _local_relative_path("exports/reports/diagnostics/run1_report.html")
+    assert result.parts[0] != "exports", f"Doubled prefix: {result}"
+    assert result == Path("reports/diagnostics/run1_report.html")
 
 
 def test_deliver_artifact_no_doubled_exports_path(tmp_path, monkeypatch):
