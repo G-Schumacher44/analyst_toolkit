@@ -2143,9 +2143,7 @@ async def test_manage_session_rebind_missing_run_id():
     df = pd.DataFrame({"v": [1]})
     sid = StateStore.save(df, run_id="r1")
 
-    result = await session_tool._toolkit_manage_session(
-        action="rebind", session_id=sid
-    )
+    result = await session_tool._toolkit_manage_session(action="rebind", session_id=sid)
     assert result["status"] == "error"
     assert result["error_code"] == "MISSING_RUN_ID"
     StateStore.clear()

@@ -135,9 +135,7 @@ class StateStore:
                 cls._session_run_ids[new_session_id] = run_id
 
             if copy_configs and source_session_id in cls._session_configs:
-                cls._session_configs[new_session_id] = dict(
-                    cls._session_configs[source_session_id]
-                )
+                cls._session_configs[new_session_id] = dict(cls._session_configs[source_session_id])
 
         logger.info(
             "Forked session %s → %s (run_id: %s, copy_configs: %s)",
