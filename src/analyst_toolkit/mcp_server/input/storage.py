@@ -91,7 +91,11 @@ def validate_server_visible_path(path_text: str) -> Path:
             return candidate
         except ValueError:
             continue
+    roots_display = [str(r) for r in roots]
     raise InputPathDeniedError(
         "Local path is not visible to the MCP runtime. "
-        "Upload the file, mount the directory, or use gs://."
+        f"Allowed input roots: {roots_display}. "
+        "Set ANALYST_MCP_ALLOWED_INPUT_ROOTS to add "
+        "directories, or upload the file via "
+        "/inputs/upload, or use a gs:// URI."
     )
