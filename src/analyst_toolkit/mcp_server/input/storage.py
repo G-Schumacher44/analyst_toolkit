@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import tempfile
@@ -13,6 +14,8 @@ from analyst_toolkit.mcp_server.input.errors import (
     InputPathNotFoundError,
     InputPayloadTooLargeError,
 )
+
+logger = logging.getLogger(__name__)
 
 _MAX_UPLOAD_BYTES = int(os.environ.get("ANALYST_MCP_MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
 
@@ -92,9 +95,23 @@ def validate_server_visible_path(path_text: str) -> Path:
         except ValueError:
             continue
     roots_display = [str(r) for r in roots]
+    logger.warning(
+        "INPUT_PATH_DENIED for %s — allowed roots: %s",
+        path_text,
+        roots_display,
+    )
+    disclose = os.environ.get("ANALYST_MCP_DISCLOSE_INPUT_ROOTS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if disclose:
+        hint = f"Allowed input roots: {roots_display}. "
+    else:
+        hint = ""
     raise InputPathDeniedError(
         "Local path is not visible to the MCP runtime. "
-        f"Allowed input roots: {roots_display}. "
+        f"{hint}"
         "Set ANALYST_MCP_ALLOWED_INPUT_ROOTS to add "
         "directories, or upload the file via "
         "/inputs/upload, or use a gs:// URI."
