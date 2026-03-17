@@ -39,13 +39,27 @@ async def _toolkit_register_input(
     except InputError as exc:
         trace_id = new_trace_id()
         logger.exception("Input registration failed (trace_id=%s, code=%s)", trace_id, exc.code)
-        return {
+        result: dict = {
             "status": "error",
             "module": "register_input",
             "code": exc.code,
             "message": exc.message,
             "trace_id": trace_id,
         }
+        if exc.code == "INPUT_PATH_DENIED":
+            result["next_actions"] = [
+                {
+                    "tool": "upload_input",
+                    "why": (
+                        "The path is not server-visible. Use upload_input to "
+                        "base64-encode the file and push it through MCP."
+                    ),
+                    "arguments_hint": {
+                        "filename": uri.rsplit("/", 1)[-1] if uri else "",
+                    },
+                },
+            ]
+        return result
     except Exception:
         trace_id = new_trace_id()
         logger.exception("Failed to register input (trace_id=%s)", trace_id)

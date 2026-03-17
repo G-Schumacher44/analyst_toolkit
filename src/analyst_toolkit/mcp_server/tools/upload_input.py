@@ -52,12 +52,29 @@ async def _toolkit_upload_input(
     try:
         payload = base64.b64decode(content_base64, validate=True)
     except Exception:
+        received_len = len(content_base64)
+        ends_cleanly = content_base64.rstrip().endswith("=") or (received_len % 4 == 0)
+        hint = f" Received {received_len} chars" + (
+            " which appears truncated (does not end with '=' padding)."
+            " The MCP client or transport may have a message size limit."
+            " Try splitting the file into smaller chunks or use the HTTP"
+            " POST /inputs/upload endpoint instead."
+            if not ends_cleanly
+            else "."
+        )
         return {
             "status": "error",
             "module": "upload_input",
             "code": "INPUT_INVALID_BASE64",
-            "message": "content_base64 is not valid base64.",
+            "message": f"content_base64 is not valid base64.{hint}",
             "trace_id": trace_id,
+            "next_actions": [
+                {
+                    "tool": "upload_input",
+                    "why": "Retry with valid, complete base64. Ensure the full file is encoded without truncation.",
+                    "arguments_hint": {"filename": filename},
+                },
+            ],
         }
 
     if not payload:
