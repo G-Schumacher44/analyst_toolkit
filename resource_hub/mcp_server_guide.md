@@ -91,7 +91,8 @@ curl http://localhost:8001/health | python3 -m json.tool
     "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
     "get_run_history", "get_data_health_report",
     "data_dictionary", "get_pipeline_dashboard", "get_cockpit_dashboard",
-    "ensure_artifact_server", "manage_session"
+    "ensure_artifact_server", "manage_session",
+    "upload_input", "read_artifact"
   ]
 }
 ```
@@ -189,6 +190,8 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `data_dictionary` | Column-level schema report as a standalone HTML artifact; preview surfaced in the cockpit dictionary tab |
 | `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs |
 | `manage_session` | Session lifecycle: list active sessions, inspect details, fork a session into a new run context, or rebind a session to a different run_id |
+| `upload_input` | Upload a local file as base64-encoded content through the MCP protocol — use when the file is not server-visible (e.g., server runs in a container) |
+| `read_artifact` | Read a container-local artifact and return its content through MCP — use when localhost artifact URLs are not reachable from the client |
 
 </details>
 

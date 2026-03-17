@@ -31,7 +31,8 @@ def user_quickstart_payload() -> dict:
 ## Input Ingest
 - Prefer a canonical `input_id` for user-provided datasets whenever possible.
 - If the dataset already lives at `gs://...` or a server-visible mounted path, call `register_input` first and carry the returned `input_id` or `session_id` forward.
-- If the user only has a local file on their machine, use the `/inputs/upload` ingest path (or a client helper built on top of it) to obtain an `input_id` before running analysis tools.
+- If the user has a local file that is NOT server-visible, use `upload_input` to push base64-encoded file content directly through MCP. The agent reads the file locally, base64-encodes it, and sends it. This works even when the server runs in a container.
+- The HTTP `/inputs/upload` endpoint is also available for non-MCP clients.
 - Use `get_input_descriptor` to inspect the resolved canonical input reference when needed.
 
 ## Session Management
@@ -42,7 +43,7 @@ def user_quickstart_payload() -> dict:
 - `manage_session(action="rebind", session_id="...", run_id="new_run")` — change the run_id bound to an existing session.
 
 ## Recommended Order (Manual Pipeline)
-1. `register_input` or upload to `/inputs/upload`
+1. `register_input` (gs:// or server path) or `upload_input` (local file via base64)
 2. `diagnostics`
 3. `infer_configs`
 4. Review/edit configs (normalization, duplicates, outliers, imputation, validation)
@@ -54,6 +55,7 @@ def user_quickstart_payload() -> dict:
 ## Dashboard Artifacts
 - In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
 - Use `ensure_artifact_server` before relying on localhost dashboard links.
+- If localhost dashboard URLs are not reachable (e.g., server runs in a container), use `read_artifact` with the `artifact_path` or `dashboard_path` returned by module tools to retrieve the HTML content directly through MCP.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
@@ -238,6 +240,16 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "arguments_schema_hint": {"required": ["uri"]},
             },
             {
+                "label": "Upload local file",
+                "tool": "upload_input",
+                "arguments_schema_hint": {"required": ["filename", "content_base64"]},
+            },
+            {
+                "label": "Read artifact",
+                "tool": "read_artifact",
+                "arguments_schema_hint": {"required": ["artifact_path"]},
+            },
+            {
                 "label": "Run diagnostics",
                 "tool": "diagnostics",
                 "arguments_schema_hint": {"required": ["input_id|gcs_path|session_id", "run_id"]},
@@ -282,7 +294,7 @@ def agent_playbook_payload() -> dict:
         "goal": "Audit, clean, and certify a dataset with controlled user-editable configs.",
         "prerequisites": [
             "Canonical input_id from upload/register flow (preferred) or existing session_id",
-            "If no input_id exists yet: a gs:// URI or server-visible path for register_input, or an upload client that can call /inputs/upload",
+            "If no input_id exists yet: a gs:// URI or server-visible path for register_input, or use upload_input to push base64-encoded file content through MCP",
             "Stable run_id used across calls",
             "Optional output bucket/prefix overrides",
             "Optional runtime overlay for cross-cutting execution control",
