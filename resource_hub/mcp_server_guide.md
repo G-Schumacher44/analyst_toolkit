@@ -91,7 +91,7 @@ curl http://localhost:8001/health | python3 -m json.tool
     "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
     "get_run_history", "get_data_health_report",
     "data_dictionary", "get_pipeline_dashboard", "get_cockpit_dashboard",
-    "ensure_artifact_server"
+    "ensure_artifact_server", "manage_session"
   ]
 }
 ```
@@ -188,6 +188,7 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `get_pipeline_dashboard` | Combined multi-module HTML dashboard for a specific `run_id`; linked from the cockpit hub |
 | `data_dictionary` | Column-level schema report as a standalone HTML artifact; preview surfaced in the cockpit dictionary tab |
 | `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs |
+| `manage_session` | Session lifecycle: list active sessions, inspect details, fork a session into a new run context, or rebind a session to a different run_id |
 
 </details>
 
@@ -225,6 +226,8 @@ A `run_id` ties all steps together in the Healing Ledger. Pass the same `run_id`
 If a tool call provides both `session_id` and `run_id`, the server enforces lifecycle consistency by default:
 - If the session already has a bound run id and it differs from the requested run id, the tool coerces to the session run id and emits a warning.
 - To allow explicit overrides, set `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1`.
+- To start a new run context without re-downloading data, use `manage_session(action="fork", session_id="...", run_id="new_run")`. This clones the session's DataFrame and inferred configs into a fresh session with its own run_id.
+- To change the run_id on an existing session in-place, use `manage_session(action="rebind", session_id="...", run_id="new_run")`.
 
 > **Config structure note:** `infer_configs` returns YAML strings. Parse each one with `yaml.safe_load` and pass the resulting dict directly to the relevant tool. Never flatten nested keys — for normalization, `standardize_text_columns`, `coerce_dtypes`, etc. must stay nested inside `rules:` or the pipeline will skip all transformations.
 >
