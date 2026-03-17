@@ -1,5 +1,6 @@
 """MCP tool: toolkit_manage_session — session lifecycle management."""
 
+import uuid
 from datetime import datetime, timezone
 
 from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
@@ -91,9 +92,10 @@ async def _toolkit_manage_session(
                 "error": "session_id is required for fork.",
                 "error_code": "MISSING_SESSION_ID",
             }
-        # Generate a fresh run_id if none provided
+        # Generate a fresh run_id if none provided (include uuid suffix to avoid collisions)
         if not run_id:
-            run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            run_id = f"{ts}_{uuid.uuid4().hex[:6]}"
         new_session_id = StateStore.fork(
             session_id,
             run_id=run_id,

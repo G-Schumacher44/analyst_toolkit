@@ -116,6 +116,7 @@ class StateStore:
         Returns the new session_id, or None if the source session does not exist.
         """
         with cls._lock:
+            cls._cleanup_unsafe()
             df = cls._sessions.get(source_session_id)
             if df is None:
                 return None
@@ -150,6 +151,7 @@ class StateStore:
     def rebind_run_id(cls, session_id: str, run_id: str) -> bool:
         """Rebind a session to a new run_id. Returns False if session does not exist."""
         with cls._lock:
+            cls._cleanup_unsafe()
             if session_id not in cls._sessions:
                 return False
             cls._session_run_ids[session_id] = run_id
@@ -160,6 +162,7 @@ class StateStore:
     def list_sessions(cls) -> Dict[str, dict]:
         """List available sessions and their metadata."""
         with cls._lock:
+            cls._cleanup_unsafe()
             return {k: cls._metadata.get(k, {}) for k in cls._sessions.keys()}
 
     @classmethod

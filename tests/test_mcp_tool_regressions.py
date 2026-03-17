@@ -2105,9 +2105,13 @@ async def test_manage_session_fork_generates_run_id():
     df = pd.DataFrame({"v": [1]})
     sid = StateStore.save(df)
 
-    result = await session_tool._toolkit_manage_session(action="fork", session_id=sid)
-    assert result["status"] == "pass"
-    assert result["run_id"]  # auto-generated, non-empty
+    result1 = await session_tool._toolkit_manage_session(action="fork", session_id=sid)
+    result2 = await session_tool._toolkit_manage_session(action="fork", session_id=sid)
+    assert result1["status"] == "pass"
+    assert result2["status"] == "pass"
+    assert result1["run_id"]  # auto-generated, non-empty
+    assert result2["run_id"]
+    assert result1["run_id"] != result2["run_id"]  # unique even within same second
     StateStore.clear()
 
 
