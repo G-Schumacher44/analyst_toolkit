@@ -30,9 +30,11 @@ def user_quickstart_payload() -> dict:
 
 ## Input Ingest
 - Prefer a canonical `input_id` for user-provided datasets whenever possible.
-- If the dataset already lives at `gs://...` or a server-visible mounted path, call `register_input` first and carry the returned `input_id` or `session_id` forward.
-- If the user has a local file that is NOT server-visible, use `upload_input` to push base64-encoded file content directly through MCP. The agent reads the file locally, base64-encodes it, and sends it. This works even when the server runs in a container.
-- The HTTP `/inputs/upload` endpoint is also available for non-MCP clients.
+- Decision tree for getting data in:
+  1. **GCS or server-visible path** → `register_input(uri="gs://..." or "/mnt/data/...")`. Zero byte transfer.
+  2. **Local file (agent has it, server doesn't)** → `upload_input(filename="data.csv", content_base64="...")`. Agent reads the file, base64-encodes it, sends through MCP. Works even when the server runs in a container.
+  3. **Non-MCP client with HTTP access** → `POST /inputs/upload` (multipart form-data to `localhost:8001`).
+- If `register_input` fails with `INPUT_PATH_DENIED`, the path is not visible to the server — switch to `upload_input`.
 - Use `get_input_descriptor` to inspect the resolved canonical input reference when needed.
 
 ## Session Management
@@ -54,8 +56,10 @@ def user_quickstart_payload() -> dict:
 
 ## Dashboard Artifacts
 - In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
-- Use `ensure_artifact_server` before relying on localhost dashboard links.
-- If localhost dashboard URLs are not reachable (e.g., server runs in a container), use `read_artifact` with the `artifact_path` or `dashboard_path` returned by module tools to retrieve the HTML content directly through MCP.
+- Decision tree for accessing artifacts:
+  1. Call `ensure_artifact_server` first to start the localhost artifact server.
+  2. Surface the `dashboard_url` (e.g. `http://127.0.0.1:8765/exports/...`) to the user — this is the preferred path.
+  3. If the user reports the URL is unreachable, fall back to `read_artifact(artifact_path=<dashboard_path from tool output>)` to retrieve the HTML content directly through MCP.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
@@ -69,6 +73,8 @@ def user_quickstart_payload() -> dict:
   - `runtime.run.input_path`
   - `runtime.artifacts.export_html`
   - `runtime.artifacts.plotting`
+  - `runtime.destinations.local.enabled` — mirror artifacts to a local directory
+  - `runtime.destinations.local.root` — relative path for local artifact output (e.g. `exports`)
   - `runtime.destinations.gcs.*`
 - Keep module `config` for business logic like normalization rules, validation rules, imputation strategies, and outlier detection settings.
 - Prefer `runtime` over editing every module config when the change is cross-cutting.
@@ -124,7 +130,8 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "outputs": ["input_id", "session_id?", "summary"],
                 "notes": [
                     "Use this when data already lives at gs:// or a server-visible path.",
-                    "If the user only has a local file, upload it through /inputs/upload first and reuse the returned input_id.",
+                    "If the user has a local file that is not server-visible, use upload_input instead.",
+                    "If this fails with INPUT_PATH_DENIED, switch to upload_input.",
                 ],
             },
             {
@@ -175,7 +182,12 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "arguments": {
                     "input_id": "<input_id_from_register_or_upload>",
                     "run_id": "run_001",
-                    "runtime": {"artifacts": {"export_html": True, "plotting": False}},
+                    "runtime": {
+                        "artifacts": {"export_html": True, "plotting": False},
+                        "destinations": {
+                            "local": {"enabled": True, "root": "exports"},
+                        },
+                    },
                 },
             },
             {
@@ -336,7 +348,8 @@ def agent_playbook_payload() -> dict:
                 "outputs": ["input_id", "session_id?", "summary"],
                 "notes": [
                     "Use this when data already lives at gs:// or a server-visible path.",
-                    "If the user only has a local file, upload it through /inputs/upload first and then switch to input_id.",
+                    "If the user has a local file that is not server-visible, use the upload_input MCP tool instead.",
+                    "If register_input fails with INPUT_PATH_DENIED, switch to upload_input.",
                 ],
                 "next": [offset + 2],
             },

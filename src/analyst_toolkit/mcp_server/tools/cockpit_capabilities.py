@@ -240,6 +240,16 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                 "user_editable": True,
             },
             {
+                "path": "runtime.destinations.local.enabled",
+                "description": "Mirror artifacts to a local output directory.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.destinations.local.root",
+                "description": "Relative path for local artifact output (e.g. 'exports'). Must be within the configured local output base.",
+                "user_editable": True,
+            },
+            {
                 "path": "runtime.destinations.gcs.*",
                 "description": "Set shared GCS upload destination overrides for runtime-aware tools.",
                 "user_editable": True,
@@ -298,6 +308,8 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                     "runtime.run.input_path",
                     "runtime.artifacts.export_html",
                     "runtime.artifacts.plotting",
+                    "runtime.destinations.local.enabled",
+                    "runtime.destinations.local.root",
                     "runtime.destinations.gcs.enabled",
                     "runtime.destinations.gcs.bucket_uri",
                     "runtime.destinations.gcs.prefix",
