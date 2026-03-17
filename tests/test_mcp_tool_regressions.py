@@ -2213,14 +2213,14 @@ async def test_upload_input_rejects_invalid_base64():
 
 @pytest.mark.asyncio
 async def test_read_artifact_returns_text_html(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
     artifact_dir = tmp_path / "exports" / "reports" / "diagnostics"
     artifact_dir.mkdir(parents=True)
     artifact = artifact_dir / "run1_diagnostics_report.html"
     artifact.write_text("<html><body>Dashboard</body></html>", encoding="utf-8")
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
 
     result = await read_artifact_tool._toolkit_read_artifact(
-        artifact_path="exports/reports/diagnostics/run1_diagnostics_report.html",
+        artifact_path=str(artifact),
     )
     assert result["status"] == "pass"
     assert result["encoding"] == "text"
@@ -2231,15 +2231,15 @@ async def test_read_artifact_returns_text_html(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_read_artifact_returns_base64_for_binary(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
     artifact_dir = tmp_path / "exports" / "plots"
     artifact_dir.mkdir(parents=True)
     artifact = artifact_dir / "chart.png"
     raw_bytes = b"\x89PNG\r\n\x1a\nfake_png_data"
     artifact.write_bytes(raw_bytes)
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
 
     result = await read_artifact_tool._toolkit_read_artifact(
-        artifact_path="exports/plots/chart.png",
+        artifact_path=str(artifact),
     )
     assert result["status"] == "pass"
     assert result["encoding"] == "base64"
@@ -2259,10 +2259,45 @@ async def test_read_artifact_rejects_traversal():
 
 @pytest.mark.asyncio
 async def test_read_artifact_rejects_missing_file(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
     result = await read_artifact_tool._toolkit_read_artifact(
-        artifact_path="exports/reports/nonexistent.html",
+        artifact_path=str(tmp_path / "exports" / "reports" / "nonexistent.html"),
     )
     assert result["status"] == "error"
     assert result["code"] == "ARTIFACT_PATH_DENIED"
     assert "not found" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_http_mode_rejects_cwd_path(tmp_path, monkeypatch):
+    """In HTTP mode (non-stdio), only _ARTIFACT_ROOT is allowed — not CWD."""
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+    monkeypatch.delenv("ANALYST_MCP_STDIO", raising=False)
+
+    # Create a file under CWD but outside artifact root
+    secret = tmp_path / "src" / "secret.py"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("SECRET_KEY = 'oops'")
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(secret),
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "ARTIFACT_PATH_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_stdio_mode_allows_cwd_path(tmp_path, monkeypatch):
+    """In stdio mode, CWD is an allowed root (client is local)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+    monkeypatch.setenv("ANALYST_MCP_STDIO", "true")
+
+    report = tmp_path / "my_report.html"
+    report.write_text("<html>local</html>")
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(report),
+    )
+    assert result["status"] == "pass"
+    assert result["encoding"] == "text"

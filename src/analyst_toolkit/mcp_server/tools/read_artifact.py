@@ -11,6 +11,16 @@ from analyst_toolkit.mcp_server.response_utils import new_trace_id
 
 logger = logging.getLogger("analyst_toolkit.mcp_server.read_artifact")
 
+
+def _is_stdio_mode() -> bool:
+    return os.environ.get("ANALYST_MCP_STDIO", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 _MAX_ARTIFACT_BYTES = int(os.environ.get("ANALYST_MCP_MAX_ARTIFACT_READ_BYTES", 10 * 1024 * 1024))
 
 _ARTIFACT_ROOT = Path(os.environ.get("ANALYST_MCP_ARTIFACT_SERVER_ROOT", "exports")).resolve(
@@ -51,11 +61,15 @@ def _validate_artifact_path(artifact_path: str) -> tuple[Path | None, str | None
     else:
         resolved = (Path.cwd() / raw).resolve(strict=False)
 
-    # Ensure within artifact root or CWD
-    cwd = Path.cwd().resolve(strict=False)
-    artifact_root = _ARTIFACT_ROOT
+    # In stdio mode the client is local, so CWD is a reasonable root.
+    # In HTTP mode restrict to the artifact root only — CWD could expose
+    # source code, configs, or secrets to remote callers.
+    allowed_roots: list[Path] = [_ARTIFACT_ROOT]
+    if _is_stdio_mode():
+        allowed_roots.append(Path.cwd().resolve(strict=False))
+
     within_root = False
-    for allowed_root in (artifact_root, cwd):
+    for allowed_root in allowed_roots:
         try:
             resolved.relative_to(allowed_root)
             within_root = True
