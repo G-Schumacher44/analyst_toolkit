@@ -3,6 +3,7 @@ state.py — In-memory state management for MCP tool pipelines.
 """
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -12,7 +13,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-SESSION_TTL_SECONDS = 3600  # 1 hour
+SESSION_TTL_SECONDS = int(os.environ.get("ANALYST_MCP_SESSION_TTL_SEC", 3600))
+SESSION_MAX_ENTRIES = int(os.environ.get("ANALYST_MCP_SESSION_MAX_ENTRIES", 32))
 
 
 class StateStore:
@@ -166,8 +168,19 @@ class StateStore:
             return {k: cls._metadata.get(k, {}) for k in cls._sessions.keys()}
 
     @classmethod
+    def _evict_session_unsafe(cls, sid: str, reason: str) -> None:
+        """Remove a single session from all stores. Must be called with _lock held."""
+        cls._sessions.pop(sid, None)
+        cls._metadata.pop(sid, None)
+        cls._last_accessed.pop(sid, None)
+        cls._session_run_ids.pop(sid, None)
+        cls._session_start_times.pop(sid, None)
+        cls._session_configs.pop(sid, None)
+        logger.info("Evicted session %s (%s)", sid, reason)
+
+    @classmethod
     def _cleanup_unsafe(cls):
-        """Evict expired sessions. Must be called with _lock held."""
+        """Evict expired and over-limit sessions. Must be called with _lock held."""
         now = time.time()
         expired = [
             sid
@@ -175,13 +188,12 @@ class StateStore:
             if now - last_ts > SESSION_TTL_SECONDS
         ]
         for sid in expired:
-            cls._sessions.pop(sid, None)
-            cls._metadata.pop(sid, None)
-            cls._last_accessed.pop(sid, None)
-            cls._session_run_ids.pop(sid, None)
-            cls._session_start_times.pop(sid, None)
-            cls._session_configs.pop(sid, None)
-            logger.info(f"Evicted expired session {sid} (TTL reached)")
+            cls._evict_session_unsafe(sid, "TTL reached")
+
+        # LRU eviction when over capacity
+        while len(cls._sessions) > SESSION_MAX_ENTRIES:
+            oldest_sid = min(cls._last_accessed, key=cls._last_accessed.get)
+            cls._evict_session_unsafe(oldest_sid, "LRU capacity limit")
 
     @classmethod
     def cleanup(cls):

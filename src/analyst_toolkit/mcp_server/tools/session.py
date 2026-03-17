@@ -28,13 +28,14 @@ async def _toolkit_manage_session(
     copy_configs: bool = True,
 ) -> dict:
     """
-    Manage session lifecycle: list, inspect, fork, or rebind.
+    Manage session lifecycle: list, inspect, fork, rebind, or clear.
 
     Actions:
       list    — show all active sessions
       inspect — show details for a single session
       fork    — clone a session into a new session with a new run_id
       rebind  — change the run_id bound to a session
+      clear   — drop a session (or all sessions) to free memory
     """
     action = (action or "").strip().lower()
 
@@ -170,10 +171,39 @@ async def _toolkit_manage_session(
             "new_run_id": run_id,
         }
 
+    if action == "clear":
+        if session_id:
+            if StateStore.get(session_id) is None:
+                return {
+                    "status": "error",
+                    "module": "manage_session",
+                    "action": "clear",
+                    "error": f"Session '{session_id}' not found or expired.",
+                    "error_code": "SESSION_NOT_FOUND",
+                }
+            StateStore.clear(session_id)
+            return {
+                "status": "pass",
+                "module": "manage_session",
+                "action": "clear",
+                "cleared_session_id": session_id,
+            }
+        else:
+            sessions = StateStore.list_sessions()
+            count = len(sessions)
+            StateStore.clear()
+            return {
+                "status": "pass",
+                "module": "manage_session",
+                "action": "clear",
+                "cleared_count": count,
+                "message": f"Cleared all {count} sessions.",
+            }
+
     return {
         "status": "error",
         "module": "manage_session",
-        "error": f"Unknown action '{action}'. Use list, inspect, fork, or rebind.",
+        "error": f"Unknown action '{action}'. Use list, inspect, fork, rebind, or clear.",
         "error_code": "UNKNOWN_ACTION",
     }
 
@@ -183,13 +213,14 @@ _INPUT_SCHEMA = {
     "properties": {
         "action": {
             "type": "string",
-            "enum": ["list", "inspect", "fork", "rebind"],
+            "enum": ["list", "inspect", "fork", "rebind", "clear"],
             "description": (
                 "Action to perform: "
                 "list (show all sessions), "
                 "inspect (show details for one session), "
                 "fork (clone a session with a new run_id), "
-                "rebind (change the run_id bound to a session)."
+                "rebind (change the run_id bound to a session), "
+                "clear (drop a single session by session_id, or all sessions if omitted)."
             ),
         },
         "session_id": {
@@ -219,7 +250,8 @@ register_tool(
     fn=_toolkit_manage_session,
     description=(
         "Manage session lifecycle: list active sessions, inspect a session, "
-        "fork a session into a new run context, or rebind a session to a different run_id."
+        "fork a session into a new run context, rebind a session to a different run_id, "
+        "or clear sessions to free memory."
     ),
     input_schema=_INPUT_SCHEMA,
 )

@@ -94,6 +94,13 @@ export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8
 # Default false enforces fail-closed posture.
 # export ANALYST_MCP_ALLOW_EMPTY_CERT_RULES=false
 
+# --- MCP Session Store ---
+# Maximum number of sessions to keep in memory (LRU eviction when exceeded).
+# export ANALYST_MCP_SESSION_MAX_ENTRIES=32
+
+# TTL (seconds) for sessions before eviction. Default 1 hour.
+# export ANALYST_MCP_SESSION_TTL_SEC=3600
+
 # --- MCP Input Registry ---
 # Maximum number of registered inputs to keep in memory.
 # export ANALYST_MCP_INPUT_REGISTRY_MAX_ENTRIES=512
