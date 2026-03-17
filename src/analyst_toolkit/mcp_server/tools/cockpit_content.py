@@ -32,9 +32,10 @@ def user_quickstart_payload() -> dict:
 - Prefer a canonical `input_id` for user-provided datasets whenever possible.
 - Decision tree for getting data in:
   1. **GCS or server-visible path** → `register_input(uri="gs://..." or "/mnt/data/...")`. Zero byte transfer.
-  2. **Local file (agent has it, server doesn't)** → `upload_input(filename="data.csv", content_base64="...")`. Agent reads the file, base64-encodes it, sends through MCP. Works even when the server runs in a container.
-  3. **Non-MCP client with HTTP access** → `POST /inputs/upload` (multipart form-data to `localhost:8001`).
-- If `register_input` fails with `INPUT_PATH_DENIED`, the path is not visible to the server — switch to `upload_input`.
+  2. **Local file, small (<100KB)** → `upload_input(filename="data.csv", content_base64="...")`. Base64-encode and send through MCP.
+  3. **Local file, large (>100KB)** → Upload via HTTP from your shell: `curl -sS -X POST -F 'file=@<path>' -F 'load_into_session=true' http://127.0.0.1:8001/inputs/upload`. This avoids MCP transport size limits. Parse the JSON response for `input_id` and `session_id`.
+  4. **No shell access** → Use `upload_input` with base64 for any size, but be aware the MCP transport may truncate large payloads.
+- If `register_input` fails with `INPUT_PATH_DENIED`, the path is not visible to the server — check the `next_actions` in the error response for the recommended upload method.
 - Use `get_input_descriptor` to inspect the resolved canonical input reference when needed.
 
 ## Session Management

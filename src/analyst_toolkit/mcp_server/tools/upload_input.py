@@ -70,9 +70,17 @@ async def _toolkit_upload_input(
             "trace_id": trace_id,
             "next_actions": [
                 {
-                    "tool": "upload_input",
-                    "why": "Retry with valid, complete base64. Ensure the full file is encoded without truncation.",
-                    "arguments_hint": {"filename": filename},
+                    "tool": "shell",
+                    "why": (
+                        "For files larger than ~100KB, upload via HTTP instead of MCP. "
+                        "Run this curl command in your shell."
+                    ),
+                    "shell_command": (
+                        "curl -sS -X POST"
+                        " -F 'file=@<LOCAL_FILE_PATH>'"
+                        " -F 'load_into_session=true'"
+                        " http://127.0.0.1:8001/inputs/upload"
+                    ),
                 },
             ],
         }

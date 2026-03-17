@@ -47,16 +47,29 @@ async def _toolkit_register_input(
             "trace_id": trace_id,
         }
         if exc.code == "INPUT_PATH_DENIED":
+            safe_name = uri.rsplit("/", 1)[-1] if uri else "<filename>"
             result["next_actions"] = [
                 {
                     "tool": "upload_input",
                     "why": (
                         "The path is not server-visible. Use upload_input to "
-                        "base64-encode the file and push it through MCP."
+                        "base64-encode the file and push it through MCP. "
+                        "Best for files under ~100KB."
                     ),
-                    "arguments_hint": {
-                        "filename": uri.rsplit("/", 1)[-1] if uri else "",
-                    },
+                    "arguments_hint": {"filename": safe_name},
+                },
+                {
+                    "tool": "shell",
+                    "why": (
+                        "For larger files, upload via HTTP from your shell. "
+                        "This avoids MCP transport size limits."
+                    ),
+                    "shell_command": (
+                        f"curl -sS -X POST"
+                        f" -F 'file=@{uri or '<LOCAL_FILE_PATH>'}'"
+                        f" -F 'load_into_session=true'"
+                        f" http://127.0.0.1:8001/inputs/upload"
+                    ),
                 },
             ]
         return result
