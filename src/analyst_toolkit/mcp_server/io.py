@@ -227,6 +227,31 @@ def get_session_config(session_id: str, module: str) -> Optional[str]:
     return StateStore.get_config(session_id, module)
 
 
+def get_inferred_config(session_id: str | None, module: str) -> dict:
+    """Retrieve and parse the inferred config for *module* from the session store.
+
+    Returns an empty dict when no session or no stored config exists.
+    The returned dict is unwrapped from the module-level key if present
+    (e.g. ``{"normalization": {...}}`` → ``{...}``).
+    """
+    if not session_id:
+        return {}
+    raw_yaml = get_session_config(session_id, module)
+    if not raw_yaml:
+        return {}
+    try:
+        parsed = yaml.safe_load(raw_yaml)
+    except yaml.YAMLError:
+        logger.warning("Failed to parse stored %s config for session %s", module, session_id)
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    # Unwrap module-level key so the structure matches what resolve_layered_config expects
+    if module in parsed and isinstance(parsed[module], dict):
+        parsed = parsed[module]
+    return parsed
+
+
 def get_session_run_id(session_id: str) -> Optional[str]:
     return StateStore.get_run_id(session_id)
 

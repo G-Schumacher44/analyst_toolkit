@@ -16,6 +16,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_inferred_config,
     get_session_metadata,
     load_input,
     make_json_safe,
@@ -69,6 +70,7 @@ async def _toolkit_validation(
 
     config = coerce_config(config, "validation")
     config, runtime_meta = resolve_layered_config(
+        inferred=get_inferred_config(session_id, "validation"),
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )

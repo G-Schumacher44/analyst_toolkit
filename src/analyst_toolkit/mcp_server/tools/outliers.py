@@ -16,6 +16,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_inferred_config,
     get_session_metadata,
     load_input,
     resolve_run_context,
@@ -65,7 +66,11 @@ async def _toolkit_outliers(
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     config = coerce_config(config, "outlier_detection")
+    inferred = get_inferred_config(session_id, "outlier_detection") or get_inferred_config(
+        session_id, "outliers"
+    )
     config, runtime_meta = resolve_layered_config(
+        inferred=inferred,
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )

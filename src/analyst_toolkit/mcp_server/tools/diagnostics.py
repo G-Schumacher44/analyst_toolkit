@@ -13,6 +13,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_inferred_config,
     load_input,
     resolve_run_context,
     save_output,
@@ -64,6 +65,7 @@ async def _toolkit_diagnostics(
 
     config = coerce_config(config, "diagnostics")
     config, runtime_meta = resolve_layered_config(
+        inferred=get_inferred_config(session_id, "diagnostics"),
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )

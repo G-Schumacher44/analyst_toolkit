@@ -15,6 +15,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_inferred_config,
     get_session_metadata,
     load_input,
     resolve_run_context,
@@ -63,6 +64,7 @@ async def _toolkit_normalization(
 
     config = coerce_config(config, "normalization")
     config, runtime_meta = resolve_layered_config(
+        inferred=get_inferred_config(session_id, "normalization"),
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )
