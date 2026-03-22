@@ -127,3 +127,25 @@ def test_auth_mode_allows_authorized_input_register(client, monkeypatch, tmp_pat
     assert payload["status"] == "pass"
     assert isinstance(payload["trace_id"], str)
     assert payload["input"]["resolved_reference"] == str(source.resolve())
+
+
+def test_http_auth_posture_warns_when_token_missing(caplog):
+    with caplog.at_level("WARNING", logger="analyst_toolkit.mcp_server"):
+        server_module._log_http_auth_posture("127.0.0.1", "")
+
+    assert "HTTP auth is disabled" in caplog.text
+    assert "ANALYST_MCP_AUTH_TOKEN" in caplog.text
+
+
+def test_http_auth_posture_warns_on_non_loopback_host(caplog):
+    with caplog.at_level("WARNING", logger="analyst_toolkit.mcp_server"):
+        server_module._log_http_auth_posture("0.0.0.0", "")
+
+    assert "non-loopback (0.0.0.0)" in caplog.text
+
+
+def test_http_auth_posture_is_quiet_when_token_present(caplog):
+    with caplog.at_level("WARNING", logger="analyst_toolkit.mcp_server"):
+        server_module._log_http_auth_posture("127.0.0.1", "token")
+
+    assert caplog.text == ""

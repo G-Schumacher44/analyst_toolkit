@@ -65,6 +65,7 @@ logging.basicConfig(
     stream=sys.stderr,  # Log to stderr to avoid polluting stdout in stdio mode
 )
 logger = logging.getLogger("analyst_toolkit.mcp_server")
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def _env_float(name: str, default: float) -> float:
@@ -83,6 +84,27 @@ def _env_bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower().strip("[]")
+    return normalized in _LOOPBACK_HOSTS
+
+
+def _log_http_auth_posture(host: str, auth_token: str) -> None:
+    if auth_token:
+        return
+    if _is_loopback_host(host):
+        logger.warning(
+            "HTTP auth is disabled because ANALYST_MCP_AUTH_TOKEN is unset. "
+            "The default bind host is loopback-only, but set a token before exposing the server."
+        )
+        return
+    logger.warning(
+        "HTTP auth is disabled because ANALYST_MCP_AUTH_TOKEN is unset and the bind host "
+        "is non-loopback (%s). Set a token before exposing this server.",
+        host,
+    )
 
 
 RESOURCE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_RESOURCE_TIMEOUT_SEC", 8.0)
@@ -561,6 +583,7 @@ def main():
         logger.info("Starting Analyst Toolkit MCP Server in stdio mode")
         asyncio.run(run_stdio())
     else:
+        _log_http_auth_posture(args.host, AUTH_TOKEN)
         logger.info(
             "Starting Analyst Toolkit MCP Server in HTTP mode on %s:%s",
             args.host,
