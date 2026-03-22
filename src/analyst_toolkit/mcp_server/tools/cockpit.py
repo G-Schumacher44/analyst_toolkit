@@ -90,10 +90,13 @@ def _env_int(name: str, default: int) -> int:
 TEMPLATE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC", 8.0)
 RUN_HISTORY_DEFAULT_SUMMARY_ONLY = _env_bool("ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT", True)
 RUN_HISTORY_DEFAULT_LIMIT = _env_int("ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT", 50)
-TRUSTED_HISTORY_ENABLED = _env_bool(
-    "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
-    _env_bool("ANALYST_MCP_STDIO", False),
-)
+
+
+def _trusted_history_enabled() -> bool:
+    return _env_bool(
+        "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
+        _env_bool("ANALYST_MCP_STDIO", False),
+    )
 
 
 def _artifact_server_control_enabled() -> bool:
@@ -305,7 +308,7 @@ def _history_sort_value(path: Path) -> float:
 
 
 def _iter_recent_history_files(limit: int) -> list[Path]:
-    if not TRUSTED_HISTORY_ENABLED:
+    if not _trusted_history_enabled():
         return []
     history_root = Path("exports/reports/history")
     if not history_root.exists():
@@ -318,7 +321,7 @@ def _iter_recent_history_files(limit: int) -> list[Path]:
 
 
 def _read_history_entries(path: Path) -> list[dict[str, Any]]:
-    if not TRUSTED_HISTORY_ENABLED:
+    if not _trusted_history_enabled():
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -871,7 +874,7 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
 
 
 async def _toolkit_get_cockpit_dashboard(limit: int = 8) -> dict:
-    if not TRUSTED_HISTORY_ENABLED:
+    if not _trusted_history_enabled():
         return _trusted_history_denial()
     try:
         limit = max(1, min(int(limit), 50))

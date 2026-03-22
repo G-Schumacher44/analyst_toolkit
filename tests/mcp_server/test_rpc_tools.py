@@ -497,7 +497,7 @@ async def test_toolkit_get_pipeline_dashboard_uses_session_specific_artifact_pat
 
 @pytest.mark.asyncio
 async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
-    mocker.patch.object(cockpit_module, "TRUSTED_HISTORY_ENABLED", True)
+    mocker.patch.object(cockpit_module, "_trusted_history_enabled", return_value=True)
     mocker.patch.object(
         cockpit_module,
         "_build_cockpit_dashboard_report",
@@ -557,7 +557,7 @@ async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
 
 @pytest.mark.asyncio
 async def test_toolkit_get_cockpit_dashboard_denies_when_untrusted(mocker):
-    mocker.patch.object(cockpit_module, "TRUSTED_HISTORY_ENABLED", False)
+    mocker.patch.object(cockpit_module, "_trusted_history_enabled", return_value=False)
     export_html = mocker.patch.object(cockpit_module, "export_html_report")
     deliver = mocker.patch.object(cockpit_module, "deliver_artifact")
 

@@ -49,7 +49,7 @@ def user_quickstart_payload() -> dict:
 ## Recommended Order (Manual Pipeline)
 1. `register_input` (gs:// or server path) or `upload_input` (local file via base64)
 2. `diagnostics`
-3. `infer_configs`
+3. `infer_configs` — **required before running module tools**. Without this, modules have no rules and will silently produce no-op results.
 4. Review/edit configs (normalization, duplicates, outliers, imputation, validation)
 5. `normalization` -> `duplicates` -> `outliers` -> `imputation` -> `validation`
 6. `final_audit`
@@ -179,6 +179,10 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "step": 3 if trusted_history else 2,
                 "tool": "infer_configs",
                 "required_inputs": ["input_id|gcs_path|session_id"],
+                "notes": [
+                    "REQUIRED before running module tools. Without inferred configs, modules have no rules and produce no-op results.",
+                    "Pass the returned configs to each module tool, or let the session carry them forward.",
+                ],
             },
             {
                 "step": 4 if trusted_history else 3,
@@ -433,6 +437,10 @@ def agent_playbook_payload() -> dict:
                 "tool": "infer_configs",
                 "required_inputs": ["input_id|gcs_path|session_id"],
                 "outputs": ["configs (YAML strings by module)"],
+                "notes": [
+                    "REQUIRED before running module tools. Without inferred configs, modules have no rules and produce no-op results.",
+                    "Pass the returned configs to each module tool, or let the session carry them forward.",
+                ],
                 "next": [offset + 5],
             },
             {
