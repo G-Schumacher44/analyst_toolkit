@@ -26,13 +26,13 @@ import logging
 from pathlib import Path  # <-- CORRECTED: Added missing import
 
 import pandas as pd
-from joblib import load as load_joblib
 
 from analyst_toolkit.m00_utils.export_utils import (
     export_dataframes,
     export_html_report,
     save_joblib,
 )
+from analyst_toolkit.m00_utils.load_data import load_joblib
 from analyst_toolkit.m00_utils.report_generator import generate_imputation_report
 from analyst_toolkit.m07_imputation.impute_data import apply_imputation
 from analyst_toolkit.m08_visuals.comparison_plots import (

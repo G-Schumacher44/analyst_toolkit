@@ -23,13 +23,13 @@ Example:
 import logging
 
 import pandas as pd
-from joblib import load as load_joblib
 
 from analyst_toolkit.m00_utils.export_utils import (
     export_dataframes,
     export_html_report,
     save_joblib,
 )
+from analyst_toolkit.m00_utils.load_data import load_joblib
 from analyst_toolkit.m00_utils.report_generator import generate_outlier_handling_report
 from analyst_toolkit.m06_outlier_handling.outlier_handler import handle_outliers
 
