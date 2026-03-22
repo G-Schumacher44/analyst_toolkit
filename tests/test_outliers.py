@@ -44,6 +44,7 @@ def test_empty_dataframe_handling():
 
 
 def test_outlier_flags_fill_false_for_null_rows():
+    """Verify that null values produce False outlier flags instead of NaN."""
     df = pd.DataFrame({"val": [1.0, None, 2.0, 3.0, 4.0, 100.0]})
     config = {"detection_specs": {"val": {"method": "iqr", "iqr_multiplier": 1.5}}}
 
