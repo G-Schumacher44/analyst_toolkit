@@ -11,11 +11,25 @@ Includes:
 Used across the Analyst Toolkit for consistent inline diagnostics, QA summaries, and output visualization.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import pandas as pd
-from IPython.display import Markdown, display
 
 
-def to_html_table(df, max_rows=25, full_preview=False):
+def _display_markdown(markdown_text: str) -> None:
+    """Render Markdown in notebooks when available, otherwise fall back to stdout."""
+    try:
+        from IPython.display import Markdown, display
+    except ImportError:
+        print(markdown_text)
+        return
+
+    display(Markdown(markdown_text))
+
+
+def to_html_table(df, max_rows=25, full_preview=False, escape: bool = True):
     """
     Render a pandas DataFrame as an HTML table for inline display.
 
@@ -23,6 +37,7 @@ def to_html_table(df, max_rows=25, full_preview=False):
         df (pd.DataFrame): The DataFrame to render.
         max_rows (int): Number of rows to display (if full_preview is False).
         full_preview (bool): If True, display all rows regardless of max_rows.
+        escape (bool): If True, HTML-escape cell contents to prevent injection.
 
     Returns:
         str: An HTML-formatted string.
@@ -31,7 +46,7 @@ def to_html_table(df, max_rows=25, full_preview=False):
         return "<p><em>No data available.</em></p>"
 
     display_df = df if full_preview else df.head(max_rows)
-    return display_df.to_html(classes="table table-striped", escape=False, index=False)
+    return display_df.to_html(classes="table table-striped", escape=escape, index=False)
 
 
 def display_markdown_summary(title: str, df: pd.DataFrame, max_rows: int = 10):
@@ -45,10 +60,10 @@ def display_markdown_summary(title: str, df: pd.DataFrame, max_rows: int = 10):
     """
     trimmed_df = df.head(max_rows)
     markdown = f"### {title}\n\n" + trimmed_df.to_markdown(index=False)
-    display(Markdown(markdown))
+    _display_markdown(markdown)
 
 
-def display_warnings(warning_list: list, title: str = "⚠️ Warnings"):
+def display_warnings(warning_list: list[Any], title: str = "⚠️ Warnings"):
     """
     Display a list of warning messages as a Markdown bullet list with a section title.
 
@@ -59,4 +74,4 @@ def display_warnings(warning_list: list, title: str = "⚠️ Warnings"):
     if warning_list:
         markdown = f"### {title}\n\n"
         markdown += "\n".join(f"- {w}" for w in warning_list)
-        display(Markdown(markdown))
+        _display_markdown(markdown)

@@ -29,14 +29,13 @@ df_certified = run_final_audit_pipeline(
 import logging
 
 import pandas as pd
-from joblib import load as load_joblib
 
 from analyst_toolkit.m00_utils.export_utils import (
     export_dataframes,
     export_html_report,
     save_joblib,
 )
-from analyst_toolkit.m00_utils.load_data import load_csv
+from analyst_toolkit.m00_utils.load_data import load_csv, load_joblib
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.m10_final_audit.final_audit_producer import run_final_audit_producer
 
