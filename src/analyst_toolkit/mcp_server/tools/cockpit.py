@@ -429,6 +429,8 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
                 "timestamp": str(latest_non_synthetic.get("timestamp", "")),
                 "health_score": health.get("health_score", "N/A"),
                 "health_status": health.get("health_status", "unknown"),
+                "health_advisory": bool(health.get("health_advisory", False)),
+                "certification_status": str(health.get("certification_status", "not_run")),
                 "pipeline_dashboard": pipeline_dashboard,
                 "auto_heal_dashboard": auto_heal_dashboard,
                 "final_audit_dashboard": final_audit_dashboard,
@@ -825,6 +827,10 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
         "final_status": final_status,
         "health_score": health.get("health_score", "N/A"),
         "health_status": health.get("health_status", "unknown"),
+        "health_advisory": bool(health.get("health_advisory", False)),
+        "health_message": str(health.get("message", "")),
+        "certification_status": str(health.get("certification_status", "not_run")),
+        "certification_passed": health.get("certification_passed"),
         "ready_modules": ready_modules,
         "warned_modules": warned_modules,
         "failed_modules": failed_modules,
@@ -864,6 +870,9 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
     artifact_path = str(artifact_delivery.get("local_path", output_path))
     artifact_url = str(artifact_delivery.get("url", ""))
 
+    warnings = list(artifact_delivery.get("warnings", []))
+    warnings.extend(str(item) for item in health.get("warnings", []) if str(item).strip())
+
     res = {
         "status": "pass",
         "module": "pipeline_dashboard",
@@ -872,6 +881,8 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
         "summary": {
             "health_score": report["health_score"],
             "health_status": report["health_status"],
+            "health_advisory": report["health_advisory"],
+            "certification_status": report["certification_status"],
             "ready_modules": ready_modules,
             "warned_modules": warned_modules,
             "failed_modules": failed_modules,
@@ -882,7 +893,7 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
         "destination_delivery": {
             "html_report": compact_destination_metadata(artifact_delivery["destinations"])
         },
-        "warnings": list(artifact_delivery.get("warnings", [])),
+        "warnings": warnings,
     }
     res = with_dashboard_artifact(
         res, artifact_path=artifact_path, artifact_url=artifact_url, label="Pipeline dashboard"

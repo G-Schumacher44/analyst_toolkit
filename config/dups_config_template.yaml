@@ -1,58 +1,10 @@
-# ------------------------------------------------------------------------------
-# 📄 Config File: run_duplicates_config.yaml
-# 🧩 Module: Duplicates (M04)
-# 📌 Purpose: Detects and handles duplicate rows based on configured logic.
-# ------------------------------------------------------------------------------
-# This module can flag or remove duplicates depending on the `mode` setting.
-# ------------------------------------------------------------------------------
-
-# 📥 Execution context
-notebook: true
-run_id: "0002_QA"             # A unique ID for the run, used in export paths.
-
-# 🔎 Duplicate detection settings
 duplicates:
-  logging: "auto"           # Options: 'on', 'off', or 'auto'
   run: true
 
-  # 🎯 Target subset for identifying duplicates.
-  # Use a list of column names, or set to null to use all columns.
   subset_columns: ['tag_id', 'species', 'capture_date']
-
-  # 🧭 Deduplication logic
-  keep: 'first'             # In 'remove' mode, which duplicate to keep.
-                            # Options: 'first', 'last', or False (to drop all duplicates).
-
-  mode: 'flag'            # 'remove': Finds and deletes duplicates, returning a smaller DataFrame.
-                            # 'flag': Finds duplicates and adds an 'is_duplicate' boolean column,
-                            #         but does not remove any rows.
-
-  # 📂 Input source
-  input_path: "exports/joblib/{run_id}/{run_id}_m02_certified.joblib"
-
-  # ⚙️ Operational settings (required by pipeline)
+  keep: 'first'
+  mode: 'flag'
+  input_path: "data/processed/example.csv"
   settings:
-    checkpoint:
-      run: true
-      # Path for the final processed DataFrame (either smaller or with flags).
-      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04_df_deduped.joblib"
-      # Optional: In 'remove' mode, save a joblib of the *flagged* DataFrame before rows are dropped.
-      flagged_checkpoint_path: "exports/joblib/{run_id}/{run_id}_m04_df_flagged_before_removal.joblib"
-
-    export: true
-    export_path: "exports/reports/duplicates/duplicates_report.xlsx"
-    as_csv: false          # false = single XLSX report with multiple sheets
     export_html: true
     export_html_path: "exports/reports/duplicates/{run_id}_duplicates_report.html"
-
-    show_inline: true
-
-    plotting:
-      run: true
-      save_dir: "exports/plots/duplicates/"
-
-  # 🧼 Optional preview cleanup for schema-variant files
-  preview_drop_columns:
-    - "timestamp"
-    - "script_name"
-    - "user"

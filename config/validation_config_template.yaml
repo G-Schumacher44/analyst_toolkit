@@ -1,20 +1,5 @@
-# ------------------------------------------------------------------------------
-# 📄 Config File: run_validation_config.yaml
-# 🧩 Module: Validation (M02)
-# 📌 Purpose: Performs the first-pass audit on raw input data.
-# ------------------------------------------------------------------------------
-# This configuration identifies issues in the dataset without halting the pipeline.
-# All rules are based on the `synthetic_penguins_v3.5.csv` structure and expectations.
-# ------------------------------------------------------------------------------
-
-# 📥 Execution context
-notebook: true
-run_id: "0002_QA"
-logging: "auto"            # 'on', 'off', or 'auto' (auto = enabled in notebook mode)
-
-# 🔎 Validation settings
 validation:
-  input_path: "data/raw/synthetic_penguins_v3.5.csv"
+  input_path: "data/raw/example.csv"
 
   # ✅ Schema and content validation rules
   schema_validation:
@@ -22,12 +7,11 @@ validation:
     fail_on_error: false   # Set to false in audit mode to detect all issues
 
     rules:
-      # 📐 Expected schema (column names and order)
-      expected_columns: 
+      expected_columns:
         - "tag_id"
         - "species"
         - "bill_length_mm"
-        - "bill depth_mm"
+        - "bill_depth_mm"
         - "flipper_length_mm"
         - "body_mass_g"
         - "age_group"
@@ -40,12 +24,11 @@ validation:
         - "clutch_completion"
         - "date_egg"
 
-      # 🔢 Expected data types per column
       expected_types:
         tag_id: "object"
         species: "object"
-        bill length (mm): "float64"
-        bill depth (mm): "float64"
+        bill_length_mm: "float64"
+        bill_depth_mm: "float64"
         flipper_length_mm: "int64"
         body_mass_g: "float64"
         age_group: "object"
@@ -58,23 +41,21 @@ validation:
         clutch_completion: "object"
         date_egg: "object"
 
-      # 🧬 Categorical value checks
       categorical_values:
         species: ["Adelie", "Chinstrap", "Gentoo"]
         island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut"]
-        sex: ["male", "female", "UNKNOWN"]
+        sex: ["MALE", "FEMALE", "UNKNOWN"]
         colony_id: ["Biscoe West", "Cormorant East", "Dream South", "Shortcut Point", "Torgersen North"]
         clutch_completion: ["Yes", "No"]
         age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
-        health_status: ["Healthy", "Critically Ill", "Underweight", "Unwell", "Overweight", "Unknown"]
+        health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
         study_name: ["PAPRI2019", "PAPRI2020", "PAPRI2021", "PAPRI2022", "PAPRI2023", "PAPRI2024"]
 
-      # 📏 Numeric range checks (min/max thresholds)
       numeric_ranges:
-        bill length (mm):
+        bill_length_mm:
           min: 30.0
           max: 65.0
-        bill depth (mm):
+        bill_depth_mm:
           min: 12.0
           max: 23.5
         flipper_length_mm:
@@ -84,13 +65,6 @@ validation:
           min: 2300.0
           max: 7500.0
 
-  # 📤 Output and display settings
   settings:
-    checkpoint: false
-    checkpoint_path: "exports/joblib/{run_id}/{run_id}_m02_validation.joblib"
-    export: true
-    as_csv: false
-    export_path: "exports/reports/validation/validation_report.xlsx"
     export_html: true
     export_html_path: "exports/reports/validation/{run_id}_validation_report.html"
-    show_inline: true

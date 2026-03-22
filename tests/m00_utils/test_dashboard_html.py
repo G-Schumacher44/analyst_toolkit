@@ -635,6 +635,52 @@ def test_generate_pipeline_dashboard_surfaces_terminal_fallback_when_final_artif
     assert "exports/reports/validation/sample_validation.html" in html
 
 
+def test_generate_pipeline_dashboard_marks_health_as_advisory_when_final_audit_failed():
+    report = {
+        "final_status": "fail",
+        "session_id": "sess_pipeline",
+        "health_score": 94.7,
+        "health_status": "green",
+        "health_advisory": True,
+        "health_message": "Advisory Data Health Score is 94.7/100 (GREEN). Final audit failed certification for this run.",
+        "certification_status": "fail",
+        "ready_modules": 4,
+        "warned_modules": 1,
+        "failed_modules": 1,
+        "not_run_modules": 3,
+        "module_order": ["Validation", "Final Audit"],
+        "modules": {
+            "Validation": {
+                "status": "pass",
+                "summary": {"passed": True},
+                "dashboard_url": "",
+                "dashboard_path": "",
+                "artifact_url": "",
+                "export_url": "",
+                "warnings": [],
+            },
+            "Final Audit": {
+                "status": "fail",
+                "summary": {"passed": False},
+                "dashboard_url": "",
+                "dashboard_path": "exports/reports/final_audit/run_final.html",
+                "artifact_url": "",
+                "export_url": "gs://bucket/final.csv",
+                "warnings": [],
+            },
+        },
+        "final_dashboard_url": "",
+        "final_dashboard_path": "exports/reports/final_audit/run_final.html",
+        "final_export_url": "gs://bucket/final.csv",
+    }
+
+    html = generate_html_report(report, "Pipeline Dashboard", "run-pipeline-advisory")
+
+    assert "Health Mode:</strong> ADVISORY" in html
+    assert "Health Score Is Advisory" in html
+    assert "Certification Status:</strong> FAIL" in html
+
+
 def test_generate_cockpit_dashboard_renders_operator_hub():
     report = {
         "overview": {

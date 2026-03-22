@@ -1,36 +1,17 @@
-# ------------------------------------------------------------------------------
-# 📄 Config File: run_normalization_config.yaml
-# 🧩 Module: Normalization (M03)
-# 📌 Purpose: Cleans and standardizes data using rule-based transformations.
-# ------------------------------------------------------------------------------
-# This module is designed to resolve data quality issues identified in validation.
-# It performs column renaming, value mapping, fuzzy matching, and type coercion.
-# ------------------------------------------------------------------------------
-
-# 📥 Execution context
-notebook: true
-run_id: "0002_QA"
-logging: "auto"            # Options: 'on', 'off', or 'auto'
-
-# 🔧 Normalization settings
 normalization:
   run: true
 
-  # Optionally define input_path if this is the first module in a run
-  # input_path: "path/to/input.csv"
+  input_path: "data/processed/example_validated.csv"
 
   rules:
-    # ✏️ Rename columns
     rename_columns:
       'bill length (mm)': 'bill_length_mm'
       'bill depth (mm)': 'bill_depth_mm'
 
-    # 🧹 Standardize categorical text columns
     standardize_text_columns:
       - 'clutch_completion'
       - 'sex'
 
-    # 🧩 Explicit value mappings for cleanup
     value_mappings:
       sex:
         '.': null
@@ -80,7 +61,6 @@ normalization:
         'PAPR2023': 'PAPRI2023'
         'PAPRI20X9': 'UNKNOWN'
 
-    # 🤖 Fuzzy string matching for typo correction
     fuzzy_matching:
       run: true
       settings:
@@ -91,26 +71,17 @@ normalization:
           master_list: ["Torgersen", "Biscoe", "Dream", "Shortcut", "Cormorant"]
           score_cutoff: 85
 
-    # 📅 Date parsing for timestamp fields
     parse_datetimes:
       capture_date:
         format: '%Y-%m-%d'
         errors: 'coerce'
-        # Optional timezone/format controls
-        # If your inputs include time zones and you want to normalize to UTC, set utc: true
-        # If downstream expects tz-naive timestamps (no timezone), set make_naive: true
         utc: false
         make_naive: true
-        # Optionally support multiple input formats (tried in order)
-        # formats: ['%Y-%m-%d', '%m/%d/%Y', '%Y.%m.%d']
       date_egg:
         format: '%Y-%m-%d'
         errors: 'coerce'
         utc: false
         make_naive: true
-        # formats: ['%Y-%m-%d', '%m/%d/%Y']
-
-    # 🔬 Columns to preview in the report
     preview_columns:
       - 'sex'
       - 'island'
@@ -123,20 +94,10 @@ normalization:
       - 'date_egg'
       - 'clutch_completion'
 
-    # 🧪 Coerce data types explicitly
     coerce_dtypes:
       bill_length_mm: 'float64'
       flipper_length_mm: 'float64'
 
-  # 📤 Output and display controls
   settings:
-    show_inline: true
-    export: true
     export_html: true
     export_html_path: "exports/reports/normalization/{run_id}_normalization_report.html"
-    as_csv: false
-    export_path: "exports/reports/normalization/normalization_report.xlsx"
-
-    checkpoint:
-      run: true
-      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m03_df_normalized.joblib"
