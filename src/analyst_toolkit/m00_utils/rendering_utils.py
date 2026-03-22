@@ -59,7 +59,11 @@ def display_markdown_summary(title: str, df: pd.DataFrame, max_rows: int = 10):
         max_rows (int): Maximum number of rows to show.
     """
     trimmed_df = df.head(max_rows)
-    markdown = f"### {title}\n\n" + trimmed_df.to_markdown(index=False)
+    try:
+        table_body = trimmed_df.to_markdown(index=False)
+    except ImportError:
+        table_body = trimmed_df.to_string(index=False)
+    markdown = f"### {title}\n\n{table_body}"
     _display_markdown(markdown)
 
 
