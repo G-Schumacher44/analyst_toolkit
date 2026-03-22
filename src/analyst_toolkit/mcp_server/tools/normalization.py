@@ -6,6 +6,10 @@ from analyst_toolkit.m03_normalization.run_normalization_pipeline import (
     count_normalization_changes,
     run_normalization_pipeline,
 )
+from analyst_toolkit.mcp_server.config_normalizers import (
+    INFER_CONFIG_REQUIRED_WARNING,
+    has_actionable_normalization_config,
+)
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     build_artifact_contract,
@@ -134,11 +138,13 @@ async def _toolkit_normalization(
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
 
     status_warnings: list = []
+    advisory_warnings: list = []
     status_warnings.extend(lifecycle["warnings"])
     status_warnings.extend(runtime_warnings)
     status_warnings.extend(runtime_meta["runtime_warnings"])
+    if not has_actionable_normalization_config(base_cfg):
+        advisory_warnings.append(INFER_CONFIG_REQUIRED_WARNING)
     status_warnings.extend(export_delivery["warnings"])
-
     # Artifact delivery warnings are informational — collected separately so they
     # appear in the response but do not escalate base_status when the artifacts
     # are non-required.
@@ -185,7 +191,7 @@ async def _toolkit_normalization(
         probe_local_paths=True,
     )
     artifact_warnings.extend(artifact_contract["artifact_warnings"])
-    warnings = status_warnings + artifact_warnings
+    warnings = status_warnings + advisory_warnings + artifact_warnings
     base_status = "warn" if status_warnings else "pass"
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]

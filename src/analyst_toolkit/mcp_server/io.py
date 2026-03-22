@@ -256,6 +256,14 @@ def get_inferred_config(session_id: str | None, module: str) -> dict:
     return parsed
 
 
+def missing_config_warning(runtime_meta: dict[str, Any]) -> str | None:
+    """Return a user-facing warning when no executable config layers were supplied."""
+    resolved_layers = runtime_meta.get("resolved_layers", {})
+    if any(resolved_layers.get(layer) for layer in ("inferred", "provided", "explicit")):
+        return None
+    return "No inferred or explicit config found. Run infer_configs first for meaningful results."
+
+
 def get_session_run_id(session_id: str) -> Optional[str]:
     return StateStore.get_run_id(session_id)
 
