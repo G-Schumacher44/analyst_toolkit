@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import threading
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -57,12 +58,15 @@ def _env_bool(name: str, default: bool) -> bool:
 RUN_ID_OVERRIDE_ALLOWED = _env_bool("ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE", False)
 DEDUP_RUN_ID_WARNINGS = _env_bool("ANALYST_MCP_DEDUP_RUN_ID_WARNINGS", True)
 _HISTORY_LOCKS_GUARD = threading.Lock()
-_HISTORY_LOCKS: dict[str, threading.Lock] = {}
+_MAX_HISTORY_LOCKS = 256
+_HISTORY_LOCKS: OrderedDict[str, threading.Lock] = OrderedDict()
 _LIFECYCLE_WARNINGS_GUARD = threading.Lock()
+_MAX_LIFECYCLE_WARNING_KEYS = 512
 _SEEN_LIFECYCLE_WARNING_KEYS: set[tuple[str, str]] = set()
 ALLOW_EMPTY_CERT_RULES = _env_bool("ANALYST_MCP_ALLOW_EMPTY_CERT_RULES", False)
 _HISTORY_READ_META_GUARD = threading.Lock()
-_LAST_HISTORY_READ_META: dict[tuple[str, Optional[str]], dict[str, Any]] = {}
+_MAX_HISTORY_READ_META = 256
+_LAST_HISTORY_READ_META: OrderedDict[tuple[str, Optional[str]], dict[str, Any]] = OrderedDict()
 
 
 def coerce_config(config: Optional[dict], module: str) -> dict:
@@ -434,9 +438,13 @@ def _history_lock_for(path: Path) -> threading.Lock:
     key = str(path.resolve())
     with _HISTORY_LOCKS_GUARD:
         lock = _HISTORY_LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _HISTORY_LOCKS[key] = lock
+        if lock is not None:
+            _HISTORY_LOCKS.move_to_end(key)
+            return lock
+        if len(_HISTORY_LOCKS) >= _MAX_HISTORY_LOCKS:
+            _HISTORY_LOCKS.popitem(last=False)
+        lock = threading.Lock()
+        _HISTORY_LOCKS[key] = lock
         return lock
 
 
@@ -447,6 +455,8 @@ def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bo
     with _LIFECYCLE_WARNINGS_GUARD:
         if key in _SEEN_LIFECYCLE_WARNING_KEYS:
             return False
+        if len(_SEEN_LIFECYCLE_WARNING_KEYS) >= _MAX_LIFECYCLE_WARNING_KEYS:
+            _SEEN_LIFECYCLE_WARNING_KEYS.clear()
         _SEEN_LIFECYCLE_WARNING_KEYS.add(key)
         return True
 
@@ -454,7 +464,11 @@ def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bo
 def _set_last_history_meta(run_id: str, session_id: Optional[str], meta: dict[str, Any]) -> None:
     key = (run_id, session_id)
     with _HISTORY_READ_META_GUARD:
+        if key in _LAST_HISTORY_READ_META:
+            _LAST_HISTORY_READ_META.move_to_end(key)
         _LAST_HISTORY_READ_META[key] = {
             "parse_errors": list(meta.get("parse_errors", [])),
             "skipped_records": int(meta.get("skipped_records", 0)),
         }
+        while len(_LAST_HISTORY_READ_META) > _MAX_HISTORY_READ_META:
+            _LAST_HISTORY_READ_META.popitem(last=False)
