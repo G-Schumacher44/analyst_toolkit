@@ -40,6 +40,12 @@ def allowed_server_input_roots() -> list[Path]:
         roots = [Path(item).expanduser().resolve() for item in configured.split(os.pathsep) if item]
     else:
         roots = [input_root()]
+    # In stdio/local mode the server shares the host filesystem — include CWD
+    # so agents can register workspace files without extra configuration.
+    if os.environ.get("ANALYST_MCP_STDIO", "").strip().lower() in {"1", "true", "yes", "on"}:
+        cwd = Path.cwd().resolve()
+        if cwd not in roots:
+            roots.append(cwd)
     unique: list[Path] = []
     seen: set[Path] = set()
     for root in roots:

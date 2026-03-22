@@ -12,7 +12,11 @@ import yaml
 RESOURCE_SCHEME = "analyst"
 RESOURCE_HOST = "templates"
 
-CONFIG_DIR = Path("config")
+# Resolve config/ relative to the project root, not CWD.
+# This ensures templates are found regardless of where the process starts
+# (e.g. stdio mode spawned from a different workspace).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+CONFIG_DIR = _PROJECT_ROOT / "config"
 GOLDEN_TEMPLATE_DIR = CONFIG_DIR / "golden_templates"
 GOLDEN_TEMPLATE_FILENAMES: tuple[str, ...] = (
     "compliance_audit.yaml",
@@ -32,6 +36,11 @@ class TemplateSpec:
     @property
     def path(self) -> Path:
         return CONFIG_DIR / self.filename
+
+    @property
+    def relative_path(self) -> str:
+        """Portable display path relative to project root (e.g. 'config/foo.yaml')."""
+        return f"config/{self.filename}"
 
     @property
     def uri(self) -> str:

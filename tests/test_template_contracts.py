@@ -23,7 +23,9 @@ def test_template_resource_uris_cover_template_files():
     }
     expected_golden = {
         f"analyst://templates/golden/{p.name}"
-        for p in sorted(Path("config/golden_templates").glob("*.yaml"))
+        for p in sorted(
+            (Path(__file__).resolve().parent.parent / "config" / "golden_templates").glob("*.yaml")
+        )
         if p.is_file()
     }
 

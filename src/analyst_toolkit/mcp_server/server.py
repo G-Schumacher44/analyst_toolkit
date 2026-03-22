@@ -555,6 +555,9 @@ def main():
     args = parser.parse_args()
 
     if args.stdio or os.environ.get("ANALYST_MCP_STDIO", "").lower() == "true":
+        # Propagate stdio flag so downstream modules auto-enable local defaults
+        # (trusted history, artifact server, CWD input roots, etc.)
+        os.environ.setdefault("ANALYST_MCP_STDIO", "true")
         logger.info("Starting Analyst Toolkit MCP Server in stdio mode")
         asyncio.run(run_stdio())
     else:

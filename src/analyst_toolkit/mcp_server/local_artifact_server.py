@@ -45,7 +45,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 def artifact_server_enabled() -> bool:
-    return _env_bool("ANALYST_MCP_ENABLE_ARTIFACT_SERVER", False)
+    return _env_bool("ANALYST_MCP_ENABLE_ARTIFACT_SERVER", _env_bool("ANALYST_MCP_STDIO", False))
 
 
 def _artifact_server_host() -> str:

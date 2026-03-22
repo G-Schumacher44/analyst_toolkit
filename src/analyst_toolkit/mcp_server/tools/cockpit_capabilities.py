@@ -172,9 +172,9 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
         raise ValueError("Runtime template inventory is empty.")
     if len(runtime_template_specs) > 1:
         raise ValueError("Multiple runtime templates are not supported in capability catalog.")
-    runtime_template_path = runtime_template_specs[0].path.as_posix()
+    runtime_template_path = runtime_template_specs[0].relative_path
     workflow_template_paths = {
-        spec.tool: spec.path.as_posix() for spec in workflow_template_specs if spec.tool
+        spec.tool: spec.relative_path for spec in workflow_template_specs if spec.tool
     }
 
     modules: list[dict[str, Any]] = []
@@ -345,7 +345,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
         "workflow_templates": [
             {
                 "tool": spec.tool,
-                "template_path": spec.path.as_posix(),
+                "template_path": spec.relative_path,
                 **_WORKFLOW_TOOL_METADATA[spec.tool],
             }
             for spec in workflow_template_specs
