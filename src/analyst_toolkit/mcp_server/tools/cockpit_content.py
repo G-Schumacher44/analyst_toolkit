@@ -10,10 +10,14 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _is_stdio_mode() -> bool:
+    return _env_bool("ANALYST_MCP_STDIO", False)
+
+
 def _trusted_history_enabled() -> bool:
     return _env_bool(
         "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
-        _env_bool("ANALYST_MCP_STDIO", False),
+        _is_stdio_mode(),
     )
 
 
@@ -30,11 +34,7 @@ def user_quickstart_payload() -> dict:
 
 ## Input Ingest
 - Prefer a canonical `input_id` for user-provided datasets whenever possible.
-- Decision tree for getting data in:
-  1. **GCS or server-visible path** → `register_input(uri="gs://..." or "/mnt/data/...")`. Zero byte transfer.
-  2. **Local file, small (<100KB)** → `upload_input(filename="data.csv", content_base64="...")`. Base64-encode and send through MCP.
-  3. **Local file, large (>100KB)** → Upload via HTTP from your shell: `curl -sS -X POST -F 'file=@<path>' -F 'load_into_session=true' http://127.0.0.1:8001/inputs/upload`. This avoids MCP transport size limits. Parse the JSON response for `input_id` and `session_id`.
-  4. **No shell access** → Use `upload_input` with base64 for any size, but be aware the MCP transport may truncate large payloads.
+{input_ingest_tree}
 - If `register_input` fails with `INPUT_PATH_DENIED`, the path is not visible to the server — check the `next_actions` in the error response for the recommended upload method.
 - Use `get_input_descriptor` to inspect the resolved canonical input reference when needed.
 
@@ -44,6 +44,7 @@ def user_quickstart_payload() -> dict:
 - `manage_session(action="inspect", session_id="...")` — view session details and stored configs.
 - `manage_session(action="fork", session_id="...", run_id="new_run")` — clone a session into a new run context. The forked session gets its own run_id and optionally inherits inferred configs.
 - `manage_session(action="rebind", session_id="...", run_id="new_run")` — change the run_id bound to an existing session.
+- `manage_session(action="clear", session_id="...")` — evict a single session, or omit `session_id` to clear all sessions. Useful for freeing memory or resetting state.
 
 ## Recommended Order (Manual Pipeline)
 1. `register_input` (gs:// or server path) or `upload_input` (local file via base64)
@@ -107,6 +108,28 @@ Use this to auto-correct typos while controlling aggressiveness via score cutoff
 
 Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
+    stdio = _is_stdio_mode()
+    if stdio:
+        input_ingest_tree = (
+            "- Decision tree for getting data in:\n"
+            '  1. **Local file path** → `register_input(uri="/absolute/path/to/file.csv", load_into_session=true)`. '
+            "The server runs locally and can read your filesystem directly. This is the fastest path.\n"
+            '  2. **GCS path** → `register_input(uri="gs://bucket/file.csv")`. Zero byte transfer.\n'
+            '  3. **Base64 upload** → `upload_input(filename="data.csv", content_base64="...")`. '
+            "Only needed if the file is not on disk (e.g. generated in memory)."
+        )
+    else:
+        input_ingest_tree = (
+            "- Decision tree for getting data in:\n"
+            '  1. **GCS or server-visible path** → `register_input(uri="gs://..." or "/mnt/data/...")`. Zero byte transfer.\n'
+            '  2. **Local file, small (<100KB)** → `upload_input(filename="data.csv", content_base64="...")`. '
+            "Base64-encode and send through MCP.\n"
+            "  3. **Local file, large (>100KB)** → Upload via HTTP from your shell: "
+            "`curl -sS -X POST -F 'file=@<path>' -F 'load_into_session=true' http://127.0.0.1:8001/inputs/upload`. "
+            "This avoids MCP transport size limits. Parse the JSON response for `input_id` and `session_id`.\n"
+            "  4. **No shell access** → Use `upload_input` with base64 for any size, but be aware the MCP transport may truncate large payloads."
+        )
+    guide = guide.format(input_ingest_tree=input_ingest_tree)
     trusted_history = _trusted_history_enabled()
     ordered_steps = []
     if trusted_history:
@@ -129,11 +152,19 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "tool": "register_input",
                 "required_inputs": ["uri"],
                 "outputs": ["input_id", "session_id?", "summary"],
-                "notes": [
-                    "Use this when data already lives at gs:// or a server-visible path.",
-                    "If the user has a local file that is not server-visible, use upload_input instead.",
-                    "If this fails with INPUT_PATH_DENIED, switch to upload_input.",
-                ],
+                "notes": (
+                    [
+                        "In stdio/local mode, the server can read your filesystem directly — use local absolute paths.",
+                        "Also works with gs:// URIs for cloud-hosted data.",
+                        "If this fails with INPUT_PATH_DENIED, check the allowed input roots.",
+                    ]
+                    if stdio
+                    else [
+                        "Use this when data already lives at gs:// or a server-visible path.",
+                        "If the user has a local file that is not server-visible, use upload_input instead.",
+                        "If this fails with INPUT_PATH_DENIED, switch to upload_input.",
+                    ]
+                ),
             },
             {
                 "step": 2 if trusted_history else 1,
@@ -173,7 +204,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
             {
                 "tool": "register_input",
                 "arguments": {
-                    "uri": "gs://bucket/data.csv",
+                    "uri": "/absolute/path/to/data.csv" if stdio else "gs://bucket/data.csv",
                     "load_into_session": True,
                     "idempotency_key": "run_001_source",
                 },
@@ -220,6 +251,13 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                     "action": "fork",
                     "session_id": "<session_id_from_previous_run>",
                     "run_id": "second_pass_001",
+                },
+            },
+            {
+                "tool": "manage_session",
+                "arguments": {
+                    "action": "clear",
+                    "session_id": "<session_id_to_evict>",
                 },
             },
         ],
@@ -299,6 +337,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
 
 
 def agent_playbook_payload() -> dict:
+    stdio = _is_stdio_mode()
     trusted_history = _trusted_history_enabled()
     offset = 1 if trusted_history else 0
     return {
@@ -307,11 +346,16 @@ def agent_playbook_payload() -> dict:
         "goal": "Audit, clean, and certify a dataset with controlled user-editable configs.",
         "prerequisites": [
             "Canonical input_id from upload/register flow (preferred) or existing session_id",
-            "If no input_id exists yet: a gs:// URI or server-visible path for register_input, or use upload_input to push base64-encoded file content through MCP",
+            (
+                "In stdio/local mode the server shares your filesystem — use register_input with absolute local paths directly"
+                if stdio
+                else "If no input_id exists yet: a gs:// URI or server-visible path for register_input, or use upload_input to push base64-encoded file content through MCP"
+            ),
             "Stable run_id used across calls",
             "Optional output bucket/prefix overrides",
             "Optional runtime overlay for cross-cutting execution control",
             "Use manage_session(action='fork') to start a new run context from an existing session without re-downloading data or re-running infer_configs",
+            "Use manage_session(action='clear') to evict a session and free memory when done, or omit session_id to clear all",
         ],
         "ordered_steps": (
             [
@@ -347,11 +391,18 @@ def agent_playbook_payload() -> dict:
                 "tool": "register_input",
                 "required_inputs": ["uri"],
                 "outputs": ["input_id", "session_id?", "summary"],
-                "notes": [
-                    "Use this when data already lives at gs:// or a server-visible path.",
-                    "If the user has a local file that is not server-visible, use the upload_input MCP tool instead.",
-                    "If register_input fails with INPUT_PATH_DENIED, switch to upload_input.",
-                ],
+                "notes": (
+                    [
+                        "In stdio/local mode, the server can read your filesystem directly — use local absolute paths.",
+                        "Also works with gs:// URIs for cloud-hosted data.",
+                    ]
+                    if stdio
+                    else [
+                        "Use this when data already lives at gs:// or a server-visible path.",
+                        "If the user has a local file that is not server-visible, use the upload_input MCP tool instead.",
+                        "If register_input fails with INPUT_PATH_DENIED, switch to upload_input.",
+                    ]
+                ),
                 "next": [offset + 2],
             },
             {

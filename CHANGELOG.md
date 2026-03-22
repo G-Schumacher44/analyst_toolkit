@@ -19,15 +19,28 @@ Format:
 
 ### Added
 
-- None.
+- Add `upload_input` MCP tool for base64 file ingestion through MCP transport (#110).
+- Add `read_artifact` MCP tool for retrieving artifact content through MCP (#110).
+- Add `manage_session(action="clear")` to evict one or all sessions on demand.
+- Add configurable session store guardrails: `ANALYST_MCP_SESSION_TTL_SEC` (default 3600) and `ANALYST_MCP_SESSION_MAX_ENTRIES` (default 32) with LRU eviction.
+- Add `next_actions` hints to `INPUT_PATH_DENIED` and `INPUT_INVALID_BASE64` errors to guide agents toward upload alternatives.
+- Add `runtime.destinations.local.enabled` and `runtime.destinations.local.root` to all agent-facing resources.
+- Add truncation detection for base64 payloads with HTTP curl fallback in error guidance.
+- Add stdio-aware input ingest guidance — resources now recommend `register_input` with local paths in stdio/local mode.
 
 ### Changed
 
-- None.
+- Rename `read_artifact` response field `content` → `artifact_content` to avoid MCP protocol collision.
+- Restrict `read_artifact` CWD access to stdio mode only; HTTP mode is limited to artifact root.
+- Update quickstart, playbook, and capability catalog to document `manage_session(action="clear")`.
+- Update input ingest decision tree with size-based split (MCP <100KB, HTTP curl for larger).
+- Redact allowed input roots from client error messages by default (`ANALYST_MCP_DISCLOSE_INPUT_ROOTS`).
 
 ### Fixed
 
-- None.
+- Fix doubled `exports/exports/` path for relative artifact paths in destination routing.
+- Fix artifact server advertising `http://0.0.0.0:...` instead of `http://127.0.0.1:...` in URLs.
+- Fix docker-compose to forward artifact server port 8765 and bind to 0.0.0.0 inside container.
 
 ### Deprecated
 
