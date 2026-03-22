@@ -51,7 +51,9 @@ def apply_imputation(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.D
             elif strategy == "median":
                 fill_value = df_imputed[column].median()
             elif strategy == "mode":
-                fill_value = df_imputed[column].mode()[0]
+                mode_values = df_imputed[column].mode(dropna=True)
+                if not mode_values.empty:
+                    fill_value = mode_values.iloc[0]
             elif strategy == "constant":
                 fill_value = spec.get("value") if isinstance(spec, dict) else None
             elif strategy == "none":

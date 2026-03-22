@@ -43,10 +43,31 @@ def _apply_final_edits(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd
 
     dtype_map = config.get("coerce_dtypes", {})
     if dtype_map:
-        df_out = df_out.astype(dtype_map)
-        changelog.append(
-            {"Action": "coerce_dtypes", "Details": f"Changed types for {len(dtype_map)} columns"}
-        )
+        coerced_columns = []
+        failed_columns = []
+        for column, dtype in dtype_map.items():
+            if column not in df_out.columns:
+                failed_columns.append(f"{column} (missing)")
+                continue
+            try:
+                df_out[column] = df_out[column].astype(dtype)
+                coerced_columns.append(column)
+            except (TypeError, ValueError) as exc:
+                failed_columns.append(f"{column} ({dtype}): {exc}")
+        if coerced_columns:
+            changelog.append(
+                {
+                    "Action": "coerce_dtypes",
+                    "Details": f"Changed types for {len(coerced_columns)} columns",
+                }
+            )
+        if failed_columns:
+            changelog.append(
+                {
+                    "Action": "coerce_dtypes_failed",
+                    "Details": "; ".join(failed_columns),
+                }
+            )
 
     return df_out, pd.DataFrame(changelog)
 
