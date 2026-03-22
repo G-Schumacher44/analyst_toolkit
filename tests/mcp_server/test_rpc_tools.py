@@ -496,6 +496,48 @@ async def test_toolkit_get_pipeline_dashboard_uses_session_specific_artifact_pat
 
 
 @pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_does_not_append_duplicate_history_on_retry(mocker):
+    history = [
+        {
+            "module": "pipeline_dashboard",
+            "status": "pass",
+            "session_id": "",
+            "artifact_path": "exports/reports/pipeline/run-pipeline-001_pipeline_dashboard.html",
+            "artifact_url": "https://example.com/pipeline.html",
+            "summary": {"health_score": 95},
+        }
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/run-pipeline-001_pipeline_dashboard.html",
+    )
+    append_history = mocker.patch.object(cockpit_module, "append_to_run_history")
+    mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "https://example.com/pipeline.html",
+            "local_path": "/tmp/run-pipeline-001_pipeline_dashboard.html",
+            "url": "https://example.com/pipeline.html",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await cockpit_module._toolkit_get_pipeline_dashboard(run_id="run-pipeline-001")
+
+    assert result["status"] == "pass"
+    append_history.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_toolkit_get_cockpit_dashboard_builds_operator_hub(mocker):
     mocker.patch.object(cockpit_module, "_trusted_history_enabled", return_value=True)
     mocker.patch.object(

@@ -889,7 +889,9 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
     res = with_dashboard_artifact(
         res, artifact_path=artifact_path, artifact_url=artifact_url, label="Pipeline dashboard"
     )
-    append_to_run_history(run_id, res, session_id=effective_session_id or None)
+    existing_pipeline_dashboard = latest_by_module.get("pipeline_dashboard", {})
+    if not existing_pipeline_dashboard:
+        append_to_run_history(run_id, res, session_id=effective_session_id or None)
     res = with_next_actions(
         res,
         [
