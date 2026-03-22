@@ -131,7 +131,7 @@ def generate_data_profile(
     return {"for_display": profile_for_display, "for_export": profile_for_export}
 
 
-def run_data_profile(df: pd.DataFrame, config: dict = {}, **kwargs):
+def run_data_profile(df: pd.DataFrame, config: dict | None = None, **kwargs):
     """
     Orchestrates data profiling using config-driven settings.
 
@@ -143,5 +143,5 @@ def run_data_profile(df: pd.DataFrame, config: dict = {}, **kwargs):
     Returns:
         dict: Structured profile output containing display and export blocks.
     """
-    profile_cfg = config.get("profile", {})
+    profile_cfg = (config or {}).get("profile", {})
     return generate_data_profile(df, **profile_cfg.get("settings", {}))

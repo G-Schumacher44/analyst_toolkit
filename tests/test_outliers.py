@@ -41,3 +41,14 @@ def test_empty_dataframe_handling():
 
     assert results["outlier_log"].empty
     assert results["outlier_flags"].empty
+
+
+def test_outlier_flags_fill_false_for_null_rows():
+    df = pd.DataFrame({"val": [1.0, None, 2.0, 3.0, 4.0, 100.0]})
+    config = {"detection_specs": {"val": {"method": "iqr", "iqr_multiplier": 1.5}}}
+
+    results = detect_outliers(df, config)
+    flags = results["outlier_flags"]
+
+    assert list(flags.columns) == ["val_iqr_outlier"]
+    assert flags["val_iqr_outlier"].tolist() == [False, False, False, False, False, True]

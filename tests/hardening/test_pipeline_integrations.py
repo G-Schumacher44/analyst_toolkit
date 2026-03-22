@@ -1,3 +1,7 @@
+import importlib
+import inspect
+import sys
+
 import pandas as pd
 
 
@@ -38,6 +42,17 @@ def test_normalization_no_rules_returns_unchanged():
     assert changelog == {}
 
 
+def test_normalization_value_mapping_does_not_mutate_config():
+    from analyst_toolkit.m03_normalization.normalize_data import apply_normalization
+
+    df = pd.DataFrame({"status": ["ok", None]})
+    config = {"rules": {"value_mappings": {"status": {"null": "UNKNOWN", "ok": "OK"}}}}
+
+    apply_normalization(df, config)
+
+    assert config["rules"]["value_mappings"]["status"] == {"null": "UNKNOWN", "ok": "OK"}
+
+
 def test_imputation_empty_strategies_returns_unchanged():
     """Empty strategy map should be treated as no-op, not an error."""
     from analyst_toolkit.m07_imputation.run_imputation_pipeline import run_imputation_pipeline
@@ -47,6 +62,17 @@ def test_imputation_empty_strategies_returns_unchanged():
 
     out = run_imputation_pipeline(config=cfg, df=df, notebook=False, run_id="run_imp_empty")
     pd.testing.assert_frame_equal(out, df)
+
+
+def test_imputation_mode_all_nan_column_is_noop():
+    from analyst_toolkit.m07_imputation.impute_data import apply_imputation
+
+    df = pd.DataFrame({"score": [None, None, None]})
+
+    out, changelog = apply_imputation(df, {"rules": {"strategies": {"score": "mode"}}})
+
+    pd.testing.assert_frame_equal(out, df)
+    assert changelog.empty
 
 
 def test_validation_suite_passes_with_correct_schema():
@@ -125,3 +151,68 @@ def test_validation_suite_fails_categorical_violation():
     }
     results = run_validation_suite(df, config)
     assert results["categorical_values"]["passed"] is False
+
+
+def test_run_data_profile_uses_none_default_config():
+    from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
+
+    default = inspect.signature(run_data_profile).parameters["config"].default
+
+    assert default is None
+
+
+def test_run_diag_pipeline_does_not_import_plotting_stack_when_disabled(monkeypatch):
+    module_name = "analyst_toolkit.m01_diagnostics.run_diag_pipeline"
+    plotting_modules = (
+        "analyst_toolkit.m08_visuals.distributions",
+        "analyst_toolkit.m08_visuals.summary_plots",
+    )
+    for name in plotting_modules:
+        sys.modules.pop(name, None)
+    sys.modules.pop(module_name, None)
+
+    diag_module = importlib.import_module(module_name)
+    diag_module = importlib.reload(diag_module)
+
+    monkeypatch.setattr(
+        diag_module,
+        "run_data_profile",
+        lambda df, config: {
+            "for_display": {"shape": pd.DataFrame([{"Rows": len(df), "Columns": len(df.columns)}])},
+            "for_export": {"shape": pd.DataFrame([{"Rows": len(df), "Columns": len(df.columns)}])},
+        },
+    )
+    monkeypatch.setattr(diag_module, "export_dataframes", lambda *args, **kwargs: None)
+    monkeypatch.setattr(diag_module, "export_html_report", lambda *args, **kwargs: None)
+
+    df = pd.DataFrame({"value": [1, 2, 3]})
+    diag_module.run_diag_pipeline(
+        config={
+            "diagnostics": {
+                "profile": {"run": True, "settings": {"export": False}},
+                "plotting": {"run": False},
+                "logging": "off",
+            }
+        },
+        df=df,
+        notebook=False,
+        run_id="diag_no_plots",
+    )
+
+    for name in plotting_modules:
+        assert name not in sys.modules
+
+
+def test_apply_final_edits_handles_dtype_coercion_failures():
+    from analyst_toolkit.m10_final_audit.final_audit_producer import _apply_final_edits
+
+    df = pd.DataFrame({"score": ["bad", "2"], "flag": ["1", "0"]})
+
+    out, changelog = _apply_final_edits(
+        df,
+        {"coerce_dtypes": {"score": "float64", "flag": "int64"}},
+    )
+
+    assert out["flag"].dtype == "int64"
+    assert out["score"].tolist() == ["bad", "2"]
+    assert set(changelog["Action"]) == {"coerce_dtypes", "coerce_dtypes_failed"}
