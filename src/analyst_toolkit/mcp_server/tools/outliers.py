@@ -6,7 +6,11 @@ from typing import Any
 from analyst_toolkit.m05_detect_outliers.run_detection_pipeline import (
     run_outlier_detection_pipeline,
 )
-from analyst_toolkit.mcp_server.config_normalizers import normalize_outliers_config
+from analyst_toolkit.mcp_server.config_normalizers import (
+    INFER_CONFIG_REQUIRED_WARNING,
+    has_actionable_outliers_config,
+    normalize_outliers_config,
+)
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     build_artifact_contract,
@@ -138,11 +142,13 @@ async def _toolkit_outliers(
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
     plot_delivery: dict[str, dict] = {}
     status_warnings: list = []
+    advisory_warnings: list = []
     status_warnings.extend(lifecycle["warnings"])
     status_warnings.extend(runtime_warnings)
     status_warnings.extend(runtime_meta["runtime_warnings"])
+    if not has_actionable_outliers_config(base_cfg):
+        advisory_warnings.append(INFER_CONFIG_REQUIRED_WARNING)
     status_warnings.extend(export_delivery["warnings"])
-
     artifact_warnings: list = []
     # Only expect report artifacts when outliers were actually detected
     html_requested = should_export_html(config)
@@ -211,7 +217,7 @@ async def _toolkit_outliers(
         probe_local_paths=True,
     )
     artifact_warnings.extend(artifact_contract["artifact_warnings"])
-    warnings = status_warnings + artifact_warnings
+    warnings = status_warnings + advisory_warnings + artifact_warnings
     base_status = "pass" if outlier_count == 0 else "warn"
     if status_warnings and base_status == "pass":
         base_status = "warn"

@@ -257,6 +257,35 @@ async def test_toolkit_infer_configs_includes_apply_next_actions(monkeypatch, mo
 
 
 @pytest.mark.asyncio
+async def test_toolkit_infer_configs_routes_certification_to_final_audit(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "certification": "validation:\n  schema_validation:\n    run: true\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_cert_only",
+        modules=["certification"],
+    )
+
+    assert result["status"] == "pass"
+    actions = result["next_actions"]
+    assert all(action["tool"] != "certification" for action in actions)
+    assert any(action["tool"] == "final_audit" for action in actions)
+
+
+@pytest.mark.asyncio
 async def test_toolkit_infer_configs_ignores_unsupported_external_modules_kw(monkeypatch, mocker):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
 
@@ -477,9 +506,54 @@ async def test_toolkit_infer_configs_normalizes_dict_module_aliases(monkeypatch,
     assert "certification" in result["configs"]
     # outlier → outliers alias still works
     assert "outliers" in result["configs"]
+    assert "outlier_detection" in result["configs"]["outliers"]
+    assert "outlier_handling" not in result["configs"]["outliers"]
     # dups → duplicates alias still works
     assert "duplicates" in result["configs"]
     assert result["unsupported_modules"] == []
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_default_request_uses_public_module_surface(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    captured = {}
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        captured["modules"] = kwargs["modules"]
+        return {
+            "validation": "validation:\n  schema_validation:\n    run: true\n",
+            "certification": "validation:\n  schema_validation:\n    run: true\n",
+            "outliers": "outlier_detection:\n  run: true\n",
+            "diagnostics": "diagnostics:\n  run: true\n",
+            "normalization": "normalization:\n  rules: {}\n",
+            "duplicates": "duplicates:\n  subset_columns: []\n",
+            "imputation": "imputation:\n  rules: {}\n",
+            "final_audit": "final_audit:\n  certification:\n    rules: {}\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(session_id="sess_public_surface")
+
+    assert result["status"] == "pass"
+    assert set(captured["modules"]) == {
+        "certification",
+        "diagnostics",
+        "duplicates",
+        "final_audit",
+        "imputation",
+        "normalization",
+        "outliers",
+        "validation",
+    }
+    assert "handling" not in captured["modules"]
+    assert set(result["covered_modules"]) == set(captured["modules"])
 
 
 @pytest.mark.asyncio
@@ -799,6 +873,120 @@ async def test_infer_configs_gcs_path_uses_local_snapshot(monkeypatch, mocker):
 
 
 @pytest.mark.asyncio
+async def test_infer_configs_replaces_transient_final_audit_path_with_stable_input(
+    monkeypatch, mocker, tmp_path
+):
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    source_path = tmp_path / "source.csv"
+    df.to_csv(source_path, index=False)
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "final_audit": (
+                "final_audit:\n"
+                "  raw_data_path: /tmp/transient-source.csv\n"
+                "  certification:\n"
+                "    schema_validation:\n"
+                "      rules:\n"
+                "        expected_columns: [id, value]\n"
+            )
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        gcs_path=str(source_path),
+    )
+
+    assert result["status"] == "pass"
+    assert "/tmp/transient-source.csv" not in result["configs"]["final_audit"]
+    assert str(source_path) in result["configs"]["final_audit"]
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_strips_temp_paths_from_generated_yaml(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        temp_input_path = kwargs["input_path"]
+        return {
+            "validation": (
+                "validation:\n"
+                f"  input_path: {temp_input_path}\n"
+                "  schema_validation:\n"
+                "    run: true\n"
+            ),
+            "final_audit": (
+                "final_audit:\n"
+                f"  raw_data_path: {temp_input_path}\n"
+                f"  input_path: {temp_input_path}\n"
+                f"  input_df_path: {temp_input_path}\n"
+                "  certification:\n"
+                "    schema_validation:\n"
+                "      rules:\n"
+                "        expected_columns: [id, value]\n"
+            ),
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_strip_paths",
+        modules=["validation", "final_audit"],
+    )
+
+    assert result["status"] == "pass"
+    final_yaml = result["configs"]["final_audit"]
+    assert "/tmp/" not in final_yaml
+    assert "input_df_path" not in final_yaml
+    assert "raw_data_path" not in final_yaml
+    validation_yaml = result["configs"]["validation"]
+    assert "/tmp/" not in validation_yaml
+    assert "input_path" not in validation_yaml
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_ignores_internal_handling_output(monkeypatch, mocker):
+    df = pd.DataFrame({"id": [1, 2], "value": [1.0, 2.0]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "outliers": "outlier_detection:\n  detection_specs:\n    value:\n      method: iqr\n",
+            "handling": "outlier_handling:\n  handling_specs:\n    value:\n      strategy: median\n",
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_outlier_contract",
+        modules=["outliers"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["covered_modules"] == ["outliers"]
+    assert "outlier_detection" in result["configs"]["outliers"]
+    assert "outlier_handling" not in result["configs"]["outliers"]
+
+
+@pytest.mark.asyncio
 async def test_infer_configs_surfaces_covered_and_unsupported_modules(monkeypatch, mocker):
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
 
@@ -868,6 +1056,7 @@ async def test_infer_configs_reports_unsupported_when_partial(monkeypatch, mocke
     assert result["covered_modules"] == ["outliers", "validation"]
     assert result["unsupported_modules"] == ["normalization"]
     assert any("not generated for" in w for w in result["warnings"])
+    assert any("partial MCP workflow coverage" in w for w in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -898,6 +1087,40 @@ async def test_infer_configs_aliased_requests_resolve_before_unsupported_check(m
     assert "outliers" in result["configs"]
     # handling resolves to outliers, certification is its own module — neither unsupported
     assert result["unsupported_modules"] == []
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_routes_certification_next_action_through_final_audit(
+    monkeypatch, mocker
+):
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "certification": (
+                "validation:\n"
+                "  schema_validation:\n"
+                "    rules:\n"
+                "      expected_columns: [id, name]\n"
+            )
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_cert_next_action",
+        modules=["certification"],
+    )
+
+    assert result["status"] == "pass"
+    tools = [action["tool"] for action in result["next_actions"]]
+    assert "certification" not in tools
+    assert "final_audit" in tools
 
 
 @pytest.mark.asyncio
@@ -1031,6 +1254,7 @@ async def test_normalization_disabled_html_when_no_changes(mocker):
     assert result["artifact_matrix"]["html_report"]["expected"] is False
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
+    assert any("Run infer_configs first" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -1073,6 +1297,7 @@ async def test_imputation_disabled_html_when_no_nulls_filled(mocker):
     assert result["artifact_matrix"]["html_report"]["expected"] is False
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
+    assert any("Run infer_configs first" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -1115,6 +1340,7 @@ async def test_outliers_disabled_html_when_no_outliers(mocker):
     assert result["artifact_matrix"]["html_report"]["expected"] is False
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
+    assert any("Run infer_configs first" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -1142,6 +1368,32 @@ async def test_toolkit_validation_runtime_can_disable_html_artifacts(mocker):
     assert result["runtime_applied"] is True
     assert result["artifact_path"] == ""
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_validation_warns_without_inferred_or_explicit_config(mocker):
+    df = pd.DataFrame({"value": [1, 2]})
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(validation_tool, "save_to_session", return_value="sess_val")
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=df)
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(validation_tool, "should_export_html", return_value=False)
+    mocker.patch.object(
+        validation_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+
+    result = await validation_tool._toolkit_validation(
+        session_id="sess_val",
+        run_id="val_missing_config",
+        config={},
+    )
+
+    assert any("Run infer_configs first" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -1178,6 +1430,27 @@ async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
     assert captured["input_path"] == "gs://bucket/dup.csv"
     assert captured["input_id"] is None
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_toolkit_duplicates_warns_without_inferred_or_explicit_config(mocker):
+    df = pd.DataFrame({"id": [1, 2], "value": [10, 20]})
+
+    mocker.patch.object(duplicates_tool, "load_input", return_value=df)
+    mocker.patch.object(duplicates_tool, "run_duplicates_pipeline", return_value=df)
+    mocker.patch.object(duplicates_tool, "save_to_session", return_value="sess_dup")
+    mocker.patch.object(duplicates_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(duplicates_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(duplicates_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(duplicates_tool, "should_export_html", return_value=False)
+
+    result = await duplicates_tool._toolkit_duplicates(
+        session_id="sess_dup",
+        run_id="dup_missing_config",
+        config={},
+    )
+
+    assert any("Run infer_configs first" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio

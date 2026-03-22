@@ -8,6 +8,10 @@ import pandas as pd
 from analyst_toolkit.m07_imputation.run_imputation_pipeline import (
     run_imputation_pipeline,
 )
+from analyst_toolkit.mcp_server.config_normalizers import (
+    INFER_CONFIG_REQUIRED_WARNING,
+    has_actionable_imputation_config,
+)
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     build_artifact_contract,
@@ -144,11 +148,13 @@ async def _toolkit_imputation(
     plot_delivery: dict[str, dict] = {}
 
     status_warnings: list = []
+    advisory_warnings: list = []
     status_warnings.extend(lifecycle["warnings"])
     status_warnings.extend(runtime_warnings)
     status_warnings.extend(runtime_meta["runtime_warnings"])
+    if not has_actionable_imputation_config(base_cfg):
+        advisory_warnings.append(INFER_CONFIG_REQUIRED_WARNING)
     status_warnings.extend(export_delivery["warnings"])
-
     artifact_warnings: list = []
 
     # Only expect report artifacts when imputation actually filled nulls
@@ -217,7 +223,7 @@ async def _toolkit_imputation(
         probe_local_paths=True,
     )
     artifact_warnings.extend(artifact_contract["artifact_warnings"])
-    warnings = status_warnings + artifact_warnings
+    warnings = status_warnings + advisory_warnings + artifact_warnings
     base_status = "warn" if status_warnings else "pass"
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]

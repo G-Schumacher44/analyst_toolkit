@@ -4,10 +4,12 @@ import inspect
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor
+from analyst_toolkit.mcp_server.input.registry import get_session_input_id
 from analyst_toolkit.mcp_server.io import (
     load_input,
     resolve_run_context,
@@ -32,12 +34,14 @@ _SUPPORTED_INFER_MODULES = {
     "final_audit",
 }
 
-_INFER_MODULE_ALIASES = {
+_REQUEST_MODULE_ALIASES = {
     "dups": "duplicates",
     "duplicate": "duplicates",
     "outlier": "outliers",
     "handling": "outliers",
+    "outlier_handling": "outliers",
 }
+_TRANSIENT_PATH_KEYS = ("raw_data_path", "input_path", "input_df_path")
 
 
 def _call_external_infer_configs(
@@ -88,8 +92,7 @@ def _module_name_from_generated_file(path: Path) -> str | None:
             stem = stem[: -len(suffix)]
             break
 
-    normalized = _INFER_MODULE_ALIASES.get(stem, stem)
-    return normalized if normalized in _SUPPORTED_INFER_MODULES else None
+    return stem if stem in _SUPPORTED_INFER_MODULES else None
 
 
 def _module_name_from_generated_yaml(raw_yaml: str) -> str | None:
@@ -102,7 +105,9 @@ def _module_name_from_generated_yaml(raw_yaml: str) -> str | None:
     for key in loaded:
         if not isinstance(key, str):
             continue
-        module_name = _module_name_from_generated_file(Path(f"{key}.yaml"))
+        module_name = key if key in _SUPPORTED_INFER_MODULES else None
+        if module_name is None and key == "outlier_detection":
+            module_name = "outliers"
         if module_name is not None:
             return module_name
     return None
@@ -120,10 +125,114 @@ def _trusted_generated_config_root() -> Path:
     return (Path.cwd() / "config").resolve()
 
 
+def _normalize_requested_modules(modules: list[str] | None) -> list[str] | None:
+    if modules is None:
+        return sorted(_SUPPORTED_INFER_MODULES)
+
+    normalized: list[str] = []
+    for module in modules:
+        candidate = _REQUEST_MODULE_ALIASES.get(module, module)
+        if candidate in _SUPPORTED_INFER_MODULES and candidate not in normalized:
+            normalized.append(candidate)
+    return normalized
+
+
+def _replace_transient_paths(
+    value: Any,
+    *,
+    stable_input_path: str | None,
+    temp_input_path: str,
+) -> Any:
+    temp_dir = tempfile.gettempdir()
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, child in value.items():
+            cleaned_child = _replace_transient_paths(
+                child,
+                stable_input_path=stable_input_path,
+                temp_input_path=temp_input_path,
+            )
+            if key in _TRANSIENT_PATH_KEYS and isinstance(child, str):
+                child_path = child.strip()
+                is_temp_snapshot = child_path == temp_input_path
+                is_ephemeral_tmp = child_path.startswith("/tmp/") or child_path.startswith(
+                    temp_dir + os.sep
+                )
+                if is_temp_snapshot or is_ephemeral_tmp:
+                    if key in {"raw_data_path", "input_path"} and stable_input_path:
+                        cleaned[key] = stable_input_path
+                    continue
+            if cleaned_child is not None:
+                cleaned[key] = cleaned_child
+        if "outlier_handling" in cleaned and "outlier_detection" not in cleaned:
+            cleaned["outlier_detection"] = cleaned.pop("outlier_handling")
+        return cleaned
+    if isinstance(value, list):
+        return [
+            item
+            for item in (
+                _replace_transient_paths(
+                    child,
+                    stable_input_path=stable_input_path,
+                    temp_input_path=temp_input_path,
+                )
+                for child in value
+            )
+            if item is not None
+        ]
+    return value
+
+
+def _sanitize_generated_yaml(
+    raw_yaml: str,
+    *,
+    stable_input_path: str | None,
+    temp_input_path: str,
+) -> str:
+    try:
+        loaded = yaml.safe_load(raw_yaml)
+    except yaml.YAMLError:
+        return raw_yaml
+    if not isinstance(loaded, dict):
+        return raw_yaml
+    sanitized = _replace_transient_paths(
+        loaded,
+        stable_input_path=stable_input_path,
+        temp_input_path=temp_input_path,
+    )
+    return yaml.safe_dump(sanitized, sort_keys=False, allow_unicode=True)
+
+
+def _stable_input_path(
+    *,
+    gcs_path: str | None,
+    input_id: str | None,
+    descriptor,
+    session_id: str | None,
+) -> str | None:
+    if gcs_path and Path(gcs_path).exists():
+        return gcs_path
+    if descriptor and descriptor.source_type != "gcs":
+        resolved = descriptor.resolved_reference
+        if resolved and Path(resolved).exists():
+            return resolved
+    if session_id:
+        bound_input_id = get_session_input_id(session_id)
+        if bound_input_id:
+            bound_descriptor = get_input_descriptor(bound_input_id)
+            if bound_descriptor and bound_descriptor.source_type != "gcs":
+                resolved = bound_descriptor.resolved_reference
+                if resolved and Path(resolved).exists():
+                    return resolved
+    return None
+
+
 def _normalize_external_configs_result(
     configs_result,
     *,
     trusted_config_root: Path,
+    stable_input_path: str | None,
+    temp_input_path: str,
 ) -> tuple[dict[str, str], list[str], str | None]:
     """Normalize external infer_configs output into module->yaml mapping."""
     if isinstance(configs_result, dict):
@@ -138,7 +247,11 @@ def _normalize_external_configs_result(
             if module_name is None:
                 warnings.append(f"Ignored unsupported inferred module key: {module}.")
                 continue
-            normalized[module_name] = str(config_yaml)
+            normalized[module_name] = _sanitize_generated_yaml(
+                str(config_yaml),
+                stable_input_path=stable_input_path,
+                temp_input_path=temp_input_path,
+            )
         return normalized, warnings, None
 
     if isinstance(configs_result, str):
@@ -171,7 +284,11 @@ def _normalize_external_configs_result(
             ) or _module_name_from_generated_file(resolved_path)
             if module_name is None:
                 continue
-            configs[module_name] = raw_yaml
+            configs[module_name] = _sanitize_generated_yaml(
+                raw_yaml,
+                stable_input_path=stable_input_path,
+                temp_input_path=temp_input_path,
+            )
 
         warnings = []
         if not configs:
@@ -242,10 +359,13 @@ async def _toolkit_infer_configs(
         }
 
     # Resolve session_id from input descriptor if not provided
+    descriptor = None
     if not session_id and input_id:
         descriptor = get_input_descriptor(input_id)
         if descriptor and descriptor.session_id:
             session_id = descriptor.session_id
+    elif input_id:
+        descriptor = get_input_descriptor(input_id)
 
     # If we still don't have a session, start one
     if not session_id:
@@ -257,6 +377,13 @@ async def _toolkit_infer_configs(
     df.to_csv(temp_file.name, index=False)
     input_path = temp_file.name
     trusted_config_root = _trusted_generated_config_root()
+    stable_input_path = _stable_input_path(
+        gcs_path=gcs_path,
+        input_id=input_id,
+        descriptor=descriptor,
+        session_id=session_id,
+    )
+    normalized_modules = _normalize_requested_modules(modules)
 
     try:
         try:
@@ -282,12 +409,14 @@ async def _toolkit_infer_configs(
             infer_configs,
             input_path=input_path,
             options=options,
-            modules=modules,
+            modules=normalized_modules,
             sample_rows=sample_rows,
         )
         configs, normalization_warnings, generated_config_dir = _normalize_external_configs_result(
             raw_configs,
             trusted_config_root=trusted_config_root,
+            stable_input_path=stable_input_path,
+            temp_input_path=input_path,
         )
         external_warnings.extend(normalization_warnings)
     finally:
@@ -305,22 +434,35 @@ async def _toolkit_infer_configs(
         "outliers",
         "imputation",
         "validation",
-        "certification",
         "final_audit",
     ]
-    apply_actions = [
-        next_action(
-            module,
-            f"Apply inferred config for {module}.",
-            {
-                "session_id": session_id,
-                "run_id": "<set_run_id>",
-                "config": f"<configs.{module}>",
-            },
+    apply_actions = []
+    for module in module_order:
+        if module not in configs:
+            continue
+        params = {"session_id": session_id, "run_id": "<set_run_id>"}
+        if module == "final_audit":
+            params["config"] = f"<configs.{module}>"
+        else:
+            params["config"] = f"<configs.{module}>"
+        apply_actions.append(
+            next_action(
+                module,
+                f"Apply inferred config for {module}.",
+                params,
+            )
         )
-        for module in module_order
-        if module in configs
-    ]
+    if "certification" in configs and "final_audit" not in configs:
+        apply_actions.append(
+            next_action(
+                "final_audit",
+                "Apply inferred certification rules through final_audit.",
+                {
+                    "session_id": session_id,
+                    "run_id": "<set_run_id>",
+                },
+            )
+        )
 
     capability_action = next_action(
         "get_capability_catalog",
@@ -341,14 +483,18 @@ async def _toolkit_infer_configs(
         next_steps = apply_actions + [capability_action]
 
     covered_modules = sorted(configs.keys())
-    if modules:
-        normalized_requested = {_INFER_MODULE_ALIASES.get(m, m) for m in modules}
+    if normalized_modules:
+        normalized_requested = set(normalized_modules)
     else:
         normalized_requested = set(_SUPPORTED_INFER_MODULES)
     unsupported_modules = sorted(normalized_requested - set(covered_modules))
     if unsupported_modules:
         external_warnings.append(
             f"Configs were not generated for: {', '.join(unsupported_modules)}."
+        )
+        external_warnings.append(
+            "infer_configs returned partial MCP workflow coverage. Review covered_modules and "
+            "unsupported_modules before running downstream tools."
         )
 
     return with_next_actions(
@@ -397,8 +543,10 @@ _INPUT_SCHEMA = {
             "items": {"type": "string"},
             "description": (
                 "Module names to generate configs for. Defaults to all. "
-                "Valid: validation, certification, outliers, diagnostics, "
-                "normalization, duplicates, handling, imputation, final_audit."
+                "Valid public modules: validation, certification, outliers, diagnostics, "
+                "normalization, duplicates, imputation, final_audit. Legacy aliases such as "
+                "duplicate, dups, outlier, and handling normalize to the public module names. "
+                "Certification is inferred-only and should be applied through final_audit."
             ),
         },
         "sample_rows": {

@@ -5,6 +5,10 @@ config_normalizers.py — Shared config normalization helpers for MCP tools.
 from copy import deepcopy
 from typing import Any
 
+INFER_CONFIG_REQUIRED_WARNING = (
+    "No inferred or explicit config found. Run infer_configs first for meaningful results."
+)
+
 
 def normalize_validation_config(config: dict[str, Any]) -> dict[str, Any]:
     """
@@ -170,3 +174,65 @@ def normalize_module_config(module_name: str, config: dict[str, Any]) -> dict[st
         return deepcopy(config[module_name])
 
     return deepcopy(config)
+
+
+def has_actionable_validation_config(config: dict[str, Any]) -> bool:
+    """Return True when validation rules contain at least one meaningful constraint."""
+    normalized = normalize_validation_config(config)
+    schema_cfg = normalized.get("schema_validation", {})
+    if not isinstance(schema_cfg, dict):
+        return False
+    rules = schema_cfg.get("rules", {})
+    if not isinstance(rules, dict):
+        return False
+    return any(
+        bool(rules.get(key))
+        for key in (
+            "expected_columns",
+            "expected_types",
+            "categorical_values",
+            "numeric_ranges",
+            "disallowed_null_columns",
+        )
+    )
+
+
+def has_actionable_normalization_config(config: dict[str, Any]) -> bool:
+    """Return True when normalization contains at least one transformation rule."""
+    if "normalization" in config and isinstance(config.get("normalization"), dict):
+        normalized = deepcopy(config["normalization"])
+    else:
+        normalized = deepcopy(config)
+    if not isinstance(normalized, dict):
+        return False
+    rules = normalized.get("rules", {})
+    return isinstance(rules, dict) and any(bool(value) for value in rules.values())
+
+
+def has_actionable_imputation_config(config: dict[str, Any]) -> bool:
+    """Return True when imputation contains at least one executable strategy or rule."""
+    if "imputation" in config and isinstance(config.get("imputation"), dict):
+        normalized = deepcopy(config["imputation"])
+    else:
+        normalized = deepcopy(config)
+    if not isinstance(normalized, dict):
+        return False
+    rules = normalized.get("rules", {})
+    if not isinstance(rules, dict):
+        return False
+    strategies = rules.get("strategies", {})
+    if isinstance(strategies, dict) and any(bool(value) for value in strategies.values()):
+        return True
+    return any(bool(value) for key, value in rules.items() if key != "strategies")
+
+
+def has_actionable_outliers_config(config: dict[str, Any]) -> bool:
+    """Return True when outlier detection contains at least one detection spec."""
+    if "outlier_detection" in config and isinstance(config.get("outlier_detection"), dict):
+        normalized = normalize_outliers_config(config["outlier_detection"])
+    else:
+        normalized = normalize_outliers_config(config)
+    detection_specs = normalized.get("detection_specs", {})
+    return isinstance(detection_specs, dict) and any(
+        bool(spec) for spec in detection_specs.values()
+    )
