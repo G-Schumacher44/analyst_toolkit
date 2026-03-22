@@ -399,7 +399,7 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
     assert result["summary"]["failed_modules"] == 1
     assert result["summary"]["warned_modules"] == 1
     assert result["summary"]["ready_modules"] == 1
-    assert result["summary"]["not_run_modules"] == 6
+    assert result["summary"]["not_run_modules"] == 5
     export_html.assert_called_once_with(
         mocker.ANY,
         "exports/reports/pipeline/run-pipeline-001_pipeline_dashboard.html",
@@ -418,6 +418,51 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
         mocker.ANY,
         session_id=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_hides_internal_outlier_handling_stage(mocker):
+    history = [
+        {
+            "module": "outlier_handling",
+            "status": "pass",
+            "session_id": "sess_pipeline",
+            "summary": {"handled_rows": 5},
+        }
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    captured_report: dict[str, object] = {}
+
+    def fake_export_html(report, artifact_path, title, safe_run_id):
+        captured_report["report"] = report
+        return "/tmp/internal-filtered_pipeline_dashboard.html"
+
+    mocker.patch.object(cockpit_module, "export_html_report", side_effect=fake_export_html)
+    mocker.patch.object(cockpit_module, "append_to_run_history")
+    mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "",
+            "local_path": "/tmp/internal-filtered_pipeline_dashboard.html",
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await cockpit_module._toolkit_get_pipeline_dashboard(run_id="run-pipeline-002")
+
+    assert result["status"] == "pass"
+    report = captured_report["report"]
+    assert isinstance(report, dict)
+    assert "Outlier Handling" not in report["module_order"]
+    assert "Outlier Handling" not in report["modules"]
 
 
 @pytest.mark.asyncio

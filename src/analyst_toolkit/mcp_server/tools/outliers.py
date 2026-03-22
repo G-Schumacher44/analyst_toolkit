@@ -81,13 +81,14 @@ async def _toolkit_outliers(
     df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     base_cfg = normalize_outliers_config(config.get("outlier_detection", config))
+    plotting_requested = bool(config.get("plotting", {}).get("run", True))
 
     # Build a module config that ensures plotting and export are on
     module_cfg = {
         "outlier_detection": {
             **base_cfg,
             "logging": "off",
-            "plotting": {"run": True},
+            "plotting": {"run": plotting_requested},
             "export": {"run": True, "export_html": should_export_html(config)},
         }
     }
@@ -153,6 +154,17 @@ async def _toolkit_outliers(
     # Only expect report artifacts when outliers were actually detected
     html_requested = should_export_html(config)
     expect_reports = html_requested and outlier_count > 0
+    runtime_artifacts = runtime_cfg.get("artifacts", {}) if isinstance(runtime_cfg, dict) else {}
+    if runtime_artifacts.get("export_html") is True and not expect_reports:
+        artifact_warnings.append(
+            "runtime.artifacts.export_html=true requested report artifacts, but outlier "
+            "detection found no outliers so HTML/XLSX outputs were disabled."
+        )
+    if runtime_artifacts.get("plotting") is True and not expect_reports:
+        artifact_warnings.append(
+            "runtime.artifacts.plotting=true requested plot artifacts, but outlier detection "
+            "found no outliers so plots were disabled."
+        )
 
     if expect_reports:
         # Path where the pipeline runner saves its report
@@ -212,7 +224,7 @@ async def _toolkit_outliers(
         plot_urls=plot_urls,
         expect_html=expect_reports,
         expect_xlsx=expect_reports,
-        expect_plots=expect_reports,
+        expect_plots=expect_reports and plotting_requested,
         required_html=False,
         probe_local_paths=True,
     )

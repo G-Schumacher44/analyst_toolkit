@@ -284,6 +284,7 @@ async def _toolkit_final_audit(
     )
     xlsx_url = xlsx_delivery["url"]
     warnings.extend(xlsx_delivery["warnings"])
+    xlsx_expected = bool(xlsx_delivery.get("local_path")) or Path(xlsx_path).exists()
 
     cert_cfg = base_cfg.get("certification", {})
     schema_cfg = cert_cfg.get("schema_validation", {})
@@ -331,7 +332,7 @@ async def _toolkit_final_audit(
         xlsx_path=xlsx_delivery["local_path"],
         xlsx_url=xlsx_url,
         expect_html=True,
-        expect_xlsx=True,
+        expect_xlsx=xlsx_expected,
         required_html=True,
         probe_local_paths=True,
     )

@@ -236,6 +236,10 @@ async def _run_auto_heal_pipeline(
 
     final_export_url = imp_res.get("export_url") or norm_res.get("export_url", "")
     final_export_path = ""
+    child_plot_urls = imp_res.get("plot_urls") or norm_res.get("plot_urls", {})
+    child_plot_matrix = imp_res.get("artifact_matrix", {}).get("plots", {}) or norm_res.get(
+        "artifact_matrix", {}
+    ).get("plots", {})
     for child in (imp_res, norm_res):
         if child.get("export_url"):
             matrix = child.get("artifact_matrix", {})
@@ -247,7 +251,9 @@ async def _run_auto_heal_pipeline(
         export_path=final_export_path,
         artifact_path=artifact_path,
         artifact_url=artifact_url,
+        plot_urls=child_plot_urls,
         expect_html=export_html,
+        expect_plots=bool(child_plot_matrix.get("expected")) or bool(child_plot_urls),
         required_html=False,
         probe_local_paths=True,
     )
@@ -263,7 +269,7 @@ async def _run_auto_heal_pipeline(
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
         "export_url": final_export_url,
-        "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
+        "plot_urls": child_plot_urls,
         "failed_steps": failed_steps,
         "destination_delivery": {
             "html_report": compact_destination_metadata(artifact_delivery["destinations"]),
