@@ -112,7 +112,8 @@ def build_data_health_report(
 
     for entry in history:
         module = entry.get("module")
-        summary = entry.get("summary", {})
+        summary_raw = entry.get("summary", {})
+        summary = summary_raw if isinstance(summary_raw, dict) else {}
         row_count = summary.get("row_count")
 
         if module == "diagnostics":
@@ -129,7 +130,10 @@ def build_data_health_report(
     score_res = calculate_health_score(metrics)
     final_audit_entry = _latest_module_entry(history, "final_audit")
     final_audit_status = str(final_audit_entry.get("status", "not_run") or "not_run")
-    final_audit_summary = final_audit_entry.get("summary", {})
+    final_audit_summary_raw = final_audit_entry.get("summary", {})
+    final_audit_summary = (
+        final_audit_summary_raw if isinstance(final_audit_summary_raw, dict) else {}
+    )
     final_audit_passed = (
         final_audit_summary.get("passed")
         if isinstance(final_audit_summary.get("passed"), bool)

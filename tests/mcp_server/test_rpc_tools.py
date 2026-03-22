@@ -498,6 +498,26 @@ def test_build_data_health_report_marks_failed_final_audit_as_advisory():
     assert any("final_audit reported certification failures" in msg for msg in health["warnings"])
 
 
+def test_build_data_health_report_tolerates_malformed_final_audit_summary():
+    health = cockpit_module.build_data_health_report(
+        run_id="run-health-002",
+        session_id="sess-health-002",
+        history=[
+            {
+                "module": "final_audit",
+                "status": "fail",
+                "summary": ["unexpected", "shape"],
+            }
+        ],
+        history_meta={"parse_errors": [], "skipped_records": 0},
+    )
+
+    assert health["status"] == "warn"
+    assert health["health_advisory"] is True
+    assert health["certification_status"] == "fail"
+    assert health["certification_passed"] is None
+
+
 @pytest.mark.asyncio
 async def test_toolkit_get_pipeline_dashboard_surfaces_advisory_health_when_final_audit_failed(
     mocker,
