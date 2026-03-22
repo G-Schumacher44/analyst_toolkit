@@ -4,6 +4,15 @@ from typing import Any
 
 from analyst_toolkit.m00_utils.scoring import calculate_health_score
 
+_CERT_FAILURE_STATUSES = {"fail", "error"}
+
+
+def _latest_module_entry(history: list[dict[str, Any]], module_name: str) -> dict[str, Any]:
+    for entry in reversed(history):
+        if str(entry.get("module", "")).strip() == module_name:
+            return entry
+    return {}
+
 
 def build_run_history_result(
     *,
@@ -118,15 +127,43 @@ def build_data_health_report(
             metrics["outlier_ratio"] = count / row_count if row_count else min(0.2, count / 1000)
 
     score_res = calculate_health_score(metrics)
-    status = "warn" if history_meta.get("parse_errors") else "pass"
+    final_audit_entry = _latest_module_entry(history, "final_audit")
+    final_audit_status = str(final_audit_entry.get("status", "not_run") or "not_run")
+    final_audit_summary = final_audit_entry.get("summary", {})
+    final_audit_passed = (
+        final_audit_summary.get("passed")
+        if isinstance(final_audit_summary.get("passed"), bool)
+        else None
+    )
+    health_advisory = bool(
+        final_audit_entry
+        and (final_audit_status.lower() in _CERT_FAILURE_STATUSES or final_audit_passed is False)
+    )
+    warnings: list[str] = []
+    message = (
+        f"Data Health Score is {score_res['overall_score']}/100 ({score_res['status'].upper()})"
+    )
+    if health_advisory:
+        warnings.append(
+            "Health score is advisory only because final_audit reported certification failures."
+        )
+        message = (
+            f"Advisory Data Health Score is {score_res['overall_score']}/100 "
+            f"({score_res['status'].upper()}). Final audit failed certification for this run."
+        )
+    status = "warn" if history_meta.get("parse_errors") or health_advisory else "pass"
     return {
         "status": status,
         "run_id": run_id,
         "session_id": session_id,
         "health_score": score_res["overall_score"],
         "health_status": score_res["status"],
+        "health_advisory": health_advisory,
+        "certification_status": final_audit_status,
+        "certification_passed": final_audit_passed,
         "breakdown": score_res["breakdown"],
-        "message": f"Data Health Score is {score_res['overall_score']}/100 ({score_res['status'].upper()})",
+        "message": message,
+        "warnings": warnings,
         "skipped_records": int(history_meta.get("skipped_records", 0)),
         "parse_errors": list(history_meta.get("parse_errors", [])),
     }

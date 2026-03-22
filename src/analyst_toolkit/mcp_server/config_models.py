@@ -41,6 +41,10 @@ class NormalizationRules(BaseModel):
     parse_datetimes: Dict[str, Any] = Field(
         default_factory=dict, description="Datetime parsing rules."
     )
+    preview_columns: List[str] = Field(
+        default_factory=list,
+        description="Optional columns to highlight in normalization report previews.",
+    )
     coerce_dtypes: Dict[str, str] = Field(
         default_factory=dict, description="Final type coercion mapping."
     )
@@ -148,6 +152,10 @@ class FinalAuditConfig(BaseModel):
     """
 
     run: bool = Field(True, description="Master final_audit toggle.")
+    input_df_path: Optional[str] = Field(
+        None,
+        description="Optional cleaned input path used by final_audit pipeline wrappers.",
+    )
     raw_data_path: Optional[str] = Field(
         None,
         description="Optional path to raw source data for before/after reporting.",

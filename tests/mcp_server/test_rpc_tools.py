@@ -465,6 +465,83 @@ async def test_toolkit_get_pipeline_dashboard_hides_internal_outlier_handling_st
     assert "Outlier Handling" not in report["modules"]
 
 
+def test_build_data_health_report_marks_failed_final_audit_as_advisory():
+    health = cockpit_module.build_data_health_report(
+        run_id="run-health-001",
+        session_id="sess-health-001",
+        history=[
+            {
+                "module": "diagnostics",
+                "status": "pass",
+                "summary": {"null_rate": 0.0, "row_count": 100},
+            },
+            {
+                "module": "validation",
+                "status": "pass",
+                "summary": {"passed": True, "row_count": 100},
+            },
+            {
+                "module": "final_audit",
+                "status": "fail",
+                "summary": {"passed": False, "row_count": 100},
+            },
+        ],
+        history_meta={"parse_errors": [], "skipped_records": 0},
+    )
+
+    assert health["status"] == "warn"
+    assert health["health_score"] == 100.0
+    assert health["health_advisory"] is True
+    assert health["certification_status"] == "fail"
+    assert health["certification_passed"] is False
+    assert "Advisory Data Health Score" in health["message"]
+    assert any("final_audit reported certification failures" in msg for msg in health["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_toolkit_get_pipeline_dashboard_surfaces_advisory_health_when_final_audit_failed(
+    mocker,
+):
+    history = [
+        {
+            "module": "final_audit",
+            "status": "fail",
+            "summary": {"passed": False},
+            "dashboard_path": "exports/reports/final_audit/run_final.html",
+        }
+    ]
+    mocker.patch.object(cockpit_module, "get_run_history", return_value=history)
+    mocker.patch.object(
+        cockpit_module,
+        "get_last_history_read_meta",
+        return_value={"parse_errors": [], "skipped_records": 0},
+    )
+    mocker.patch.object(
+        cockpit_module,
+        "export_html_report",
+        return_value="/tmp/run-health-001_pipeline_dashboard.html",
+    )
+    append_history = mocker.patch.object(cockpit_module, "append_to_run_history")
+    mocker.patch.object(
+        cockpit_module,
+        "deliver_artifact",
+        return_value={
+            "reference": "https://example.com/pipeline.html",
+            "local_path": "/tmp/run-health-001_pipeline_dashboard.html",
+            "url": "https://example.com/pipeline.html",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await cockpit_module._toolkit_get_pipeline_dashboard(run_id="run-health-001")
+
+    assert result["summary"]["health_advisory"] is True
+    assert result["summary"]["certification_status"] == "fail"
+    assert any("Health score is advisory only" in warning for warning in result["warnings"])
+    append_history.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_toolkit_get_pipeline_dashboard_sanitizes_run_id_for_artifact_path(mocker):
     mocker.patch.object(cockpit_module, "get_run_history", return_value=[])

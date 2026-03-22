@@ -185,6 +185,12 @@ def _render_cockpit_recent_runs(recent_runs: list[dict[str, Any]]) -> str:
     for run in recent_runs:
         dashboard_ref = run.get("pipeline_dashboard") or run.get("best_dashboard")
         export_ref = run.get("best_export")
+        health_note = html.escape(str(run.get("health_status", "unknown")).upper())
+        if bool(run.get("health_advisory", False)):
+            certification_status = html.escape(
+                str(run.get("certification_status", "unknown")).upper()
+            )
+            health_note = f"ADVISORY · {health_note} · FINAL_AUDIT {certification_status}"
         recent_run_cards.append(
             "<div class='resource-card'>"
             f"<p class='resource-meta'>{html.escape(str(run.get('timestamp') or 'Recent run'))}</p>"
@@ -196,7 +202,7 @@ def _render_cockpit_recent_runs(recent_runs: list[dict[str, Any]]) -> str:
             f"<p class='subtle'>Latest module: {html.escape(str(run.get('latest_module', 'unknown')))}</p></div>"
             "<div class='module-mini-card'><h3>Health</h3>"
             f"{_metric_value(run.get('health_score', 'N/A'))}"
-            f"<p class='subtle'>{html.escape(str(run.get('health_status', 'unknown')).upper())}</p></div>"
+            f"<p class='subtle'>{health_note}</p></div>"
             "<div class='module-mini-card'><h3>Warnings</h3>"
             f"{_metric_value(run.get('warning_count', 0))}"
             f"<p class='subtle'>Modules observed: {html.escape(str(run.get('module_count', 0)))}</p></div>"
@@ -622,6 +628,9 @@ def render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
     session_id = str(report.get("session_id", ""))
     health_score = report.get("health_score", "N/A")
     health_status = str(report.get("health_status", "unknown")).upper()
+    health_advisory = bool(report.get("health_advisory", False))
+    health_message = str(report.get("health_message", "")).strip()
+    certification_status = str(report.get("certification_status", "not_run")).upper()
     ready_modules = int(report.get("ready_modules", 0))
     warned_modules = int(report.get("warned_modules", 0))
     failed_modules = int(report.get("failed_modules", 0))
@@ -639,16 +648,26 @@ def render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
         )
     module_ledger_df = pd.DataFrame(module_ledger_rows)
 
-    banner_class = "ok" if failed_modules == 0 else "warn"
+    banner_class = "ok" if failed_modules == 0 and not health_advisory else "warn"
     banner = (
         f"<div class='banner {banner_class}'>"
         "<div class='banner-item'><strong>Stage:</strong> Pipeline Review Shell</div>"
         f"<div class='banner-item'><strong>Final Status:</strong> {html.escape(final_status.upper())}</div>"
         f"<div class='banner-item'><strong>Health:</strong> {html.escape(str(health_score))} ({html.escape(health_status)})</div>"
+        f"<div class='banner-item'><strong>Health Mode:</strong> {'ADVISORY' if health_advisory else 'STANDARD'}</div>"
         f"<div class='banner-item'><strong>Session:</strong> {html.escape(session_id or 'Unavailable')}</div>"
         f"<div class='banner-item'><strong>Modules:</strong> {len(module_order)}</div>"
         "</div>"
     )
+    advisory_card = ""
+    if health_advisory:
+        advisory_card = (
+            "<div class='card'>"
+            "<h3>Health Score Is Advisory</h3>"
+            f"<p class='subtle'>{html.escape(health_message or 'Final audit failed certification for this run.')}</p>"
+            f"<p class='subtle'><strong>Certification Status:</strong> {html.escape(certification_status)}</p>"
+            "</div>"
+        )
 
     executive = (
         "<div class='stack'>"
@@ -667,6 +686,7 @@ def render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
         "<p class='subtle'>Pipeline stages not observed in the current run history.</p></div>"
         "</div>"
         "<div class='cert-ledger'>"
+        f"{advisory_card}"
         "<div class='card'><h3>Final References</h3>"
         f"{_render_terminal_references(final_dashboard=final_dashboard, final_export=final_export, final_status=final_status, failed_modules=failed_modules, modules=modules, module_order=module_order)}"
         "</div>"

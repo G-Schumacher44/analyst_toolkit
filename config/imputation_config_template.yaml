@@ -1,37 +1,17 @@
-# ------------------------------------------------------------------------------
-# 📄 Config File: run_imputation_config.yaml
-# 🧩 Module: Imputation (M07)
-# 📌 Purpose: Fills missing (NaN) values using rule-based strategies.
-# ------------------------------------------------------------------------------
-# This module supports column-wise imputation strategies including mean, median,
-# mode, or constant values. Output is visualized, exported, and checkpointed.
-# ------------------------------------------------------------------------------
-
-# 📥 Execution context
-notebook: true
-run_id: "0002_QA"
-logging: "on"               # Options: 'on', 'off', or 'auto'
-
-# 🧩 Imputation configuration
 imputation:
   run: true
 
-  # 📂 Input path (typically the result of M06 outlier handling)
-  input_path: "exports/joblib/{run_id}_m06_df_handled.joblib"
+  input_path: "data/processed/example.csv"
 
-  # 🔧 Column-specific imputation rules
   rules:
     strategies:
-      # 🔢 Numeric imputations
       bill_length_mm: 'mean'
       body_mass_g: 'mean'
       bill_depth_mm: 'median'
       flipper_length_mm: 'median'
 
-      # 🧬 Categorical imputations
       sex: 'mode'
 
-      # 🧱 Constant value fallbacks
       tag_id:
         strategy: 'constant'
         value: 'UNKNOWN'
@@ -63,21 +43,6 @@ imputation:
         strategy: 'constant'
         value: 'UNKNOWN'
 
-  # ⚙️ Output, visualization, and persistence settings
   settings:
-    show_inline: true
-
-    export:
-      run: true
-      as_csv: false
-      export_path: "exports/reports/imputation/imputation_report.xlsx"
-      export_html: true
-      export_html_path: "exports/reports/imputation/{run_id}_imputation_report.html"
-
-    plotting:
-      run: true
-      save_dir: "exports/plots/imputation/"
-
-    checkpoint:
-      run: true
-      checkpoint_path: "exports/joblib/{run_id}/{run_id}_m07_df_imputed.joblib"
+    export_html: true
+    export_html_path: "exports/reports/imputation/{run_id}_imputation_report.html"
