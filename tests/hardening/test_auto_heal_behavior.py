@@ -76,6 +76,8 @@ async def test_auto_heal_propagates_child_artifacts_and_status(monkeypatch, tmp_
     assert res["artifact_url"] == "https://example.com/auto"
     assert res["export_url"] == "gs://bucket/imp.csv"
     assert res["plot_urls"] == {"imp.png": "https://example.com/imp.png"}
+    assert res["artifact_matrix"]["plots"]["status"] == "available"
+    assert res["artifact_matrix"]["plots"]["count"] == 1
     assert res["failed_steps"] == []
     assert Path(res["artifact_path"]).exists()
     assert "MCP Auto Heal" in Path(res["artifact_path"]).read_text(encoding="utf-8")

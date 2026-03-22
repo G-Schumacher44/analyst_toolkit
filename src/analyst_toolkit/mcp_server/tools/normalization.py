@@ -153,6 +153,12 @@ async def _toolkit_normalization(
     # Only expect report artifacts when the pipeline had work to report on
     html_requested = should_export_html(config)
     expect_reports = html_requested and changes_made > 0
+    runtime_artifacts = runtime_cfg.get("artifacts", {}) if isinstance(runtime_cfg, dict) else {}
+    if runtime_artifacts.get("export_html") is True and not expect_reports:
+        artifact_warnings.append(
+            "runtime.artifacts.export_html=true requested report artifacts, but normalization "
+            "made no changes so HTML/XLSX outputs were disabled."
+        )
 
     if expect_reports:
         artifact_path = f"exports/reports/normalization/{run_id}_normalization_report.html"

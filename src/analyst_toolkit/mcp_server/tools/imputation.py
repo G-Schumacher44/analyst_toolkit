@@ -84,6 +84,7 @@ async def _toolkit_imputation(
     df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     base_cfg = config.get("imputation", config)
+    plotting_requested = bool(config.get("plotting", {}).get("run", True))
 
     # Build module config for the pipeline runner
     module_cfg = {
@@ -92,7 +93,7 @@ async def _toolkit_imputation(
             "logging": "off",
             "settings": {
                 "export": {"run": True, "export_html": should_export_html(config)},
-                "plotting": {"run": True},
+                "plotting": {"run": plotting_requested},
             },
         }
     }
@@ -160,6 +161,17 @@ async def _toolkit_imputation(
     # Only expect report artifacts when imputation actually filled nulls
     html_requested = should_export_html(config)
     expect_reports = html_requested and nulls_filled > 0
+    runtime_artifacts = runtime_cfg.get("artifacts", {}) if isinstance(runtime_cfg, dict) else {}
+    if runtime_artifacts.get("export_html") is True and not expect_reports:
+        artifact_warnings.append(
+            "runtime.artifacts.export_html=true requested report artifacts, but imputation "
+            "produced no filled nulls so HTML/XLSX outputs were disabled."
+        )
+    if runtime_artifacts.get("plotting") is True and not expect_reports:
+        artifact_warnings.append(
+            "runtime.artifacts.plotting=true requested plot artifacts, but imputation produced "
+            "no filled nulls so plots were disabled."
+        )
 
     if expect_reports:
         artifact_path = f"exports/reports/imputation/{run_id}_imputation_report.html"
@@ -218,7 +230,7 @@ async def _toolkit_imputation(
         plot_urls=plot_urls,
         expect_html=expect_reports,
         expect_xlsx=expect_reports,
-        expect_plots=expect_reports,
+        expect_plots=expect_reports and plotting_requested,
         required_html=False,
         probe_local_paths=True,
     )

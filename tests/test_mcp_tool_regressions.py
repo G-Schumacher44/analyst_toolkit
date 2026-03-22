@@ -1301,6 +1301,41 @@ async def test_imputation_disabled_html_when_no_nulls_filled(mocker):
 
 
 @pytest.mark.asyncio
+async def test_imputation_runtime_can_disable_plot_artifacts(mocker):
+    df = pd.DataFrame({"value": [1.0, None]})
+
+    mocker.patch.object(imputation_tool, "load_input", return_value=df)
+    mocker.patch.object(imputation_tool, "run_imputation_pipeline", return_value=df.fillna(0.0))
+    mocker.patch.object(imputation_tool, "save_to_session", return_value="sess_imp")
+    mocker.patch.object(imputation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(imputation_tool, "save_output", return_value="gs://bucket/imp.csv")
+    mocker.patch.object(imputation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(imputation_tool, "should_export_html", return_value=True)
+    mocker.patch.object(
+        imputation_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await imputation_tool._toolkit_imputation(
+        session_id="sess_imp",
+        run_id="imp_runtime_no_plots",
+        config={},
+        runtime={"artifacts": {"export_html": True, "plotting": False}},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["artifact_matrix"]["plots"]["status"] == "disabled"
+    assert result["artifact_matrix"]["html_report"]["expected"] is True
+
+
+@pytest.mark.asyncio
 async def test_outliers_disabled_html_when_no_outliers(mocker):
     """When outlier detection finds 0 outliers, HTML/XLSX should be disabled, not missing."""
     df = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
@@ -1341,6 +1376,47 @@ async def test_outliers_disabled_html_when_no_outliers(mocker):
     assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
     assert any("Run infer_configs first" in warning for warning in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_outliers_runtime_requests_are_explained_when_no_findings(mocker):
+    df = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
+
+    mocker.patch.object(outliers_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        outliers_tool,
+        "run_outlier_detection_pipeline",
+        return_value=(df, {"outlier_log": pd.DataFrame()}),
+    )
+    mocker.patch.object(outliers_tool, "save_to_session", return_value="sess_out")
+    mocker.patch.object(outliers_tool, "get_session_metadata", return_value={"row_count": 3})
+    mocker.patch.object(outliers_tool, "save_output", return_value="gs://bucket/out.csv")
+    mocker.patch.object(outliers_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(outliers_tool, "should_export_html", return_value=True)
+    mocker.patch.object(
+        outliers_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await outliers_tool._toolkit_outliers(
+        session_id="sess_out",
+        run_id="out_runtime_requests",
+        config={},
+        runtime={"artifacts": {"export_html": True, "plotting": True}},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+    assert result["artifact_matrix"]["plots"]["status"] == "disabled"
+    assert any("runtime.artifacts.export_html=true" in warning for warning in result["warnings"])
+    assert any("runtime.artifacts.plotting=true" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -1433,6 +1509,45 @@ async def test_toolkit_duplicates_runtime_can_override_input_and_html(mocker):
 
 
 @pytest.mark.asyncio
+async def test_normalization_runtime_export_request_warns_when_no_changes(mocker):
+    df = pd.DataFrame({"name": ["Alice"]})
+
+    mocker.patch.object(normalization_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        normalization_tool,
+        "run_normalization_pipeline",
+        return_value=(df, {"changelog": {}, "changes_made": 0}),
+    )
+    mocker.patch.object(normalization_tool, "save_to_session", return_value="sess_norm")
+    mocker.patch.object(normalization_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(normalization_tool, "save_output", return_value="gs://bucket/norm.csv")
+    mocker.patch.object(normalization_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(normalization_tool, "should_export_html", return_value=True)
+    mocker.patch.object(
+        normalization_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+
+    result = await normalization_tool._toolkit_normalization(
+        session_id="sess_norm",
+        run_id="norm_runtime_request",
+        config={},
+        runtime={"artifacts": {"export_html": True}},
+    )
+
+    assert result["runtime_applied"] is True
+    assert result["artifact_matrix"]["html_report"]["status"] == "disabled"
+    assert any("runtime.artifacts.export_html=true" in warning for warning in result["warnings"])
+
+
+@pytest.mark.asyncio
 async def test_toolkit_duplicates_warns_without_inferred_or_explicit_config(mocker):
     df = pd.DataFrame({"id": [1, 2], "value": [10, 20]})
 
@@ -1497,6 +1612,44 @@ async def test_toolkit_final_audit_runtime_can_override_input_path(mocker, monke
     assert captured["input_path"] == "gs://bucket/final.csv"
     assert captured["input_id"] is None
     assert "final_runtime" in result["artifact_path"]
+
+
+@pytest.mark.asyncio
+async def test_final_audit_disables_xlsx_expectation_when_no_xlsx_artifact(mocker, monkeypatch):
+    df = pd.DataFrame({"value": [1]})
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/out.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path if local_path.endswith(".html") else "",
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+    monkeypatch.setattr(final_audit_tool, "ALLOW_EMPTY_CERT_RULES", True)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_final",
+        run_id="final_no_xlsx",
+        config={},
+    )
+
+    assert result["artifact_matrix"]["xlsx_report"]["expected"] is False
+    assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
 
 
 @pytest.mark.asyncio

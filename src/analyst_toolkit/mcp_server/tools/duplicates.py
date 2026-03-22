@@ -81,6 +81,7 @@ async def _toolkit_duplicates(
     base_cfg = config.get("duplicates", config)
     subset_cols = subset_columns or base_cfg.get("subset_columns")
     mode = _normalize_mode(base_cfg.get("mode", "flag"))
+    plotting_requested = bool(config.get("plotting", {}).get("run", True))
 
     # Build module config for the pipeline runner
     module_cfg = {
@@ -92,7 +93,7 @@ async def _toolkit_duplicates(
             "settings": {
                 "export": True,
                 "export_html": should_export_html(config),
-                "plotting": {"run": True},
+                "plotting": {"run": plotting_requested},
             },
         }
     }
@@ -211,7 +212,7 @@ async def _toolkit_duplicates(
         plot_urls=plot_urls,
         expect_html=should_export_html(config),
         expect_xlsx=should_export_html(config),
-        expect_plots=should_export_html(config),
+        expect_plots=should_export_html(config) and plotting_requested,
         required_html=should_export_html(config),
         probe_local_paths=True,
     )
