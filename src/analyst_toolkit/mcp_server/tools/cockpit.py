@@ -26,6 +26,7 @@ from analyst_toolkit.mcp_server.local_artifact_server import (
 )
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.response_utils import (
+    new_trace_id,
     next_action,
     with_dashboard_artifact,
     with_next_actions,
@@ -277,6 +278,7 @@ def _trusted_history_denial() -> dict[str, Any]:
     return {
         "status": "error",
         "code": "COCKPIT_HISTORY_DISABLED",
+        "trace_id": new_trace_id(),
         "message": (
             "Cockpit history access is disabled. Enable ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL=1 "
             "or use trusted/local stdio mode."
@@ -337,6 +339,25 @@ def _dashboard_ref(entry: dict[str, Any]) -> str:
     )
 
 
+def _discover_local_dashboard_ref(
+    module: str,
+    run_id: str,
+    session_id: str | None = None,
+) -> str:
+    candidates: list[str] = []
+    if module == "pipeline_dashboard":
+        candidates.append(_pipeline_dashboard_artifact_path(run_id, session_id))
+    elif module == "auto_heal":
+        candidates.append(f"exports/reports/auto_heal/{run_id}_auto_heal_report.html")
+    elif module == "final_audit":
+        candidates.append(f"exports/reports/final_audit/{run_id}_final_audit_report.html")
+
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return build_local_artifact_url(candidate) or candidate
+    return ""
+
+
 def _export_ref(entry: dict[str, Any]) -> str:
     export_path = str(entry.get("export_path") or entry.get("xlsx_path") or "")
     return str(
@@ -380,10 +401,19 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
             ),
             last_entry,
         )
-        pipeline_path = _pipeline_dashboard_artifact_path(run_id, session_id or None)
         pipeline_dashboard = _dashboard_ref(pipeline_entry)
-        if not pipeline_dashboard and Path(pipeline_path).exists():
-            pipeline_dashboard = pipeline_path
+        if not pipeline_dashboard:
+            pipeline_dashboard = _discover_local_dashboard_ref(
+                "pipeline_dashboard",
+                run_id,
+                session_id or None,
+            )
+        auto_heal_dashboard = _dashboard_ref(auto_heal)
+        if not auto_heal_dashboard:
+            auto_heal_dashboard = _discover_local_dashboard_ref("auto_heal", run_id)
+        final_audit_dashboard = _dashboard_ref(final_audit)
+        if not final_audit_dashboard:
+            final_audit_dashboard = _discover_local_dashboard_ref("final_audit", run_id)
         cards.append(
             {
                 "run_id": run_id,
@@ -401,10 +431,10 @@ def _build_recent_run_cards(limit: int) -> list[dict[str, Any]]:
                 "health_score": health.get("health_score", "N/A"),
                 "health_status": health.get("health_status", "unknown"),
                 "pipeline_dashboard": pipeline_dashboard,
-                "auto_heal_dashboard": _dashboard_ref(auto_heal),
-                "final_audit_dashboard": _dashboard_ref(final_audit),
-                "best_dashboard": _dashboard_ref(final_audit)
-                or _dashboard_ref(auto_heal)
+                "auto_heal_dashboard": auto_heal_dashboard,
+                "final_audit_dashboard": final_audit_dashboard,
+                "best_dashboard": final_audit_dashboard
+                or auto_heal_dashboard
                 or _dashboard_ref(latest_non_synthetic),
                 "best_export": _export_ref(final_audit)
                 or _export_ref(auto_heal)
