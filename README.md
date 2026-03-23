@@ -121,6 +121,8 @@ make install-dev       # editable install + dev tooling + notebook extras
 pip install -e ".[mcp]"
 ```
 
+The `mcp` extra installs `analyst_toolkit_deploy` from a pinned GitHub Release wheel, so MCP builds do not rely on git checkouts during dependency resolution.
+
 **With notebook extras**
 
 ```bash

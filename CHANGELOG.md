@@ -30,6 +30,8 @@ Format:
 
 ### Changed
 
+- Pin core and optional dependency ranges to prevent silent breakage from future major-version releases (#69).
+- Replace the MCP git dependency with a pinned `analyst_toolkit_deploy` GitHub Release wheel (#70).
 - Rename `read_artifact` response field `content` → `artifact_content` to avoid MCP protocol collision.
 - Restrict `read_artifact` CWD access to stdio mode only; HTTP mode is limited to artifact root.
 - Update quickstart, playbook, and capability catalog to document `manage_session(action="clear")`.
