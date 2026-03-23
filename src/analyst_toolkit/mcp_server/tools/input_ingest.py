@@ -39,14 +39,15 @@ async def _toolkit_register_input(
     except InputError as exc:
         trace_id = new_trace_id()
         logger.exception("Input registration failed (trace_id=%s, code=%s)", trace_id, exc.code)
+        normalized_code = client_safe_input_error_code(exc.code)
         result: dict = {
             "status": "error",
             "module": "register_input",
-            "code": client_safe_input_error_code(exc.code),
+            "code": normalized_code,
             "message": exc.message,
             "trace_id": trace_id,
         }
-        if client_safe_input_error_code(exc.code) == "INPUT_PATH_DENIED":
+        if normalized_code == "INPUT_PATH_DENIED":
             safe_name = uri.rsplit("/", 1)[-1] if uri else "<filename>"
             result["next_actions"] = [
                 {

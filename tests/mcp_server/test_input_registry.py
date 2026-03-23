@@ -1,8 +1,14 @@
+import re
+
 import pytest
 
 from analyst_toolkit.mcp_server.input import registry as input_registry
 from analyst_toolkit.mcp_server.input.errors import InputConflictError
-from analyst_toolkit.mcp_server.input.models import InputDescriptor
+from analyst_toolkit.mcp_server.input.models import (
+    INPUT_ID_HEX_LENGTH,
+    INPUT_ID_PREFIX,
+    InputDescriptor,
+)
 
 
 @pytest.fixture
@@ -116,5 +122,6 @@ def test_new_input_id_uses_16_hex_entropy_budget():
 
     generated = _new_input_id("stable-key")
     assert generated == _new_input_id("stable-key")
-    assert generated.startswith("input_")
-    assert len(generated) == len("input_") + 16
+    assert generated.startswith(INPUT_ID_PREFIX)
+    assert len(generated) == len(INPUT_ID_PREFIX) + INPUT_ID_HEX_LENGTH
+    assert re.fullmatch(rf"{INPUT_ID_PREFIX}[0-9a-f]{{{INPUT_ID_HEX_LENGTH}}}", generated)

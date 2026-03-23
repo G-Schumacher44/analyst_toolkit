@@ -1895,6 +1895,9 @@ async def test_register_input_tool_falls_back_to_allowlisted_error_code(monkeypa
 
     assert result["status"] == "error"
     assert result["code"] == "INPUT_ERROR"
+    assert "trace_id" in result
+    assert isinstance(result["trace_id"], str)
+    assert result["trace_id"]
 
 
 @pytest.mark.asyncio
