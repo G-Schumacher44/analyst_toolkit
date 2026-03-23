@@ -274,17 +274,24 @@ async def _toolkit_final_audit(
     artifact_url = artifact_delivery["url"]
     warnings.extend(artifact_delivery["warnings"])
 
-    xlsx_path = f"exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
-    xlsx_delivery = deliver_artifact(
-        xlsx_path,
-        run_id,
-        "final_audit",
-        config=kwargs,
-        session_id=session_id,
-    )
-    xlsx_url = xlsx_delivery["url"]
-    warnings.extend(xlsx_delivery["warnings"])
-    xlsx_expected = bool(xlsx_delivery.get("local_path")) or Path(xlsx_path).exists()
+    xlsx_path = (
+        module_cfg.get("final_audit", {})
+        .get("settings", {})
+        .get("paths", {})
+        .get("report_excel", "exports/reports/final_audit/{run_id}_final_audit_report.xlsx")
+    ).format(run_id=run_id)
+    xlsx_expected = Path(xlsx_path).exists()
+    xlsx_url = ""
+    if xlsx_expected:
+        xlsx_delivery = deliver_artifact(
+            xlsx_path,
+            run_id,
+            "final_audit",
+            config=kwargs,
+            session_id=session_id,
+        )
+        xlsx_url = xlsx_delivery["url"]
+        warnings.extend(xlsx_delivery["warnings"])
 
     cert_cfg = base_cfg.get("certification", {})
     schema_cfg = cert_cfg.get("schema_validation", {})

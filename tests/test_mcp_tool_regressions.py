@@ -1650,6 +1650,7 @@ async def test_final_audit_disables_xlsx_expectation_when_no_xlsx_artifact(mocke
 
     assert result["artifact_matrix"]["xlsx_report"]["expected"] is False
     assert result["artifact_matrix"]["xlsx_report"]["status"] == "disabled"
+    assert not any("Artifact not found for routing" in warning for warning in result["warnings"])
 
 
 @pytest.mark.asyncio
