@@ -214,8 +214,11 @@ def test_deliver_artifact_no_doubled_exports_path(tmp_path, monkeypatch):
     assert routed == tmp_path / "exports" / "reports" / "run1_report.html"
 
 
-def test_local_relative_path_strips_exports_for_absolute_path_inside_cwd(tmp_path, monkeypatch):
+def test_local_relative_path_strips_exports_for_absolute_path_inside_cwd(
+    tmp_path, monkeypatch, caplog
+):
     """Absolute paths under the workspace exports root should also avoid doubled exports."""
+    caplog.set_level(logging.WARNING)
     monkeypatch.chdir(tmp_path)
     source = tmp_path / "exports" / "reports" / "data_dictionary" / "run1_report.html"
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -236,3 +239,5 @@ def test_local_relative_path_strips_exports_for_absolute_path_inside_cwd(tmp_pat
     assert routed.exists()
     assert "exports/exports" not in str(routed)
     assert routed == tmp_path / "exports" / "reports" / "data_dictionary" / "run1_report.html"
+    assert "requested_root_status" not in delivery["destinations"]["local"]
+    assert not any("rejected" in rec.getMessage().lower() for rec in caplog.records)

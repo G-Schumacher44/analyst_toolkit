@@ -274,7 +274,12 @@ async def _toolkit_final_audit(
     artifact_url = artifact_delivery["url"]
     warnings.extend(artifact_delivery["warnings"])
 
-    xlsx_path = f"exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
+    xlsx_path = (
+        module_cfg.get("final_audit", {})
+        .get("settings", {})
+        .get("paths", {})
+        .get("report_excel", "exports/reports/final_audit/{run_id}_final_audit_report.xlsx")
+    ).format(run_id=run_id)
     xlsx_expected = Path(xlsx_path).exists()
     xlsx_url = ""
     if xlsx_expected:

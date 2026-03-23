@@ -97,7 +97,7 @@ def _resolve_local_output_root(root: str) -> Path:
 
 
 def _copy_to_local_root(local_path: str, root: str) -> str:
-    source = Path(local_path)
+    source = Path(local_path).resolve(strict=False)
     relative = _local_relative_path(local_path)
     resolved_root = _resolve_local_output_root(root)
     destination = (resolved_root / relative).resolve(strict=False)
@@ -107,6 +107,8 @@ def _copy_to_local_root(local_path: str, root: str) -> str:
         raise ValueError(
             "Resolved local artifact destination escapes the configured root."
         ) from exc
+    if destination == source:
+        return str(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return str(destination)
