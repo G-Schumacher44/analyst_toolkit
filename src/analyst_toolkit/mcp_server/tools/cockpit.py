@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-import re
 import uuid
 from typing import Any
 
@@ -55,6 +54,11 @@ from analyst_toolkit.mcp_server.tools.cockpit_schemas import (
     PIPELINE_DASHBOARD_INPUT_SCHEMA,
     RUN_HISTORY_INPUT_SCHEMA,
 )
+from analyst_toolkit.mcp_server.tools.cockpit_shared import (
+    _pipeline_dashboard_artifact_path,
+    _safe_run_id_for_path,
+    _trusted_history_enabled,
+)
 from analyst_toolkit.mcp_server.tools.cockpit_templates import (
     build_cockpit_launch_sequences,
     build_cockpit_launchpad,
@@ -65,7 +69,6 @@ from analyst_toolkit.mcp_server.tools.cockpit_templates import (
 )
 
 logger = logging.getLogger("analyst_toolkit.mcp_server.cockpit")
-_SAFE_RUN_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def _env_float(name: str, default: float) -> float:
@@ -100,13 +103,6 @@ def _env_int(name: str, default: int) -> int:
 TEMPLATE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC", 8.0)
 RUN_HISTORY_DEFAULT_SUMMARY_ONLY = _env_bool("ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT", True)
 RUN_HISTORY_DEFAULT_LIMIT = _env_int("ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT", 50)
-
-
-def _trusted_history_enabled() -> bool:
-    return _env_bool(
-        "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
-        _env_bool("ANALYST_MCP_STDIO", False),
-    )
 
 
 def _artifact_server_control_enabled() -> bool:
@@ -238,19 +234,6 @@ async def _toolkit_get_data_health_report(run_id: str, session_id: str | None = 
         history=history,
         history_meta=history_meta,
     )
-
-
-def _safe_run_id_for_path(run_id: str) -> str:
-    normalized = _SAFE_RUN_ID_RE.sub("_", str(run_id).strip()).strip("._-")
-    return normalized or "pipeline_run"
-
-
-def _pipeline_dashboard_artifact_path(run_id: str, session_id: str | None = None) -> str:
-    safe_run_id = _safe_run_id_for_path(run_id)
-    if session_id:
-        safe_session_id = _safe_run_id_for_path(session_id)
-        return f"exports/reports/pipeline/{safe_run_id}_{safe_session_id}_pipeline_dashboard.html"
-    return f"exports/reports/pipeline/{safe_run_id}_pipeline_dashboard.html"
 
 
 def _cockpit_artifact_key(limit: int) -> str:

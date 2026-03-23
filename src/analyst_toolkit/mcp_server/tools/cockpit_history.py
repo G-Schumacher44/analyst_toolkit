@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,11 @@ from analyst_toolkit.mcp_server.local_artifact_server import (
     get_local_artifact_server_status,
 )
 from analyst_toolkit.mcp_server.tools.cockpit_runtime import build_data_health_report
+from analyst_toolkit.mcp_server.tools.cockpit_shared import (
+    _pipeline_dashboard_artifact_path,
+    _safe_run_id_for_path,
+    _trusted_history_enabled,
+)
 from analyst_toolkit.mcp_server.tools.cockpit_templates import (
     build_cockpit_launch_sequences,
     build_cockpit_launchpad,
@@ -24,20 +28,6 @@ from analyst_toolkit.mcp_server.tools.cockpit_templates import (
 
 MAX_ARTIFACT_ROWS = 24
 _WORKSPACE_ROOT = Path.cwd().resolve(strict=False)
-
-
-def _trusted_history_enabled() -> bool:
-    return str(os.environ.get("ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    } or str(os.environ.get("ANALYST_MCP_STDIO", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
 
 
 def _module_display_name(module: str) -> str:
@@ -52,20 +42,6 @@ def _module_display_name(module: str) -> str:
         "auto_heal": "Auto Heal",
     }
     return mapping.get(module, module.replace("_", " ").title())
-
-
-def _safe_run_id_for_path(run_id: str) -> str:
-    sanitized = "".join(char if char.isalnum() or char in "._-" else "_" for char in str(run_id))
-    normalized = sanitized.strip("._-")
-    return normalized or "pipeline_run"
-
-
-def _pipeline_dashboard_artifact_path(run_id: str, session_id: str | None = None) -> str:
-    safe_run_id = _safe_run_id_for_path(run_id)
-    if session_id:
-        safe_session_id = _safe_run_id_for_path(session_id)
-        return f"exports/reports/pipeline/{safe_run_id}_{safe_session_id}_pipeline_dashboard.html"
-    return f"exports/reports/pipeline/{safe_run_id}_pipeline_dashboard.html"
 
 
 def _artifact_root_label(root: Any) -> str:
@@ -94,10 +70,7 @@ def _history_sort_value(path: Path) -> float:
         fallback = path.stat().st_mtime
     except OSError:
         return 0.0
-    try:
-        history = _read_history_entries(path)
-    except OSError:
-        return fallback
+    history = _read_history_entries(path)
     newest = ""
     for entry in history:
         timestamp = str(entry.get("timestamp", "") or "")
