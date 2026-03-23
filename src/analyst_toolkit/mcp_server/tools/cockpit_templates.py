@@ -5,6 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def _require_resource_by_reference(
+    resources_by_reference: dict[str, dict[str, str]],
+    reference: str,
+) -> dict[str, str]:
+    try:
+        return resources_by_reference[reference]
+    except KeyError as exc:
+        raise ValueError(
+            f"build_cockpit_resource_groups missing resource reference: {reference}"
+        ) from exc
+
+
 def build_cockpit_resources() -> list[dict[str, str]]:
     return [
         {
@@ -47,6 +59,9 @@ def build_cockpit_resources() -> list[dict[str, str]]:
 
 
 def build_cockpit_resource_groups(resources: list[dict[str, str]]) -> list[dict[str, Any]]:
+    resources_by_reference = {
+        resource["Reference"]: resource for resource in resources if "Reference" in resource
+    }
     return [
         {
             "title": "Start Here",
@@ -54,7 +69,20 @@ def build_cockpit_resource_groups(resources: list[dict[str, str]]) -> list[dict[
                 "Open these first when you need orientation, a safe execution recipe, or a "
                 "human-readable guide before touching module-specific configs."
             ),
-            "items": [resources[0], resources[1], resources[3]],
+            "items": [
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://docs/quickstart",
+                ),
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://docs/agent-playbook",
+                ),
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://templates/config/runtime_overlay_template.yaml",
+                ),
+            ],
         },
         {
             "title": "Templates And Contracts",
@@ -62,7 +90,20 @@ def build_cockpit_resource_groups(resources: list[dict[str, str]]) -> list[dict[
                 "These are the copyable request shapes for runtime overlays, auto-heal, and the "
                 "data dictionary workflow."
             ),
-            "items": [resources[3], resources[4], resources[5]],
+            "items": [
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://templates/config/runtime_overlay_template.yaml",
+                ),
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://templates/config/auto_heal_request_template.yaml",
+                ),
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://templates/config/data_dictionary_request_template.yaml",
+                ),
+            ],
         },
         {
             "title": "Capability Surfaces",
@@ -70,7 +111,12 @@ def build_cockpit_resource_groups(resources: list[dict[str, str]]) -> list[dict[
                 "Use these to inspect what the toolkit can do right now and which knobs are safe "
                 "to edit without rewriting YAML by hand."
             ),
-            "items": [resources[2]],
+            "items": [
+                _require_resource_by_reference(
+                    resources_by_reference,
+                    "analyst://catalog/capabilities",
+                )
+            ],
         },
     ]
 

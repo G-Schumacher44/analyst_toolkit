@@ -7,6 +7,10 @@ import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
 import analyst_toolkit.mcp_server.tools.data_dictionary as data_dictionary_tool
 from analyst_toolkit.mcp_server.input.models import INPUT_ID_PATTERN
 from analyst_toolkit.mcp_server.server import TOOL_REGISTRY, app
+from analyst_toolkit.mcp_server.tools.cockpit_templates import (
+    build_cockpit_resource_groups,
+    build_cockpit_resources,
+)
 
 
 @pytest.fixture
@@ -83,6 +87,42 @@ def test_rpc_tools_list_standardizes_input_id_pattern_across_tool_schemas(client
         input_id_schema = tools[tool_name]["inputSchema"]["properties"]["input_id"]
         assert input_id_schema["pattern"] == INPUT_ID_PATTERN
         assert "Canonical server-managed input reference" in input_id_schema["description"]
+
+
+def test_build_cockpit_resource_groups_uses_reference_lookup_not_position() -> None:
+    resources = build_cockpit_resources()
+    reordered = [resources[5], resources[2], resources[0], resources[4], resources[1], resources[3]]
+
+    groups = build_cockpit_resource_groups(reordered)
+
+    assert [item["Reference"] for item in groups[0]["items"]] == [
+        "analyst://docs/quickstart",
+        "analyst://docs/agent-playbook",
+        "analyst://templates/config/runtime_overlay_template.yaml",
+    ]
+    assert [item["Reference"] for item in groups[1]["items"]] == [
+        "analyst://templates/config/runtime_overlay_template.yaml",
+        "analyst://templates/config/auto_heal_request_template.yaml",
+        "analyst://templates/config/data_dictionary_request_template.yaml",
+    ]
+    assert [item["Reference"] for item in groups[2]["items"]] == ["analyst://catalog/capabilities"]
+
+
+def test_build_cockpit_resource_groups_raises_clear_error_for_missing_reference() -> None:
+    resources = [
+        resource
+        for resource in build_cockpit_resources()
+        if resource["Reference"] != "analyst://docs/agent-playbook"
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "build_cockpit_resource_groups missing resource reference: "
+            "analyst://docs/agent-playbook"
+        ),
+    ):
+        build_cockpit_resource_groups(resources)
 
 
 def test_rpc_capability_catalog_tool(client):
