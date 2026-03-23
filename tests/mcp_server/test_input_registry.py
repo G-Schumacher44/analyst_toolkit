@@ -109,3 +109,12 @@ def test_get_registry_stats_reports_current_counts(clean_registry):
     assert stats["session_binding_count"] == 1
     assert stats["max_entries"] == 8
     assert stats["ttl_sec"] == 3600.0
+
+
+def test_new_input_id_uses_16_hex_entropy_budget():
+    from analyst_toolkit.mcp_server.input.ingest import _new_input_id
+
+    generated = _new_input_id("stable-key")
+    assert generated == _new_input_id("stable-key")
+    assert generated.startswith("input_")
+    assert len(generated) == len("input_") + 16

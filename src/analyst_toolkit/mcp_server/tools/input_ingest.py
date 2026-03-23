@@ -4,7 +4,7 @@ import asyncio
 import logging
 from functools import partial
 
-from analyst_toolkit.mcp_server.input.errors import InputError
+from analyst_toolkit.mcp_server.input.errors import InputError, client_safe_input_error_code
 from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor, register_input_source
 from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.registry import register_tool
@@ -42,11 +42,11 @@ async def _toolkit_register_input(
         result: dict = {
             "status": "error",
             "module": "register_input",
-            "code": exc.code,
+            "code": client_safe_input_error_code(exc.code),
             "message": exc.message,
             "trace_id": trace_id,
         }
-        if exc.code == "INPUT_PATH_DENIED":
+        if client_safe_input_error_code(exc.code) == "INPUT_PATH_DENIED":
             safe_name = uri.rsplit("/", 1)[-1] if uri else "<filename>"
             result["next_actions"] = [
                 {

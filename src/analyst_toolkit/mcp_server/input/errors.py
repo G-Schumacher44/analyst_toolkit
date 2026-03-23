@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from typing import Optional
 
+CLIENT_SAFE_INPUT_ERROR_CODES = {
+    "INPUT_ERROR",
+    "INPUT_NOT_SUPPORTED",
+    "INPUT_PATH_NOT_FOUND",
+    "INPUT_PATH_DENIED",
+    "INPUT_PAYLOAD_TOO_LARGE",
+    "INPUT_CONFLICT",
+    "INPUT_NOT_FOUND",
+}
+
 
 class InputError(Exception):
     """Base error for input ingest and resolution surfaces."""
@@ -38,3 +48,8 @@ class InputConflictError(InputError):
 
 class InputNotFoundError(InputError):
     code = "INPUT_NOT_FOUND"
+
+
+def client_safe_input_error_code(code: str | None) -> str:
+    normalized = str(code or "").strip().upper()
+    return normalized if normalized in CLIENT_SAFE_INPUT_ERROR_CODES else "INPUT_ERROR"

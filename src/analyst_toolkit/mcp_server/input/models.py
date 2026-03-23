@@ -7,6 +7,9 @@ from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
 InputSourceType = Literal["upload", "server_path", "gcs", "gdrive"]
+INPUT_ID_PREFIX = "input_"
+INPUT_ID_HEX_LENGTH = 16
+INPUT_ID_PATTERN = rf"^{INPUT_ID_PREFIX}[a-f0-9]{{{INPUT_ID_HEX_LENGTH}}}$"
 _UNSET = object()
 
 
