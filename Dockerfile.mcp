@@ -11,7 +11,8 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Install dependencies from project metadata.
-# requirements-mcp.txt is a thin compatibility shim that resolves to .[mcp].
+# requirements-mcp.txt is a thin compatibility shim that resolves to .[mcp],
+# including the release-backed analyst_toolkit_deploy wheel pin from pyproject.toml.
 COPY pyproject.toml .
 COPY README.md .
 COPY requirements-mcp.txt .
