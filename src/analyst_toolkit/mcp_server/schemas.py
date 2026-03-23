@@ -43,7 +43,7 @@ INPUT_ID_PROP = {
         "pattern": INPUT_ID_PATTERN,
         "description": (
             "Optional: Canonical server-managed input reference returned by input "
-            "ingest/register flows. Uses a stable 16-hex suffix collision budget. "
+            f"ingest/register flows. Uses a stable {INPUT_ID_HEX_LENGTH}-hex suffix collision budget. "
             "If provided, gcs_path and session_id are ignored."
         ),
     }

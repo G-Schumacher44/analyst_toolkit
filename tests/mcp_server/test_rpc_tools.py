@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 import analyst_toolkit.mcp_server.local_artifact_server as artifact_server_module
 import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
 import analyst_toolkit.mcp_server.tools.data_dictionary as data_dictionary_tool
+from analyst_toolkit.mcp_server.input.models import INPUT_ID_PATTERN
 from analyst_toolkit.mcp_server.server import TOOL_REGISTRY, app
 
 
@@ -61,7 +62,7 @@ def test_rpc_tools_list_exposes_data_dictionary_input_id_schema(client):
     data_dictionary = next(tool for tool in tools if tool["name"] == "data_dictionary")
     input_schema = data_dictionary["inputSchema"]
 
-    assert input_schema["properties"]["input_id"]["pattern"] == "^input_[a-f0-9]{16}$"
+    assert input_schema["properties"]["input_id"]["pattern"] == INPUT_ID_PATTERN
     assert input_schema["properties"]["input_id"]["description"].endswith(
         "If provided, gcs_path and session_id are ignored."
     )
@@ -80,7 +81,7 @@ def test_rpc_tools_list_standardizes_input_id_pattern_across_tool_schemas(client
     for tool_name in ("infer_configs", "auto_heal", "get_input_descriptor"):
         assert tool_name in tools, f"Expected tool '{tool_name}' not found in tools/list response"
         input_id_schema = tools[tool_name]["inputSchema"]["properties"]["input_id"]
-        assert input_id_schema["pattern"] == "^input_[a-f0-9]{16}$"
+        assert input_id_schema["pattern"] == INPUT_ID_PATTERN
         assert "Canonical server-managed input reference" in input_id_schema["description"]
 
 
