@@ -62,7 +62,9 @@ def test_deliver_artifact_rejects_local_root_traversal(tmp_path, monkeypatch):
         logger=logging.getLogger("test"),
     )
 
-    assert delivery["destinations"]["local"]["status"] == "rejected"
+    assert delivery["destinations"]["local"]["status"] == "available"
+    assert delivery["destinations"]["local"]["path"] == str(source)
+    assert delivery["destinations"]["local"]["requested_root_status"] == "rejected"
     assert any(
         "must not contain parent-directory traversal" in warning for warning in delivery["warnings"]
     )
@@ -84,7 +86,9 @@ def test_deliver_artifact_rejects_local_root_absolute_path(tmp_path, monkeypatch
         logger=logging.getLogger("test"),
     )
 
-    assert delivery["destinations"]["local"]["status"] == "rejected"
+    assert delivery["destinations"]["local"]["status"] == "available"
+    assert delivery["destinations"]["local"]["path"] == str(source)
+    assert delivery["destinations"]["local"]["requested_root_status"] == "rejected"
     assert any(
         "must be relative to the configured local output base" in warning
         for warning in delivery["warnings"]
@@ -208,3 +212,27 @@ def test_deliver_artifact_no_doubled_exports_path(tmp_path, monkeypatch):
     # The routed path should be under exports/reports, not exports/exports/reports
     assert "exports/exports" not in str(routed)
     assert routed == tmp_path / "exports" / "reports" / "run1_report.html"
+
+
+def test_local_relative_path_strips_exports_for_absolute_path_inside_cwd(tmp_path, monkeypatch):
+    """Absolute paths under the workspace exports root should also avoid doubled exports."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "exports" / "reports" / "data_dictionary" / "run1_report.html"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("<html>dictionary</html>", encoding="utf-8")
+    monkeypatch.setenv("ANALYST_MCP_LOCAL_OUTPUT_BASE", str(tmp_path))
+
+    delivery = deliver_artifact(
+        str(source),
+        run_id="run1",
+        module="data_dictionary",
+        config={"local_output_root": "exports"},
+        session_id=None,
+        resolve_path_root=lambda run_id, session_id: f"paths/{run_id}",
+        logger=logging.getLogger("test"),
+    )
+
+    routed = Path(delivery["local_path"])
+    assert routed.exists()
+    assert "exports/exports" not in str(routed)
+    assert routed == tmp_path / "exports" / "reports" / "data_dictionary" / "run1_report.html"

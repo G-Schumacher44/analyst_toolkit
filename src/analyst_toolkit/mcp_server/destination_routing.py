@@ -53,17 +53,21 @@ def _local_relative_path(local_path: str) -> Path:
     if any(part == ".." for part in path.parts):
         raise ValueError("Local artifact path must not contain parent-directory traversal.")
     resolved = path.resolve(strict=False)
+
+    def _strip_leading_exports(candidate: Path) -> Path:
+        if candidate.parts and candidate.parts[0] == "exports" and len(candidate.parts) > 1:
+            return Path(*candidate.parts[1:])
+        return candidate
+
     if not path.is_absolute():
         # Strip a leading "exports" segment so that combining with a
         # local_output_root that already points to "exports" doesn't
         # produce "exports/exports/...".
-        if path.parts and path.parts[0] == "exports" and len(path.parts) > 1:
-            return Path(*path.parts[1:])
-        return path
+        return _strip_leading_exports(path)
 
     cwd = Path.cwd()
     try:
-        return resolved.relative_to(cwd.resolve(strict=False))
+        return _strip_leading_exports(resolved.relative_to(cwd.resolve(strict=False)))
     except ValueError:
         if "exports" in resolved.parts:
             exports_index = resolved.parts.index("exports")
@@ -165,7 +169,11 @@ def deliver_artifact(
                 local_root,
                 exc,
             )
-            result["destinations"]["local"] = {"status": "rejected", "path": ""}
+            result["destinations"]["local"] = {
+                "status": "available",
+                "path": effective_local_path,
+                "requested_root_status": "rejected",
+            }
             result["warnings"].append(str(exc))
 
     drive_folder_id = str(config.get("drive_folder_id") or "").strip()
