@@ -1844,6 +1844,37 @@ async def test_auto_heal_returns_error_when_infer_configs_load_fails(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_auto_heal_accepts_input_id_without_internal_error(monkeypatch):
+    infer_calls: list[dict] = []
+
+    async def fake_infer_configs(**kwargs):
+        infer_calls.append(kwargs)
+        return {
+            "status": "pass",
+            "module": "infer_configs",
+            "run_id": "auto_heal_input_id_ok",
+            "session_id": "sess_autoheal_input",
+            "configs": {},
+            "warnings": [],
+            "next_actions": [],
+        }
+
+    monkeypatch.setattr(auto_heal_tool, "_toolkit_infer_configs", fake_infer_configs)
+    monkeypatch.setattr(auto_heal_tool, "append_to_run_history", lambda *args, **kwargs: None)
+    monkeypatch.setattr(auto_heal_tool, "get_session_metadata", lambda session_id: {"row_count": 2})
+
+    result = await auto_heal_tool._toolkit_auto_heal(
+        input_id="input_test_autoheal",
+        run_id="auto_heal_input_id_ok",
+    )
+
+    assert infer_calls[0]["input_id"] == "input_test_autoheal"
+    assert result["status"] == "warn"
+    assert result["session_id"] == "sess_autoheal_input"
+    assert "Internal server error" not in result.get("message", "")
+
+
+@pytest.mark.asyncio
 async def test_infer_configs_persists_configs_to_session(monkeypatch, mocker):
     """infer_configs should store inferred configs in StateStore for downstream tools."""
     df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
