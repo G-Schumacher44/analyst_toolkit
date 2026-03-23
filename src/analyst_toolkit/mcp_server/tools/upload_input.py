@@ -5,7 +5,7 @@ import base64
 import logging
 from functools import partial
 
-from analyst_toolkit.mcp_server.input.errors import InputError
+from analyst_toolkit.mcp_server.input.errors import InputError, client_safe_input_error_code
 from analyst_toolkit.mcp_server.input.ingest import ingest_uploaded_bytes
 from analyst_toolkit.mcp_server.registry import register_tool
 from analyst_toolkit.mcp_server.response_utils import new_trace_id
@@ -114,7 +114,7 @@ async def _toolkit_upload_input(
         return {
             "status": "error",
             "module": "upload_input",
-            "code": exc.code,
+            "code": client_safe_input_error_code(exc.code),
             "message": exc.message,
             "trace_id": trace_id,
         }

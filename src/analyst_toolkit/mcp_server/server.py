@@ -40,6 +40,7 @@ from analyst_toolkit.mcp_server.input.errors import (
     InputError,
     InputNotSupportedError,
     InputPayloadTooLargeError,
+    client_safe_input_error_code,
 )
 from analyst_toolkit.mcp_server.input.ingest import (
     get_input_descriptor,
@@ -164,7 +165,7 @@ def _input_error_http_status(exc: InputError) -> int:
 def _input_error_detail(exc: InputError, trace_id: str) -> dict[str, str]:
     return {
         "error": exc.message,
-        "code": exc.code,
+        "code": client_safe_input_error_code(exc.code),
         "trace_id": trace_id,
     }
 

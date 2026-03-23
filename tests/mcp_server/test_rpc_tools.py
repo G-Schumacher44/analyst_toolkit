@@ -61,7 +61,7 @@ def test_rpc_tools_list_exposes_data_dictionary_input_id_schema(client):
     data_dictionary = next(tool for tool in tools if tool["name"] == "data_dictionary")
     input_schema = data_dictionary["inputSchema"]
 
-    assert input_schema["properties"]["input_id"]["pattern"] == "^input_[a-f0-9]{12}$"
+    assert input_schema["properties"]["input_id"]["pattern"] == "^input_[a-f0-9]{16}$"
     assert input_schema["properties"]["input_id"]["description"].endswith(
         "If provided, gcs_path and session_id are ignored."
     )
@@ -80,7 +80,7 @@ def test_rpc_tools_list_standardizes_input_id_pattern_across_tool_schemas(client
     for tool_name in ("infer_configs", "auto_heal", "get_input_descriptor"):
         assert tool_name in tools, f"Expected tool '{tool_name}' not found in tools/list response"
         input_id_schema = tools[tool_name]["inputSchema"]["properties"]["input_id"]
-        assert input_id_schema["pattern"] == "^input_[a-f0-9]{12}$"
+        assert input_id_schema["pattern"] == "^input_[a-f0-9]{16}$"
         assert "Canonical server-managed input reference" in input_id_schema["description"]
 
 
@@ -956,7 +956,7 @@ def test_rpc_data_dictionary_tool_passes_explicit_input_id(client, mocker, tmp_p
             "name": "data_dictionary",
             "arguments": {
                 "gcs_path": "gs://bucket/data.csv",
-                "input_id": "input_deadbeefcafe",
+                "input_id": "input_deadbeefcafebabe",
                 "run_id": "dictionary_prelaunch_002",
             },
         },
@@ -968,7 +968,7 @@ def test_rpc_data_dictionary_tool_passes_explicit_input_id(client, mocker, tmp_p
     load_input.assert_called_once_with(
         "gs://bucket/data.csv",
         session_id=None,
-        input_id="input_deadbeefcafe",
+        input_id="input_deadbeefcafebabe",
     )
 
 

@@ -12,7 +12,12 @@ import pandas as pd
 from analyst_toolkit.mcp_server.input.adapters import resolve_source_reference
 from analyst_toolkit.mcp_server.input.errors import InputNotFoundError
 from analyst_toolkit.mcp_server.input.loaders import load_dataframe_from_descriptor
-from analyst_toolkit.mcp_server.input.models import InputDescriptor, InputSourceType
+from analyst_toolkit.mcp_server.input.models import (
+    INPUT_ID_HEX_LENGTH,
+    INPUT_ID_PREFIX,
+    InputDescriptor,
+    InputSourceType,
+)
 from analyst_toolkit.mcp_server.input.registry import (
     bind_session_input,
     get_descriptor,
@@ -24,10 +29,16 @@ from analyst_toolkit.mcp_server.state import StateStore
 
 
 def _new_input_id(stable_key: str | None = None) -> str:
+    """Return canonical input IDs with a 64-bit hex suffix.
+
+    Sixteen hex characters gives 64 bits of entropy, which is a safer long-term
+    collision budget for the bounded in-memory registry while preserving stable,
+    deterministic IDs for idempotent register/upload flows.
+    """
     if stable_key:
         digest = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()
-        return f"input_{digest[:12]}"
-    return f"input_{uuid.uuid4().hex[:12]}"
+        return f"{INPUT_ID_PREFIX}{digest[:INPUT_ID_HEX_LENGTH]}"
+    return f"{INPUT_ID_PREFIX}{uuid.uuid4().hex[:INPUT_ID_HEX_LENGTH]}"
 
 
 def get_input_descriptor(input_id: str) -> InputDescriptor | None:

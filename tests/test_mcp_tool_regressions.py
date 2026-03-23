@@ -1875,6 +1875,29 @@ async def test_auto_heal_accepts_input_id_without_internal_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_register_input_tool_falls_back_to_allowlisted_error_code(monkeypatch):
+    from analyst_toolkit.mcp_server.input.errors import InputError
+
+    class FutureInputError(InputError):
+        code = "INPUT_FUTURE_MODE"
+
+    async def run():
+        return await input_ingest_tool._toolkit_register_input(uri="gs://bucket/data.csv")
+
+    def raise_future_error(*args, **kwargs):
+        raise FutureInputError("Unexpected future input error")
+
+    import analyst_toolkit.mcp_server.tools.input_ingest as input_ingest_tool
+
+    monkeypatch.setattr(input_ingest_tool, "register_input_source", raise_future_error)
+
+    result = await run()
+
+    assert result["status"] == "error"
+    assert result["code"] == "INPUT_ERROR"
+
+
+@pytest.mark.asyncio
 async def test_infer_configs_persists_configs_to_session(monkeypatch, mocker):
     """infer_configs should store inferred configs in StateStore for downstream tools."""
     df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})

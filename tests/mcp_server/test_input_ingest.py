@@ -3,8 +3,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import analyst_toolkit.mcp_server.server as server_module
 from analyst_toolkit.mcp_server.input import registry as input_registry
-from analyst_toolkit.mcp_server.input.errors import InputPathDeniedError
+from analyst_toolkit.mcp_server.input.errors import InputError, InputPathDeniedError
 from analyst_toolkit.mcp_server.input.storage import validate_server_visible_path
 from analyst_toolkit.mcp_server.state import StateStore
 from analyst_toolkit.mcp_server.tools import diagnostics as diagnostics_tool
@@ -282,7 +283,7 @@ def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(client
         "method": "tools/call",
         "params": {
             "name": "get_input_descriptor",
-            "arguments": {"input_id": "input_deadbeefcafe"},
+            "arguments": {"input_id": "input_deadbeefcafebabe"},
         },
     }
 
@@ -293,6 +294,27 @@ def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(client
     assert result["module"] == "get_input_descriptor"
     assert result["code"] == "INPUT_NOT_FOUND"
     assert isinstance(result["trace_id"], str)
+
+
+def test_inputs_register_falls_back_to_allowlisted_error_code(client, monkeypatch, clean_input_env):
+    class FutureInputError(InputError):
+        code = "INPUT_FUTURE_MODE"
+
+    def raise_future_error(*args, **kwargs):
+        raise FutureInputError("Unexpected future input error")
+
+    monkeypatch.setattr(server_module, "register_input_source", raise_future_error)
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": "gs://bucket/dirty_penguins.csv", "load_into_session": False},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_ERROR"
+    assert detail["error"] == "Unexpected future input error"
+    assert isinstance(detail["trace_id"], str)
 
 
 def test_register_input_tool_and_diagnostics_input_id_flow(client, mocker, clean_input_env):

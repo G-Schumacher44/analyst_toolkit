@@ -8,6 +8,8 @@ and document tool inputs.
 
 from typing import TypedDict
 
+from analyst_toolkit.mcp_server.input.models import INPUT_ID_HEX_LENGTH, INPUT_ID_PATTERN
+
 
 class ToolResponse(TypedDict):
     status: str  # "pass" | "warn" | "fail" | "error"
@@ -38,10 +40,11 @@ _SESSION_ID_PROP = {
 INPUT_ID_PROP = {
     "input_id": {
         "type": "string",
-        "pattern": "^input_[a-f0-9]{12}$",
+        "pattern": INPUT_ID_PATTERN,
         "description": (
             "Optional: Canonical server-managed input reference returned by input "
-            "ingest/register flows. If provided, gcs_path and session_id are ignored."
+            "ingest/register flows. Uses a stable 16-hex suffix collision budget. "
+            "If provided, gcs_path and session_id are ignored."
         ),
     }
 }
