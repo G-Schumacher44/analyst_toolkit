@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import analyst_toolkit.mcp_server.local_artifact_server as artifact_server_module
 import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
+import analyst_toolkit.mcp_server.tools.cockpit_history as cockpit_history_module
 import analyst_toolkit.mcp_server.tools.data_dictionary as data_dictionary_tool
 from analyst_toolkit.mcp_server.input.models import INPUT_ID_PATTERN
 from analyst_toolkit.mcp_server.server import TOOL_REGISTRY, app
@@ -814,9 +815,13 @@ def test_build_recent_run_cards_discovers_local_dashboards(mocker, tmp_path, mon
         artifact.parent.mkdir(parents=True, exist_ok=True)
         artifact.write_text("<html></html>", encoding="utf-8")
 
-    mocker.patch.object(cockpit_module, "_iter_recent_history_files", return_value=[history_file])
     mocker.patch.object(
-        cockpit_module,
+        cockpit_history_module,
+        "_iter_recent_history_files",
+        return_value=[history_file],
+    )
+    mocker.patch.object(
+        cockpit_history_module,
         "_read_history_entries",
         return_value=[
             {
@@ -830,11 +835,11 @@ def test_build_recent_run_cards_discovers_local_dashboards(mocker, tmp_path, mon
         ],
     )
     mocker.patch.object(
-        cockpit_module,
+        cockpit_history_module,
         "build_data_health_report",
         return_value={"health_score": 94.0, "health_status": "green"},
     )
-    mocker.patch.object(cockpit_module, "_WORKSPACE_ROOT", tmp_path)
+    mocker.patch.object(cockpit_history_module, "_WORKSPACE_ROOT", tmp_path)
     monkeypatch.chdir(tmp_path)
 
     cards = cockpit_module._build_recent_run_cards(limit=5)
