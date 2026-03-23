@@ -329,7 +329,7 @@ async def test_toolkit_get_pipeline_dashboard_does_not_append_duplicate_history_
         return_value="/tmp/run-pipeline-001_pipeline_dashboard.html",
     )
     append_history = mocker.patch.object(cockpit_module, "append_to_run_history")
-    mocker.patch.object(
+    deliver = mocker.patch.object(
         cockpit_module,
         "deliver_artifact",
         return_value={
@@ -344,4 +344,11 @@ async def test_toolkit_get_pipeline_dashboard_does_not_append_duplicate_history_
     result = await cockpit_module._toolkit_get_pipeline_dashboard(run_id="run-pipeline-001")
 
     assert result["status"] == "pass"
+    assert result["artifact_path"] == "/tmp/run-pipeline-001_pipeline_dashboard.html"
+    assert result["artifact_url"] == history[0]["artifact_url"]
+    assert result["artifact_url"] == "https://example.com/pipeline.html"
+    deliver.assert_called_once()
+    deliver_call = deliver.call_args.kwargs
+    assert deliver_call["run_id"] == "run-pipeline-001"
+    assert deliver_call["module"] == "pipeline_dashboard"
     append_history.assert_not_called()

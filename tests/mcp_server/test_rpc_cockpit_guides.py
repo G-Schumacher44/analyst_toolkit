@@ -9,7 +9,15 @@ from analyst_toolkit.mcp_server.tools.cockpit_templates import (
 
 def test_build_cockpit_resource_groups_uses_reference_lookup_not_position() -> None:
     resources = build_cockpit_resources()
-    reordered = [resources[5], resources[2], resources[0], resources[4], resources[1], resources[3]]
+    resources_by_reference = {resource["Reference"]: resource for resource in resources}
+    reordered = [
+        resources_by_reference["analyst://templates/config/data_dictionary_request_template.yaml"],
+        resources_by_reference["analyst://catalog/capabilities"],
+        resources_by_reference["analyst://docs/quickstart"],
+        resources_by_reference["analyst://templates/config/auto_heal_request_template.yaml"],
+        resources_by_reference["analyst://docs/agent-playbook"],
+        resources_by_reference["analyst://templates/config/runtime_overlay_template.yaml"],
+    ]
 
     groups = build_cockpit_resource_groups(reordered)
 
