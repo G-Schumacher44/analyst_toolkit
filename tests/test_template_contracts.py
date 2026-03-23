@@ -15,6 +15,10 @@ from analyst_toolkit.mcp_server.templates import (
     list_template_resources,
     read_template_resource,
 )
+from analyst_toolkit.mcp_server.tools.auto_heal import _INPUT_SCHEMA as AUTO_HEAL_INPUT_SCHEMA
+from analyst_toolkit.mcp_server.tools.data_dictionary import (
+    DATA_DICTIONARY_INPUT_SCHEMA,
+)
 from analyst_toolkit.mcp_server.tools.preflight_config import (
     _shape_warnings,
     _unknown_effective_keys,
@@ -41,6 +45,8 @@ def test_template_resource_uris_cover_template_files():
     # These are concrete local/internal run configs, not user-facing template resources.
     assert "analyst://templates/config/nightly_silver_qa_config.yaml" not in uris
     assert "analyst://templates/config/run_toolkit_config.yaml" not in uris
+    assert "analyst://templates/config/handling_config_template.yaml" not in uris
+    assert "analyst://templates/config/certification_config_template.yaml" not in uris
 
 
 def test_all_template_resources_parse_as_yaml_mapping():
@@ -87,3 +93,19 @@ def test_public_module_templates_match_current_config_contracts():
         assert not _shape_warnings(module_name, normalized), spec.filename
         assert not _unknown_effective_keys(module_name, normalized), spec.filename
         CONFIG_MODELS[module_name].model_validate(normalized)
+
+
+def test_workflow_request_templates_match_public_tool_input_contracts():
+    cases = [
+        ("auto_heal_request_template.yaml", AUTO_HEAL_INPUT_SCHEMA),
+        ("data_dictionary_request_template.yaml", DATA_DICTIONARY_INPUT_SCHEMA),
+    ]
+
+    for filename, schema in cases:
+        raw = yaml.safe_load(
+            (Path(__file__).resolve().parent.parent / "config" / filename).read_text()
+        )
+        assert isinstance(raw, dict), filename
+        assert all(key in schema["properties"] for key in raw), filename
+        assert "runtime" in raw, filename
+        assert not any(key in raw for key in ("auto_heal", "data_dictionary")), filename

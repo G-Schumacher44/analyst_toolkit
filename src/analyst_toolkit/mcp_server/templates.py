@@ -88,11 +88,6 @@ CONFIG_TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
         config_root="outlier_detection",
     ),
     TemplateSpec(
-        filename="handling_config_template.yaml",
-        description="Module config template: outlier handling",
-        category="module_config",
-    ),
-    TemplateSpec(
         filename="imputation_config_template.yaml",
         description="Module config template: imputation",
         category="module_config",
@@ -105,11 +100,6 @@ CONFIG_TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
         category="module_config",
         tool="final_audit",
         config_root="final_audit",
-    ),
-    TemplateSpec(
-        filename="certification_config_template.yaml",
-        description="Module config template: certification",
-        category="module_config",
     ),
     TemplateSpec(
         filename="runtime_overlay_template.yaml",
