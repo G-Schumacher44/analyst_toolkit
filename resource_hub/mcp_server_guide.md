@@ -105,20 +105,22 @@ Choose an operating mode explicitly. The server is designed to be frictionless l
 | Profile | Host/Auth Posture | Intended Use | Minimum Expectations |
 | --- | --- | --- | --- |
 | `local-dev` | loopback bind, auth token optional | local development, desktop MCP hosts, local FridAI integration | localhost-only exposure, local review workflow |
-| `internal-trusted` | explicit non-loopback bind, bearer token required | private team/internal network deployment | token auth, documented environment, normal network controls |
-| `public-or-prod` | explicit non-loopback bind, bearer token required | managed or internet-reachable deployment | token auth, release checklist complete, operator docs reviewed |
+| `internal-trusted` | explicit non-loopback bind, bearer token strongly recommended | private team/internal network deployment | documented environment, normal network controls, token policy applied by operator |
+| `public-or-prod` | explicit non-loopback bind, bearer token strongly recommended | managed or internet-reachable deployment | secure deployment review complete, token policy applied by operator, operator docs reviewed |
 
 Recommended environment posture:
 
 | Setting | `local-dev` | `internal-trusted` | `public-or-prod` |
 | --- | --- | --- | --- |
 | `ANALYST_MCP_HOST` | default loopback | explicit non-loopback | explicit non-loopback |
-| `ANALYST_MCP_AUTH_TOKEN` | optional | required | required |
+| `ANALYST_MCP_AUTH_TOKEN` | optional | strongly recommended | strongly recommended |
 | `ANALYST_MCP_ENABLE_ARTIFACT_SERVER` | optional | optional | only if intentionally exposed |
 | `ANALYST_MCP_ARTIFACT_SERVER_HOST` | loopback | loopback unless justified | loopback unless explicitly reviewed |
 
 Release note:
 - The toolkit is production-oriented, but production claims should only be made for the deployment profile that matches the actual tested posture.
+- Current runtime behavior is localhost-first and logs when `ANALYST_MCP_AUTH_TOKEN` is unset on non-loopback binds. It does not currently hard-fail startup in that posture.
+- Treat HTTP access to local files and local artifact paths as privileged. If you intentionally expose non-loopback HTTP, pair it with token auth and normal network controls.
 
 ## Operability Endpoints
 
