@@ -31,11 +31,11 @@ make install-mcp
 
 Before opening or merging a `dev -> main` release PR:
 
-1. Confirm CI is green on `dev`.
-2. Confirm CodeRabbit findings were fixed, resolved in-thread, logged as issues, or explicitly dismissed.
-3. Confirm release docs match the actual deployment posture being claimed.
-4. Confirm changelog/version state is correct for the release.
-5. Confirm remaining known limitations are either fixed or explicitly documented as deferred.
+1. Ensure CI is green on `dev`.
+2. Verify CodeRabbit findings were fixed, resolved in-thread, logged as issues, or explicitly dismissed.
+3. Match release docs to the actual deployment posture being claimed.
+4. Check changelog/version state before the release cut.
+5. Document any remaining known limitations that are intentionally deferred.
 
 ## Quality Gates
 
