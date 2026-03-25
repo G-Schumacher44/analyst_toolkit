@@ -36,6 +36,7 @@ The analyst toolkit MCP server exposes every toolkit module as a callable tool o
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Deployment Profiles](#deployment-profiles)
 - [Operability Endpoints](#operability-endpoints)
 - [Tool Reference](#tool-reference) ▾
 - [Pipeline Mode](#pipeline-mode-state-management)
@@ -96,6 +97,28 @@ curl http://localhost:8001/health | python3 -m json.tool
   ]
 }
 ```
+
+## Deployment Profiles
+
+Choose an operating mode explicitly. The server is designed to be frictionless locally and explicit when you widen the trust boundary.
+
+| Profile | Host/Auth Posture | Intended Use | Minimum Expectations |
+| --- | --- | --- | --- |
+| `local-dev` | loopback bind, auth token optional | local development, desktop MCP hosts, local FridAI integration | localhost-only exposure, local review workflow |
+| `internal-trusted` | explicit non-loopback bind, bearer token required | private team/internal network deployment | token auth, documented environment, normal network controls |
+| `public-or-prod` | explicit non-loopback bind, bearer token required | managed or internet-reachable deployment | token auth, release checklist complete, operator docs reviewed |
+
+Recommended environment posture:
+
+| Setting | `local-dev` | `internal-trusted` | `public-or-prod` |
+| --- | --- | --- | --- |
+| `ANALYST_MCP_HOST` | default loopback | explicit non-loopback | explicit non-loopback |
+| `ANALYST_MCP_AUTH_TOKEN` | optional | required | required |
+| `ANALYST_MCP_ENABLE_ARTIFACT_SERVER` | optional | optional | only if intentionally exposed |
+| `ANALYST_MCP_ARTIFACT_SERVER_HOST` | loopback | loopback unless justified | loopback unless explicitly reviewed |
+
+Release note:
+- The toolkit is production-oriented, but production claims should only be made for the deployment profile that matches the actual tested posture.
 
 ## Operability Endpoints
 
@@ -688,6 +711,16 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_ALLOW_BIND_ALL` | No | `false` | Allow artifact server to bind to `0.0.0.0` (explicit opt-in) |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
+
+## MCP Compatibility Policy
+
+The project aims to preserve stable MCP response contracts where practical.
+
+Policy:
+- additive response fields are preferred over breaking field-shape changes
+- behavior or contract changes should land with regression tests in the same PR
+- externally visible contract changes should be called out in release notes and PR descriptions
+- `dev` is the integration branch; public contract changes should not bypass it on the way to `main`
 
 ---
 

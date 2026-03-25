@@ -183,6 +183,21 @@ Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an op
 | `ANALYST_MCP_AUTH_TOKEN` | Bearer token auth for networked deployments |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | Tune template/resource read timeouts |
 
+### Deployment Profiles
+
+Use one of these operating modes intentionally:
+
+| Profile | Bind/Auth Posture | Intended Use |
+| ------- | ----------------- | ------------ |
+| `local-dev` | loopback bind, auth token optional | local testing, Claude Desktop, local FridAI integration |
+| `internal-trusted` | explicit non-loopback bind, bearer token required | team/internal network use behind normal network controls |
+| `public-or-prod` | explicit non-loopback bind, bearer token required, docs+ops review completed | managed or internet-reachable deployment |
+
+Notes:
+- Default HTTP posture is localhost-first. Do not treat `docker-compose` port publishing as a reason to skip auth.
+- If you set a non-loopback host, set `ANALYST_MCP_AUTH_TOKEN`.
+- The artifact server is also localhost-first by default and should only be widened deliberately.
+
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
 ---
