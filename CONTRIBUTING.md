@@ -27,6 +27,16 @@ make install-mcp
 6. If behavior changes, add or update tests in the same PR.
 7. Promote `dev` into `main` only after the integration slice is green and ready to release publicly.
 
+## Release Promotion Checklist
+
+Before opening or merging a `dev -> main` release PR:
+
+1. Confirm CI is green on `dev`.
+2. Confirm CodeRabbit findings were fixed, resolved in-thread, logged as issues, or explicitly dismissed.
+3. Confirm release docs match the actual deployment posture being claimed.
+4. Confirm changelog/version state is correct for the release.
+5. Confirm remaining known limitations are either fixed or explicitly documented as deferred.
+
 ## Quality Gates
 
 Before opening or updating a PR, run:
@@ -68,6 +78,12 @@ CI enforces linting, type checks, tests, and Docker smoke tests.
 - If a response field changes shape, document it in the PR.
 - Avoid introducing hidden behavior changes; make config-driven behavior explicit.
 - Keep `run_id` and `session_id` lifecycle behavior deterministic and test-covered.
+
+## Compatibility Policy
+
+- Prefer additive MCP response changes over breaking shape changes.
+- If a contract break is unavoidable, call it out in the PR and release notes.
+- Keep docs and regression tests aligned with the actual public contract.
 
 ## Commit Message Guidance
 
