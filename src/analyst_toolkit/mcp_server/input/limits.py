@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -62,18 +63,53 @@ def enforce_gcs_prefix_object_limit(*, object_count: int, reference: str) -> Non
 
 
 def enforce_dataframe_limits(df: pd.DataFrame, *, reference: str) -> None:
+    enforce_tabular_limits(
+        row_count=len(df),
+        memory_usage_bytes=int(df.memory_usage(index=True, deep=True).sum()),
+        reference=reference,
+    )
+
+
+def enforce_tabular_limits(
+    *,
+    row_count: int,
+    memory_usage_bytes: int,
+    reference: str,
+    memory_env_name: str = "ANALYST_MCP_MAX_INPUT_MEMORY_BYTES",
+) -> None:
     row_limit = max_input_rows()
-    if row_limit and len(df) > row_limit:
+    if row_limit and row_count > row_limit:
         raise InputPayloadTooLargeError(
             f"Input '{reference}' exceeds ANALYST_MCP_MAX_INPUT_ROWS "
-            f"({len(df)} rows > {row_limit})."
+            f"({row_count} rows > {row_limit})."
         )
 
     memory_limit = max_input_memory_bytes()
-    if memory_limit:
-        memory_usage = int(df.memory_usage(index=True, deep=True).sum())
-        if memory_usage > memory_limit:
-            raise InputPayloadTooLargeError(
-                f"Input '{reference}' exceeds ANALYST_MCP_MAX_INPUT_MEMORY_BYTES "
-                f"({memory_usage} bytes > {memory_limit} bytes)."
-            )
+    if memory_limit and memory_usage_bytes > memory_limit:
+        raise InputPayloadTooLargeError(
+            f"Input '{reference}' exceeds {memory_env_name} "
+            f"({memory_usage_bytes} bytes > {memory_limit} bytes)."
+        )
+
+
+def materialize_chunked_frames(
+    frames: Iterable[pd.DataFrame], *, reference: str, copy: bool = False
+) -> pd.DataFrame:
+    collected: list[pd.DataFrame] = []
+    cumulative_rows = 0
+    cumulative_memory = 0
+    for frame in frames:
+        cumulative_rows += len(frame)
+        cumulative_memory += int(frame.memory_usage(index=True, deep=True).sum())
+        enforce_tabular_limits(
+            row_count=cumulative_rows,
+            memory_usage_bytes=cumulative_memory,
+            reference=reference,
+        )
+        collected.append(frame.copy() if copy else frame)
+
+    if not collected:
+        return pd.DataFrame()
+    if len(collected) == 1:
+        return collected[0]
+    return pd.concat(collected, ignore_index=True)
