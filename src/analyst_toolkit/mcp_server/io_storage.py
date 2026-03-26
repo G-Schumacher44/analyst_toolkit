@@ -9,6 +9,12 @@ from uuid import uuid4
 
 import pandas as pd
 
+from analyst_toolkit.mcp_server.input.limits import (
+    enforce_dataframe_limits,
+    enforce_gcs_prefix_object_limit,
+    enforce_input_bytes_limit,
+)
+
 logger = logging.getLogger(__name__)
 
 _CONTENT_TYPES = {
@@ -30,16 +36,30 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
 
     # Direct file path — download and read without listing
     if prefix.endswith(".parquet") or prefix.endswith(".csv"):
+        blob = bucket.get_blob(prefix)
+        if blob is None:
+            raise FileNotFoundError(f"No file found at gs://{bucket_name}/{prefix}")
+        enforce_input_bytes_limit(blob.size, reference=gcs_path)
         with tempfile.TemporaryDirectory() as tmpdir:
             local_path = Path(tmpdir) / Path(prefix).name
-            bucket.blob(prefix).download_to_filename(str(local_path))
+            blob.download_to_filename(str(local_path))
             if local_path.suffix == ".parquet":
-                return pd.read_parquet(local_path)
-            return pd.read_csv(local_path, low_memory=False)
+                df = pd.read_parquet(local_path)
+            else:
+                df = pd.read_csv(local_path, low_memory=False)
+            enforce_dataframe_limits(df, reference=gcs_path)
+            return df
 
     # Directory path — list and concat all matching files
-    blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"))
-    blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
+    blobs = []
+    total_bytes = 0
+    for blob in client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"):
+        if not blob.name.endswith(".parquet") and not blob.name.endswith(".csv"):
+            continue
+        blobs.append(blob)
+        total_bytes += int(getattr(blob, "size", 0) or 0)
+        enforce_gcs_prefix_object_limit(object_count=len(blobs), reference=gcs_path)
+        enforce_input_bytes_limit(total_bytes, reference=gcs_path)
 
     if not blobs:
         raise FileNotFoundError(f"No .parquet or .csv files found at gs://{bucket_name}/{prefix}")
@@ -53,7 +73,9 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
                 frames.append(pd.read_parquet(local_path))
             else:
                 frames.append(pd.read_csv(local_path, low_memory=False))
-    return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+    result = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+    enforce_dataframe_limits(result, reference=gcs_path)
+    return result
 
 
 def _collect_export_html_flags(

@@ -697,6 +697,10 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_VERSION_FALLBACK` | No | `0.0.0+local` | Version string used when package metadata is unavailable in local/source execution |
 | `ANALYST_MCP_AUTH_TOKEN` | No | _(unset)_ | If set, require `Authorization: Bearer <token>` for `/rpc`, `/health`, `/ready`, and `/metrics` |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | No | `8.0` | Timeout for MCP `resources/list` and `resources/read` filesystem work |
+| `ANALYST_MCP_MAX_INPUT_BYTES` | No | `104857600` | Maximum single-input byte budget for local files, GCS objects, and cumulative GCS prefix loads |
+| `ANALYST_MCP_MAX_GCS_PREFIX_OBJECTS` | No | `32` | Maximum number of `.csv` / `.parquet` blobs loaded from a single GCS prefix |
+| `ANALYST_MCP_MAX_INPUT_ROWS` | No | `1000000` | Maximum row count allowed after an input is loaded into a DataFrame |
+| `ANALYST_MCP_MAX_INPUT_MEMORY_BYTES` | No | `268435456` | Maximum in-memory DataFrame size allowed after an input is loaded |
 | `ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES` | No | `false` | If `true`, `resources/templates/list` returns URI templates (otherwise empty to avoid duplicate UI listings) |
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
 | `ANALYST_MCP_STRUCTURED_LOGS` | No | `false` | Emit JSON-structured request lifecycle logs (`trace_id`, method, tool, duration) |
@@ -738,6 +742,11 @@ The server dispatches on path format:
 | `path/to/file.parquet` | `pd.read_parquet()` (local) |
 | `path/to/file.csv` | `pd.read_csv()` (local) |
 | `session_id` | Reads from in-memory `StateStore` (no I/O) |
+
+Boundary guards:
+- local files, single GCS objects, and cumulative GCS prefix loads respect `ANALYST_MCP_MAX_INPUT_BYTES`
+- GCS prefix scans stop once `ANALYST_MCP_MAX_GCS_PREFIX_OBJECTS` is exceeded
+- loaded DataFrames are rejected if they exceed `ANALYST_MCP_MAX_INPUT_ROWS` or `ANALYST_MCP_MAX_INPUT_MEMORY_BYTES`
 
 > **Note:** Partition-style directory paths must end with `/`. Direct file paths (ending in `.parquet` or `.csv`) are read without listing.
 
