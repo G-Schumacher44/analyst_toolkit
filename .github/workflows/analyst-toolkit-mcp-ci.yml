@@ -154,6 +154,7 @@ jobs:
             --cov-fail-under=68
 
       - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
