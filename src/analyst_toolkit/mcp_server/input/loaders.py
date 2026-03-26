@@ -7,6 +7,10 @@ from pathlib import Path
 import pandas as pd
 
 from analyst_toolkit.mcp_server.input.errors import InputNotSupportedError
+from analyst_toolkit.mcp_server.input.limits import (
+    enforce_dataframe_limits,
+    enforce_input_bytes_limit,
+)
 from analyst_toolkit.mcp_server.input.models import InputDescriptor
 from analyst_toolkit.mcp_server.io_storage import load_from_gcs
 
@@ -24,10 +28,15 @@ def load_dataframe_from_descriptor(descriptor: InputDescriptor) -> pd.DataFrame:
         )
 
     path = Path(descriptor.resolved_reference).resolve(strict=False)
+    enforce_input_bytes_limit(path.stat().st_size, reference=str(path))
     if path.suffix == ".parquet":
-        return pd.read_parquet(path)
+        df = pd.read_parquet(path)
+        enforce_dataframe_limits(df, reference=str(path))
+        return df
     if path.suffix == ".csv":
-        return pd.read_csv(path, low_memory=False)
+        df = pd.read_csv(path, low_memory=False)
+        enforce_dataframe_limits(df, reference=str(path))
+        return df
     raise InputNotSupportedError(
         f"Unsupported file format: {path.suffix or '<none>'}. Supported formats are .csv and .parquet."
     )

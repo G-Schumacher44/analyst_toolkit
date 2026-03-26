@@ -6,6 +6,7 @@ import inspect
 import logging
 from typing import Any
 
+from analyst_toolkit.mcp_server.input.errors import InputError, client_safe_input_error_code
 from analyst_toolkit.mcp_server.response_utils import (
     attach_trace_id,
     build_error_envelope,
@@ -30,6 +31,33 @@ def register_tool(name: str, fn, description: str, input_schema: dict) -> None:
             if inspect.isawaitable(result):
                 result = await result
             return attach_trace_id(result, trace_id)
+        except InputError as exc:
+            normalized_code = client_safe_input_error_code(exc.code)
+            message = str(exc)
+            logger.warning(
+                "Tool '%s' rejected input at trust boundary (trace_id=%s, code=%s)",
+                name,
+                trace_id,
+                normalized_code,
+            )
+            return {
+                "status": "error",
+                "module": name,
+                "code": normalized_code,
+                "message": message,
+                "error": build_error_envelope(
+                    category="io",
+                    code=normalized_code.lower(),
+                    message=message,
+                    remediation=(
+                        "Reduce input size, narrow the selected prefix, or raise the relevant "
+                        "ANALYST_MCP_MAX_INPUT_* limit if this workload is expected."
+                    ),
+                    retryable=False,
+                    trace_id=trace_id,
+                ),
+                "trace_id": trace_id,
+            }
         except Exception as exc:
             logger.exception("Tool '%s' failed (trace_id=%s)", name, trace_id)
             return {
