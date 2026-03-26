@@ -111,11 +111,17 @@ jobs:
 
       - name: Audit installed dependencies
         run: |
-          # CVE-2026-4539 is currently reported against Pygments 2.19.2 with no
-          # published fix version in the advisory feed yet. Keep the audit gate
-          # active, but ignore this single unresolved advisory until upstream
-          # publishes a remediable version.
-          pip-audit --ignore-vuln CVE-2026-4539
+          IGNORE_FLAGS=""
+          if [ -f .pip-audit-known-vulns ]; then
+            while IFS= read -r line; do
+              line="${line%%#*}"          # strip comments
+              line="$(echo "$line" | xargs)"  # trim whitespace
+              [ -z "$line" ] && continue
+              IGNORE_FLAGS="$IGNORE_FLAGS --ignore-vuln $line"
+            done < .pip-audit-known-vulns
+          fi
+          # shellcheck disable=SC2086
+          pip-audit $IGNORE_FLAGS
 
   build-package:
     name: Build Wheel

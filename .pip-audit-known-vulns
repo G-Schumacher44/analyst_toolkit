@@ -1,0 +1,8 @@
+# Known vulnerability ignores for pip-audit
+# Format: one CVE per line, with comment explaining why and an expiry date.
+# The CI step reads this file and converts each CVE into --ignore-vuln flags.
+# Remove entries once upstream publishes a fix and you've upgraded.
+
+# Pygments 2.19.2 — no patched release available yet (transitive dep via pytest/sphinx)
+# Added: 2026-03-25 | Revisit by: 2026-04-25
+CVE-2026-4539
