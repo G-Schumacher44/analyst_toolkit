@@ -10,6 +10,7 @@ from analyst_toolkit.mcp_server.state import StateStore
 def _session_summary(session_id: str) -> dict:
     """Build a compact summary dict for a session."""
     metadata = StateStore.get_metadata(session_id) or {}
+    expiry = StateStore.get_expiry_info(session_id)
     return {
         "session_id": session_id,
         "run_id": StateStore.get_run_id(session_id),
@@ -17,6 +18,9 @@ def _session_summary(session_id: str) -> dict:
         "row_count": metadata.get("row_count"),
         "col_count": metadata.get("col_count"),
         "updated_at": metadata.get("updated_at"),
+        "last_accessed_at": expiry["last_accessed_at"],
+        "expires_at": expiry["expires_at"],
+        "expires_in_sec": expiry["expires_in_sec"],
         "stored_configs": sorted(StateStore.get_configs(session_id).keys()),
     }
 
@@ -46,6 +50,7 @@ async def _toolkit_manage_session(
             "status": "pass",
             "module": "manage_session",
             "action": "list",
+            "session_policy": StateStore.policy(),
             "sessions": summaries,
             "session_count": len(summaries),
         }
@@ -73,6 +78,7 @@ async def _toolkit_manage_session(
                 "status": "pass",
                 "module": "manage_session",
                 "action": "inspect",
+                "session_policy": StateStore.policy(),
                 "session": summary,
             },
             [
@@ -115,6 +121,7 @@ async def _toolkit_manage_session(
                 "status": "pass",
                 "module": "manage_session",
                 "action": "fork",
+                "session_policy": StateStore.policy(),
                 "source_session_id": session_id,
                 "new_session_id": new_session_id,
                 "run_id": run_id,
@@ -166,6 +173,7 @@ async def _toolkit_manage_session(
             "status": "pass",
             "module": "manage_session",
             "action": "rebind",
+            "session_policy": StateStore.policy(),
             "session_id": session_id,
             "previous_run_id": old_run_id,
             "new_run_id": run_id,
@@ -186,6 +194,7 @@ async def _toolkit_manage_session(
                 "status": "pass",
                 "module": "manage_session",
                 "action": "clear",
+                "session_policy": StateStore.policy(),
                 "cleared_session_id": session_id,
             }
         else:
@@ -196,6 +205,7 @@ async def _toolkit_manage_session(
                 "status": "pass",
                 "module": "manage_session",
                 "action": "clear",
+                "session_policy": StateStore.policy(),
                 "cleared_count": count,
                 "message": f"Cleared all {count} sessions.",
             }
