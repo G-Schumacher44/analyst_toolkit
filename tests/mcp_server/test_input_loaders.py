@@ -40,6 +40,59 @@ def test_load_dataframe_from_descriptor_rejects_dataframe_over_row_limit(monkeyp
         load_dataframe_from_descriptor(_descriptor_for(source))
 
 
+def test_load_dataframe_from_descriptor_rejects_dataframe_over_memory_limit(monkeypatch, tmp_path):
+    source = tmp_path / "memory.csv"
+    pd.DataFrame({"a": ["x" * 64, "y" * 64]}).to_csv(source, index=False)
+    monkeypatch.setenv("ANALYST_MCP_MAX_INPUT_BYTES", "1000000")
+    monkeypatch.setenv("ANALYST_MCP_MAX_INPUT_MEMORY_BYTES", "32")
+
+    with pytest.raises(InputPayloadTooLargeError, match="ANALYST_MCP_MAX_INPUT_MEMORY_BYTES"):
+        load_dataframe_from_descriptor(_descriptor_for(source))
+
+
+def test_load_dataframe_from_descriptor_rejects_gcs_single_blob_over_byte_limit(monkeypatch):
+    class FakeBlob:
+        def __init__(self, name: str, size: int = 8):
+            self.name = name
+            self.size = size
+
+        def download_to_filename(self, filename: str) -> None:
+            Path(filename).write_text("a\n1\n", encoding="utf-8")
+
+    class FakeBucket:
+        def get_blob(self, blob_name: str):
+            assert blob_name == "dataset/file.csv"
+            return FakeBlob(blob_name, size=1024)
+
+    class FakeClient:
+        def bucket(self, _bucket_name: str):
+            return FakeBucket()
+
+    storage_mod = types.ModuleType("google.cloud.storage")
+    storage_mod.Client = FakeClient
+    cloud_mod = types.ModuleType("google.cloud")
+    cloud_mod.storage = storage_mod
+    google_mod = types.ModuleType("google")
+    google_mod.cloud = cloud_mod
+
+    monkeypatch.setitem(sys.modules, "google", google_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_mod)
+    monkeypatch.setenv("ANALYST_MCP_MAX_INPUT_BYTES", "16")
+
+    descriptor = InputDescriptor(
+        input_id="input_deadbeefcafebabe",
+        source_type="gcs",
+        original_reference="gs://bucket/dataset/file.csv",
+        resolved_reference="gs://bucket/dataset/file.csv",
+        display_name="dataset/file.csv",
+        media_type="text/csv",
+    )
+
+    with pytest.raises(InputPayloadTooLargeError, match="ANALYST_MCP_MAX_INPUT_BYTES"):
+        load_dataframe_from_descriptor(descriptor)
+
+
 def test_load_dataframe_from_descriptor_rejects_gcs_prefix_over_object_limit(monkeypatch):
     class FakeBlob:
         def __init__(self, name: str, size: int = 8):

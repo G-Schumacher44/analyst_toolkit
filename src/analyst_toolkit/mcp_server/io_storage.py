@@ -9,10 +9,12 @@ from uuid import uuid4
 
 import pandas as pd
 
+from analyst_toolkit.mcp_server.input.errors import InputNotFoundError
 from analyst_toolkit.mcp_server.input.limits import (
     enforce_dataframe_limits,
     enforce_gcs_prefix_object_limit,
     enforce_input_bytes_limit,
+    materialize_chunked_frames,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,38 @@ _CONTENT_TYPES = {
     ".json": "application/json",
     ".png": "image/png",
 }
+
+
+def _read_csv_with_limits(path: Path, *, reference: str) -> pd.DataFrame:
+    return materialize_chunked_frames(
+        pd.read_csv(path, low_memory=False, chunksize=50_000),
+        reference=reference,
+    )
+
+
+def _read_parquet_with_limits(path: Path, *, reference: str) -> pd.DataFrame:
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        df = pd.read_parquet(path)
+        enforce_dataframe_limits(df, reference=reference)
+        return df
+
+    parquet_file = pq.ParquetFile(path)
+    metadata = parquet_file.metadata
+    estimated_bytes = 0
+    for idx in range(metadata.num_row_groups):
+        estimated_bytes += metadata.row_group(idx).total_byte_size
+    from analyst_toolkit.mcp_server.input.limits import enforce_tabular_limits
+
+    enforce_tabular_limits(
+        row_count=metadata.num_rows,
+        memory_usage_bytes=estimated_bytes,
+        reference=reference,
+    )
+    df = pd.read_parquet(path)
+    enforce_dataframe_limits(df, reference=reference)
+    return df
 
 
 def load_from_gcs(gcs_path: str) -> pd.DataFrame:
@@ -38,16 +72,15 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     if prefix.endswith(".parquet") or prefix.endswith(".csv"):
         blob = bucket.get_blob(prefix)
         if blob is None:
-            raise FileNotFoundError(f"No file found at gs://{bucket_name}/{prefix}")
+            raise InputNotFoundError(f"No file found at gs://{bucket_name}/{prefix}")
         enforce_input_bytes_limit(blob.size, reference=gcs_path)
         with tempfile.TemporaryDirectory() as tmpdir:
             local_path = Path(tmpdir) / Path(prefix).name
             blob.download_to_filename(str(local_path))
             if local_path.suffix == ".parquet":
-                df = pd.read_parquet(local_path)
+                df = _read_parquet_with_limits(local_path, reference=gcs_path)
             else:
-                df = pd.read_csv(local_path, low_memory=False)
-            enforce_dataframe_limits(df, reference=gcs_path)
+                df = _read_csv_with_limits(local_path, reference=gcs_path)
             return df
 
     # Directory path — list and concat all matching files
@@ -70,10 +103,10 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
             local_path = Path(tmpdir) / blob.name.replace("/", "_")
             blob.download_to_filename(str(local_path))
             if local_path.suffix == ".parquet":
-                frames.append(pd.read_parquet(local_path))
+                frames.append(_read_parquet_with_limits(local_path, reference=gcs_path))
             else:
-                frames.append(pd.read_csv(local_path, low_memory=False))
-    result = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+                frames.append(_read_csv_with_limits(local_path, reference=gcs_path))
+    result = materialize_chunked_frames(frames, reference=gcs_path, copy=False)
     enforce_dataframe_limits(result, reference=gcs_path)
     return result
 

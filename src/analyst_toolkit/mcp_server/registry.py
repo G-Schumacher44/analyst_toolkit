@@ -19,6 +19,28 @@ logger = logging.getLogger("analyst_toolkit.mcp_server.registry")
 TOOL_REGISTRY: dict[str, dict[str, Any]] = {}
 
 
+def _input_error_remediation(code: str) -> str:
+    if code == "INPUT_PAYLOAD_TOO_LARGE":
+        return (
+            "Reduce input size, narrow the selected prefix, or raise the relevant "
+            "ANALYST_MCP_MAX_INPUT_* limit if this workload is expected."
+        )
+    if code == "INPUT_NOT_SUPPORTED":
+        return (
+            "Use a supported source or file format: upload/server-visible .csv/.parquet, or gs://."
+        )
+    if code == "INPUT_PATH_DENIED":
+        return (
+            "Use a server-visible path, update ANALYST_MCP_ALLOWED_INPUT_ROOTS, "
+            "upload the file, or switch to gs://."
+        )
+    if code == "INPUT_CONFLICT":
+        return "Retry with a unique idempotency key or the same canonical source reference."
+    if code == "INPUT_NOT_FOUND" or code == "INPUT_PATH_NOT_FOUND":
+        return "Check the requested input_id or path and retry with an existing resource."
+    return "Verify input arguments and retry."
+
+
 def register_tool(name: str, fn, description: str, input_schema: dict) -> None:
     """
     Register an async callable as an MCP tool.
@@ -49,10 +71,7 @@ def register_tool(name: str, fn, description: str, input_schema: dict) -> None:
                     category="io",
                     code=normalized_code.lower(),
                     message=message,
-                    remediation=(
-                        "Reduce input size, narrow the selected prefix, or raise the relevant "
-                        "ANALYST_MCP_MAX_INPUT_* limit if this workload is expected."
-                    ),
+                    remediation=_input_error_remediation(normalized_code),
                     retryable=False,
                     trace_id=trace_id,
                 ),
