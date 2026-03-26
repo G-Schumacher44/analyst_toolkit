@@ -65,6 +65,9 @@ CodeRabbit is included in the PR review loop. Triage its findings using the [Cod
 
 CI enforces linting, type checks, tests, and Docker smoke tests.
 
+The CI pipeline also enforces a Python 3.13 coverage floor. The current release
+gate is `68%` statement coverage for `src/analyst_toolkit`.
+
 ## Testing Guidance
 
 - Add or update tests for behavior changes.
@@ -84,6 +87,12 @@ CI enforces linting, type checks, tests, and Docker smoke tests.
 - Prefer additive MCP response changes over breaking shape changes.
 - If a contract break is unavoidable, call it out in the PR and release notes.
 - Keep docs and regression tests aligned with the actual public contract.
+
+## GitHub Actions Trust Model
+
+- CI currently uses maintained major-version action tags such as `@v4` and `@v5`.
+- Before introducing or upgrading an action, review the upstream action owner, release history, and required permissions.
+- Prefer official GitHub or Docker-maintained actions where possible, and document any new third-party action use in the PR.
 
 ## Commit Message Guidance
 
