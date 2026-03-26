@@ -110,7 +110,12 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Audit installed dependencies
-        run: pip-audit
+        run: |
+          # CVE-2026-4539 is currently reported against Pygments 2.19.2 with no
+          # published fix version in the advisory feed yet. Keep the audit gate
+          # active, but ignore this single unresolved advisory until upstream
+          # publishes a remediable version.
+          pip-audit --ignore-vuln CVE-2026-4539
 
   build-package:
     name: Build Wheel
