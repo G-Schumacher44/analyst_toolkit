@@ -123,9 +123,45 @@ jobs:
           # shellcheck disable=SC2086
           pip-audit $IGNORE_FLAGS
 
+  coverage:
+    name: Coverage (py3.13)
+    needs: [secret-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-mcp.txt
+          pip install -e ".[dev]"
+
+      - name: Run coverage gate
+        run: |
+          pytest tests/ \
+            --cov=src/analyst_toolkit \
+            --cov-report=xml \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=68
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
   build-package:
     name: Build Wheel
-    needs: [quality, dependency-audit]
+    needs: [quality, dependency-audit, coverage]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -155,7 +191,7 @@ jobs:
 
   docker-smoke:
     name: Docker Build and Smoke Test
-    needs: [quality, dependency-audit]
+    needs: [quality, dependency-audit, coverage]
     runs-on: ubuntu-latest
     permissions:
       contents: read
