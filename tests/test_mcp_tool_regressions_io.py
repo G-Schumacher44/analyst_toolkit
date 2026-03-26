@@ -21,9 +21,12 @@ async def test_manage_session_list():
     result = await session_tool._toolkit_manage_session(action="list")
     assert result["status"] == "pass"
     assert result["session_count"] == 2
+    assert result["session_policy"]["backend"] == "memory"
+    assert result["session_policy"]["durable"] is False
     session_ids = {s["session_id"] for s in result["sessions"]}
     assert sid1 in session_ids
     assert sid2 in session_ids
+    assert all("expires_in_sec" in s for s in result["sessions"])
     StateStore.clear()
 
 
@@ -40,6 +43,9 @@ async def test_manage_session_inspect():
     assert result["session"]["run_id"] == "inspect_run"
     assert result["session"]["row_count"] == 3
     assert "validation" in result["session"]["stored_configs"]
+    assert result["session_policy"]["persistence"] == "in_memory_only"
+    assert result["session"]["last_accessed_at"]
+    assert result["session"]["expires_at"]
     assert "next_actions" in result
     StateStore.clear()
 

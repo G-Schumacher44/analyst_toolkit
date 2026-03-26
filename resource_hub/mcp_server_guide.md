@@ -226,6 +226,8 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 
 Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a tool runs, it saves its output to an in-memory `StateStore` and returns a `session_id`. Pass that `session_id` to the next tool to operate on the already-transformed data — no intermediate files needed.
 
+For this release, session persistence is explicitly **in-memory only**. Sessions are bounded by TTL and max-entry eviction, and `manage_session` surfaces the live retention policy plus per-session expiry timestamps.
+
 ```text
 1. diagnostics(gcs_path="gs://bucket/path/file.parquet", run_id="my_run")
      → creates session_id: "sess_abc123", establishes baseline profile
@@ -705,6 +707,8 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
 | `ANALYST_MCP_STRUCTURED_LOGS` | No | `false` | Emit JSON-structured request lifecycle logs (`trace_id`, method, tool, duration) |
 | `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
+| `ANALYST_MCP_SESSION_TTL_SEC` | No | `3600` | Session time-to-live for in-memory `StateStore` entries |
+| `ANALYST_MCP_SESSION_MAX_ENTRIES` | No | `32` | Maximum number of in-memory sessions retained before LRU eviction |
 | `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |
 | `ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT` | No | `true` | Default compact ledger mode for `get_run_history` when caller omits `summary_only` |
 | `ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT` | No | `50` | Default max ledger entries returned in compact mode when caller omits `limit` |
@@ -747,6 +751,11 @@ Boundary guards:
 - local files, single GCS objects, and cumulative GCS prefix loads respect `ANALYST_MCP_MAX_INPUT_BYTES`
 - GCS prefix scans stop once `ANALYST_MCP_MAX_GCS_PREFIX_OBJECTS` is exceeded
 - loaded DataFrames are rejected if they exceed `ANALYST_MCP_MAX_INPUT_ROWS` or `ANALYST_MCP_MAX_INPUT_MEMORY_BYTES`
+
+Session lifecycle notes:
+- `manage_session(action="list")` returns the active retention policy (`backend`, `durable`, `ttl_sec`, `max_entries`) alongside the session summaries
+- `manage_session(action="inspect")` returns `last_accessed_at`, `expires_at`, and `expires_in_sec` for the selected session
+- `manage_session(action="fork")` clones the in-memory DataFrame and optionally the stored inferred configs into a new session with its own run context
 
 > **Note:** Partition-style directory paths must end with `/`. Direct file paths (ending in `.parquet` or `.csv`) are read without listing.
 

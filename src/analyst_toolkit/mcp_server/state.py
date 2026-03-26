@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import pandas as pd
@@ -31,6 +32,17 @@ class StateStore:
     _session_run_ids: Dict[str, str] = {}
     _session_start_times: Dict[str, str] = {}
     _session_configs: Dict[str, Dict[str, str]] = {}
+
+    @classmethod
+    def policy(cls) -> dict[str, object]:
+        """Return the current session retention policy."""
+        return {
+            "backend": "memory",
+            "durable": False,
+            "persistence": "in_memory_only",
+            "ttl_sec": SESSION_TTL_SECONDS,
+            "max_entries": SESSION_MAX_ENTRIES,
+        }
 
     @classmethod
     def save(
@@ -84,6 +96,32 @@ class StateStore:
         """Retrieve metadata for a session."""
         with cls._lock:
             return cls._metadata.get(session_id)
+
+    @classmethod
+    def get_last_accessed(cls, session_id: str) -> Optional[float]:
+        """Retrieve the last-access timestamp for a session."""
+        with cls._lock:
+            return cls._last_accessed.get(session_id)
+
+    @classmethod
+    def get_expiry_info(cls, session_id: str) -> dict[str, object]:
+        """Return derived expiry information for a session."""
+        with cls._lock:
+            last_accessed = cls._last_accessed.get(session_id)
+        if last_accessed is None:
+            return {
+                "last_accessed_at": None,
+                "expires_at": None,
+                "expires_in_sec": None,
+            }
+
+        expires_at_ts = last_accessed + SESSION_TTL_SECONDS
+        now = time.time()
+        return {
+            "last_accessed_at": datetime.fromtimestamp(last_accessed, tz=timezone.utc).isoformat(),
+            "expires_at": datetime.fromtimestamp(expires_at_ts, tz=timezone.utc).isoformat(),
+            "expires_in_sec": max(0, int(expires_at_ts - now)),
+        }
 
     @classmethod
     def save_config(cls, session_id: str, module: str, config_yaml: str) -> None:
