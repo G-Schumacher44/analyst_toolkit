@@ -9,6 +9,109 @@ INFER_CONFIG_REQUIRED_WARNING = (
     "No inferred or explicit config found. Run infer_configs first for meaningful results."
 )
 
+_GENERATED_FLAG_SUFFIXES = ("_iqr_outlier", "_zscore_outlier")
+_NUMERIC_TYPE_MARKERS = ("int", "float", "double", "decimal", "number")
+_TEMPORAL_TYPE_MARKERS = ("datetime", "timestamp", "date")
+
+
+def _is_non_text_expected_type(expected_type: Any) -> bool:
+    if not isinstance(expected_type, str):
+        return False
+    normalized = expected_type.strip().lower()
+    return any(marker in normalized for marker in (*_NUMERIC_TYPE_MARKERS, *_TEMPORAL_TYPE_MARKERS))
+
+
+def _is_non_text_observed_dtype(dtype: Any) -> bool:
+    if dtype is None:
+        return False
+    return _is_non_text_expected_type(str(dtype))
+
+
+def _looks_like_lowercased_text_values(values: list[Any]) -> bool:
+    text_values = [value for value in values if isinstance(value, str)]
+    if not text_values:
+        return False
+    return all(value == value.strip().lower() for value in text_values)
+
+
+def _normalize_allowed_values(allowed: Any) -> Any:
+    if not isinstance(allowed, list):
+        return allowed
+    normalized: list[Any] = []
+    seen: set[str] = set()
+    for value in allowed:
+        candidate: Any = value
+        if isinstance(value, str):
+            candidate = value.strip().lower()
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+        normalized.append(candidate)
+    return normalized
+
+
+def _normalize_rule_contract(
+    rules: dict[str, Any],
+    *,
+    expected_types: dict[str, Any],
+    observed_df: Any | None = None,
+) -> dict[str, Any]:
+    normalized_rules = deepcopy(rules) if isinstance(rules, dict) else {}
+    normalized_expected_types = deepcopy(expected_types) if isinstance(expected_types, dict) else {}
+
+    if observed_df is not None and normalized_expected_types:
+        for column in getattr(observed_df, "columns", []):
+            if column not in normalized_expected_types:
+                continue
+            observed_dtype = getattr(observed_df[column], "dtype", None)
+            if observed_dtype is None:
+                continue
+            observed_dtype_str = str(observed_dtype)
+            expected_type = normalized_expected_types.get(column)
+            if observed_dtype_str == expected_type:
+                continue
+            if _is_non_text_expected_type(expected_type) or _is_non_text_observed_dtype(
+                observed_dtype
+            ):
+                normalized_expected_types[column] = observed_dtype_str
+
+    if normalized_expected_types:
+        normalized_rules["expected_types"] = normalized_expected_types
+
+    expected_columns = normalized_rules.get("expected_columns", [])
+    if isinstance(expected_columns, list) and observed_df is not None:
+        for column in getattr(observed_df, "columns", []):
+            if (
+                isinstance(column, str)
+                and column.endswith(_GENERATED_FLAG_SUFFIXES)
+                and column not in expected_columns
+            ):
+                expected_columns.append(column)
+        normalized_rules["expected_columns"] = expected_columns
+
+    categorical_values = normalized_rules.get("categorical_values", {})
+    if not isinstance(categorical_values, dict):
+        return normalized_rules
+
+    cleaned_categorical: dict[str, Any] = {}
+    for column, allowed in categorical_values.items():
+        observed_dtype = None
+        if observed_df is not None and column in getattr(observed_df, "columns", []):
+            observed_dtype = getattr(observed_df[column], "dtype", None)
+        if _is_non_text_expected_type(
+            normalized_expected_types.get(column)
+        ) or _is_non_text_observed_dtype(observed_dtype):
+            continue
+        normalized_allowed = allowed
+        if observed_df is not None and column in getattr(observed_df, "columns", []):
+            observed_values = observed_df[column].dropna().astype(object).head(100).tolist()
+            if _looks_like_lowercased_text_values(observed_values):
+                normalized_allowed = _normalize_allowed_values(allowed)
+        cleaned_categorical[column] = normalized_allowed
+
+    normalized_rules["categorical_values"] = cleaned_categorical
+    return normalized_rules
+
 
 def normalize_validation_config(config: dict[str, Any]) -> dict[str, Any]:
     """
@@ -110,6 +213,70 @@ def normalize_final_audit_config(config: dict[str, Any]) -> dict[str, Any]:
     base_cfg.pop("schema_validation", None)
     base_cfg.pop("disallowed_null_columns", None)
     base_cfg.pop("fail_on_error", None)
+    return base_cfg
+
+
+def sanitize_inferred_validation_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Remove categorical rules that do not make sense for numeric/datetime fields."""
+    base_cfg = normalize_validation_config(config)
+    schema_cfg = deepcopy(base_cfg.get("schema_validation", {}))
+    rules = deepcopy(schema_cfg.get("rules", {}))
+    expected_types = rules.get("expected_types", {})
+    if not isinstance(expected_types, dict):
+        expected_types = {}
+    schema_cfg["rules"] = _normalize_rule_contract(rules, expected_types=expected_types)
+    base_cfg["schema_validation"] = schema_cfg
+    return {"validation": base_cfg}
+
+
+def sanitize_inferred_final_audit_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Remove categorical rules that do not make sense for numeric/datetime fields."""
+    base_cfg = normalize_final_audit_config(config)
+    cert_cfg = deepcopy(base_cfg.get("certification", {}))
+    schema_cfg = deepcopy(cert_cfg.get("schema_validation", {}))
+    rules = deepcopy(schema_cfg.get("rules", {}))
+    expected_types = rules.get("expected_types", {})
+    if not isinstance(expected_types, dict):
+        expected_types = {}
+    schema_cfg["rules"] = _normalize_rule_contract(rules, expected_types=expected_types)
+    cert_cfg["schema_validation"] = schema_cfg
+    base_cfg["certification"] = cert_cfg
+    return {"final_audit": base_cfg}
+
+
+def adapt_validation_config_to_dataframe(config: dict[str, Any], df: Any) -> dict[str, Any]:
+    """Align inferred validation rules to the transformed session dataframe."""
+    base_cfg = normalize_validation_config(config)
+    schema_cfg = deepcopy(base_cfg.get("schema_validation", {}))
+    rules = deepcopy(schema_cfg.get("rules", {}))
+    expected_types = rules.get("expected_types", {})
+    if not isinstance(expected_types, dict):
+        expected_types = {}
+    schema_cfg["rules"] = _normalize_rule_contract(
+        rules,
+        expected_types=expected_types,
+        observed_df=df,
+    )
+    base_cfg["schema_validation"] = schema_cfg
+    return base_cfg
+
+
+def adapt_final_audit_config_to_dataframe(config: dict[str, Any], df: Any) -> dict[str, Any]:
+    """Align inferred certification rules to the transformed session dataframe."""
+    base_cfg = normalize_final_audit_config(config)
+    cert_cfg = deepcopy(base_cfg.get("certification", {}))
+    schema_cfg = deepcopy(cert_cfg.get("schema_validation", {}))
+    rules = deepcopy(schema_cfg.get("rules", {}))
+    expected_types = rules.get("expected_types", {})
+    if not isinstance(expected_types, dict):
+        expected_types = {}
+    schema_cfg["rules"] = _normalize_rule_contract(
+        rules,
+        expected_types=expected_types,
+        observed_df=df,
+    )
+    cert_cfg["schema_validation"] = schema_cfg
+    base_cfg["certification"] = cert_cfg
     return base_cfg
 
 

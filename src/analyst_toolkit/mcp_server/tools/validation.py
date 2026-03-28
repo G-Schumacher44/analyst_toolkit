@@ -8,6 +8,7 @@ from analyst_toolkit.m02_validation.run_validation_pipeline import (
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.mcp_server.config_normalizers import (
     INFER_CONFIG_REQUIRED_WARNING,
+    adapt_validation_config_to_dataframe,
     has_actionable_validation_config,
     normalize_validation_config,
 )
@@ -80,6 +81,7 @@ async def _toolkit_validation(
     )
     base_cfg = normalize_validation_config(config)
     df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+    base_cfg = adapt_validation_config_to_dataframe(base_cfg, df)
 
     # Ensure it's in a session for the pipeline
     if not session_id:

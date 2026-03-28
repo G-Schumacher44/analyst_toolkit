@@ -100,6 +100,326 @@ async def test_final_audit_fails_closed_when_cert_rules_empty(mocker, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_validation_aligns_inferred_rules_to_transformed_session_state(mocker):
+    df = pd.DataFrame(
+        {
+            "species": ["adelie", "gentoo"],
+            "body_mass_g": [3000.0, 4200.0],
+            "body_mass_g_iqr_outlier": [False, False],
+        }
+    )
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(validation_tool, "save_to_session", return_value="sess_validation")
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/validation.csv")
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(validation_tool, "should_export_html", return_value=False)
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=None)
+
+    result = await validation_tool._toolkit_validation(
+        session_id="sess_validation",
+        run_id="validation_runtime_alignment",
+        config={
+            "validation": {
+                "schema_validation": {
+                    "rules": {
+                        "expected_columns": ["species", "body_mass_g"],
+                        "expected_types": {
+                            "species": "object",
+                            "body_mass_g": "float64",
+                        },
+                        "categorical_values": {
+                            "species": ["Adelie", "Gentoo"],
+                            "body_mass_g": ["3000.0", "4200.0"],
+                        },
+                    }
+                }
+            }
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["passed"] is True
+    assert result["violations_found"] == []
+    effective_rules = result["effective_config"]["schema_validation"]["rules"]
+    assert "body_mass_g" not in effective_rules["categorical_values"]
+    assert effective_rules["categorical_values"]["species"] == ["adelie", "gentoo"]
+    assert "body_mass_g_iqr_outlier" in effective_rules["expected_columns"]
+
+
+@pytest.mark.asyncio
+async def test_final_audit_aligns_inferred_rules_to_transformed_session_state(mocker):
+    df = pd.DataFrame(
+        {
+            "species": ["adelie", "gentoo"],
+            "body_mass_g": [3000.0, 4200.0],
+            "body_mass_g_iqr_outlier": [False, False],
+        }
+    )
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/final.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_final",
+        run_id="final_audit_runtime_alignment",
+        config={
+            "final_audit": {
+                "certification": {
+                    "schema_validation": {
+                        "rules": {
+                            "expected_columns": ["species", "body_mass_g"],
+                            "expected_types": {
+                                "species": "object",
+                                "body_mass_g": "float64",
+                            },
+                            "categorical_values": {
+                                "species": ["Adelie", "Gentoo"],
+                                "body_mass_g": ["3000.0", "4200.0"],
+                            },
+                        }
+                    }
+                }
+            }
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["passed"] is True
+    assert result["violations_found"] == []
+    effective_rules = result["effective_config"]["certification"]["schema_validation"]["rules"]
+    assert "body_mass_g" not in effective_rules["categorical_values"]
+    assert effective_rules["categorical_values"]["species"] == ["adelie", "gentoo"]
+    assert "body_mass_g_iqr_outlier" in effective_rules["expected_columns"]
+
+
+@pytest.mark.asyncio
+async def test_validation_aligns_object_date_rules_to_transformed_datetime_state(mocker):
+    df = pd.DataFrame(
+        {
+            "capture_date": pd.to_datetime(["2024-01-01", "2024-01-02"]),
+            "species": ["adelie", "gentoo"],
+        }
+    )
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(validation_tool, "save_to_session", return_value="sess_validation_date")
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/validation.csv")
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(validation_tool, "should_export_html", return_value=False)
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=None)
+
+    result = await validation_tool._toolkit_validation(
+        session_id="sess_validation_date",
+        run_id="validation_runtime_date_alignment",
+        config={
+            "validation": {
+                "schema_validation": {
+                    "rules": {
+                        "expected_columns": ["capture_date", "species"],
+                        "expected_types": {
+                            "capture_date": "object",
+                            "species": "object",
+                        },
+                        "categorical_values": {
+                            "capture_date": ["2024-01-01", "2024-01-02"],
+                            "species": ["Adelie", "Gentoo"],
+                        },
+                    }
+                }
+            }
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["passed"] is True
+    effective_rules = result["effective_config"]["schema_validation"]["rules"]
+    assert effective_rules["expected_types"]["capture_date"] == "datetime64[ns]"
+    assert "capture_date" not in effective_rules["categorical_values"]
+    assert effective_rules["categorical_values"]["species"] == ["adelie", "gentoo"]
+
+
+@pytest.mark.asyncio
+async def test_final_audit_aligns_object_date_rules_to_transformed_datetime_state(mocker):
+    df = pd.DataFrame(
+        {
+            "capture_date": pd.to_datetime(["2024-01-01", "2024-01-02"]),
+            "species": ["adelie", "gentoo"],
+        }
+    )
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final_date")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/final.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_final_date",
+        run_id="final_audit_runtime_date_alignment",
+        config={
+            "final_audit": {
+                "certification": {
+                    "schema_validation": {
+                        "rules": {
+                            "expected_columns": ["capture_date", "species"],
+                            "expected_types": {
+                                "capture_date": "object",
+                                "species": "object",
+                            },
+                            "categorical_values": {
+                                "capture_date": ["2024-01-01", "2024-01-02"],
+                                "species": ["Adelie", "Gentoo"],
+                            },
+                        }
+                    }
+                }
+            }
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["passed"] is True
+    effective_rules = result["effective_config"]["certification"]["schema_validation"]["rules"]
+    assert effective_rules["expected_types"]["capture_date"] == "datetime64[ns]"
+    assert "capture_date" not in effective_rules["categorical_values"]
+    assert effective_rules["categorical_values"]["species"] == ["adelie", "gentoo"]
+
+
+@pytest.mark.asyncio
+async def test_validation_aligns_datetime_expectation_to_transformed_object_state(mocker):
+    df = pd.DataFrame(
+        {
+            "capture_date": ["2024-01-01", "2024-01-02"],
+            "species": ["adelie", "gentoo"],
+        }
+    )
+
+    mocker.patch.object(validation_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        validation_tool, "save_to_session", return_value="sess_validation_date_text"
+    )
+    mocker.patch.object(validation_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(validation_tool, "save_output", return_value="gs://dummy/validation.csv")
+    mocker.patch.object(validation_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(validation_tool, "should_export_html", return_value=False)
+    mocker.patch.object(validation_tool, "run_validation_pipeline", return_value=None)
+
+    result = await validation_tool._toolkit_validation(
+        session_id="sess_validation_date_text",
+        run_id="validation_runtime_date_text_alignment",
+        config={
+            "validation": {
+                "schema_validation": {
+                    "rules": {
+                        "expected_columns": ["capture_date", "species"],
+                        "expected_types": {
+                            "capture_date": "datetime64[ns]",
+                            "species": "object",
+                        },
+                        "categorical_values": {
+                            "species": ["Adelie", "Gentoo"],
+                        },
+                    }
+                }
+            }
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["passed"] is True
+    effective_rules = result["effective_config"]["schema_validation"]["rules"]
+    assert effective_rules["expected_types"]["capture_date"] == "object"
+    assert effective_rules["categorical_values"]["species"] == ["adelie", "gentoo"]
+
+
+@pytest.mark.asyncio
+async def test_final_audit_aligns_datetime_expectation_to_transformed_object_state(mocker):
+    df = pd.DataFrame(
+        {
+            "capture_date": ["2024-01-01", "2024-01-02"],
+            "species": ["adelie", "gentoo"],
+        }
+    )
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(final_audit_tool, "run_final_audit_pipeline", return_value=df)
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value="sess_final_date_text")
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 2})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/final.csv")
+    mocker.patch.object(
+        final_audit_tool,
+        "deliver_artifact",
+        side_effect=lambda local_path, *args, **kwargs: {
+            "reference": "",
+            "local_path": local_path,
+            "url": "https://example.com/a",
+            "warnings": [],
+            "destinations": {},
+        },
+    )
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id="sess_final_date_text",
+        run_id="final_audit_runtime_date_text_alignment",
+        config={
+            "final_audit": {
+                "certification": {
+                    "schema_validation": {
+                        "rules": {
+                            "expected_columns": ["capture_date", "species"],
+                            "expected_types": {
+                                "capture_date": "datetime64[ns]",
+                                "species": "object",
+                            },
+                            "categorical_values": {
+                                "species": ["Adelie", "Gentoo"],
+                            },
+                        }
+                    }
+                }
+            }
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["passed"] is True
+    effective_rules = result["effective_config"]["certification"]["schema_validation"]["rules"]
+    assert effective_rules["expected_types"]["capture_date"] == "object"
+    assert effective_rules["categorical_values"]["species"] == ["adelie", "gentoo"]
+
+
+@pytest.mark.asyncio
 async def test_normalization_reports_artifact_contract(mocker):
     df = pd.DataFrame({"name": ["Alice"]})
 
