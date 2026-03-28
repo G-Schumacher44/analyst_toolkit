@@ -607,6 +607,7 @@ async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
     assert inferred["status"] == "pass"
     assert "normalization" in inferred["configs"]
     assert "validation" in inferred["configs"]
+    run_id = inferred["run_id"]
 
     mocker.patch.object(normalization_tool, "load_input", return_value=df)
     mocker.patch.object(normalization_tool, "run_normalization_pipeline", return_value=df)
@@ -618,7 +619,7 @@ async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
 
     norm_result = await normalization_tool._toolkit_normalization(
         session_id="sess_roundtrip",
-        run_id="run_roundtrip",
+        run_id=run_id,
         config={"normalization": inferred["configs"]["normalization"]},
     )
     assert norm_result["status"] == "pass"
@@ -638,7 +639,7 @@ async def test_infer_configs_yaml_roundtrip_into_tools(monkeypatch, mocker):
 
     val_result = await validation_tool._toolkit_validation(
         session_id="sess_roundtrip",
-        run_id="run_roundtrip",
+        run_id=run_id,
         config={"validation": inferred["configs"]["validation"]},
     )
     assert val_result["status"] == "pass"

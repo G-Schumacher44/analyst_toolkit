@@ -8,9 +8,14 @@ from typing import Any
 
 import yaml
 
+from analyst_toolkit.mcp_server.config_normalizers import (
+    sanitize_inferred_final_audit_config,
+    sanitize_inferred_validation_config,
+)
 from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor
 from analyst_toolkit.mcp_server.input.registry import get_session_input_id
 from analyst_toolkit.mcp_server.io import (
+    get_session_metadata,
     load_input,
     resolve_run_context,
     save_session_config,
@@ -186,6 +191,7 @@ def _replace_transient_paths(
 def _sanitize_generated_yaml(
     raw_yaml: str,
     *,
+    module_name: str | None,
     stable_input_path: str | None,
     temp_input_path: str,
 ) -> str:
@@ -200,6 +206,10 @@ def _sanitize_generated_yaml(
         stable_input_path=stable_input_path,
         temp_input_path=temp_input_path,
     )
+    if module_name == "validation":
+        sanitized = sanitize_inferred_validation_config(sanitized)
+    elif module_name == "final_audit":
+        sanitized = sanitize_inferred_final_audit_config(sanitized)
     return yaml.safe_dump(sanitized, sort_keys=False, allow_unicode=True)
 
 
@@ -249,6 +259,7 @@ def _normalize_external_configs_result(
                 continue
             normalized[module_name] = _sanitize_generated_yaml(
                 str(config_yaml),
+                module_name=module_name,
                 stable_input_path=stable_input_path,
                 temp_input_path=temp_input_path,
             )
@@ -286,6 +297,7 @@ def _normalize_external_configs_result(
                 continue
             configs[module_name] = _sanitize_generated_yaml(
                 raw_yaml,
+                module_name=module_name,
                 stable_input_path=stable_input_path,
                 temp_input_path=temp_input_path,
             )
@@ -370,6 +382,10 @@ async def _toolkit_infer_configs(
     # If we still don't have a session, start one
     if not session_id:
         session_id = save_to_session(df, run_id=run_id)
+    elif get_session_metadata(session_id) is None:
+        # input_id descriptors can outlive a cleared session; recreate the named
+        # session so inferred configs have a live persistence target.
+        session_id = save_to_session(df, session_id=session_id, run_id=run_id)
 
     # Always materialize an input snapshot locally for inference.
     # This avoids path-construction drift between modules and ensures deterministic reads.

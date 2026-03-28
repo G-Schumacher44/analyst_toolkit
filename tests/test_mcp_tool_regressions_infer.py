@@ -124,6 +124,64 @@ async def test_infer_configs_strips_temp_paths_from_generated_yaml(monkeypatch, 
 
 
 @pytest.mark.asyncio
+async def test_infer_configs_strips_non_text_categorical_rules(monkeypatch, mocker):
+    df = pd.DataFrame({"value": [1.0, 2.0], "captured_at": ["2024-01-01", "2024-01-02"]})
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+
+    def fake_infer_configs(**kwargs):
+        return {
+            "validation": (
+                "validation:\n"
+                "  schema_validation:\n"
+                "    rules:\n"
+                "      expected_types:\n"
+                "        value: float64\n"
+                "        captured_at: datetime64[ns]\n"
+                "      categorical_values:\n"
+                "        value: ['1.0', '2.0']\n"
+                "        captured_at: ['2024-01-01', '2024-01-02']\n"
+                "        status: ['OK', 'WARN']\n"
+            ),
+            "final_audit": (
+                "final_audit:\n"
+                "  certification:\n"
+                "    schema_validation:\n"
+                "      rules:\n"
+                "        expected_types:\n"
+                "          value: float64\n"
+                "          captured_at: datetime64[ns]\n"
+                "        categorical_values:\n"
+                "          value: ['1.0', '2.0']\n"
+                "          captured_at: ['2024-01-01', '2024-01-02']\n"
+                "          status: ['OK', 'WARN']\n"
+            ),
+        }
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        session_id="sess_strip_non_text_categories",
+        modules=["validation", "final_audit"],
+    )
+
+    assert result["status"] == "pass"
+    validation_yaml = result["configs"]["validation"]
+    assert "value:" not in validation_yaml.split("categorical_values:", 1)[1]
+    assert "captured_at:" not in validation_yaml.split("categorical_values:", 1)[1]
+    assert "status:" in validation_yaml.split("categorical_values:", 1)[1]
+
+    final_yaml = result["configs"]["final_audit"]
+    assert "value:" not in final_yaml.split("categorical_values:", 1)[1]
+    assert "captured_at:" not in final_yaml.split("categorical_values:", 1)[1]
+    assert "status:" in final_yaml.split("categorical_values:", 1)[1]
+
+
+@pytest.mark.asyncio
 async def test_infer_configs_ignores_internal_handling_output(monkeypatch, mocker):
     df = pd.DataFrame({"id": [1, 2], "value": [1.0, 2.0]})
 
@@ -458,6 +516,49 @@ async def test_infer_configs_accepts_input_id_with_session_id(monkeypatch, mocke
 
     assert result["status"] == "pass"
     assert result["session_id"] == "sess_combo_test"
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_infer_configs_repopulates_stale_session_resolved_from_input_id(monkeypatch, mocker):
+    """infer_configs should recreate a cleared descriptor-linked session before saving configs."""
+    from analyst_toolkit.mcp_server.input.models import InputDescriptor
+
+    df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    StateStore.clear()
+
+    mocker.patch.object(infer_configs_tool, "load_input", return_value=df)
+    descriptor = InputDescriptor(
+        input_id="input_stale_session",
+        source_type="server_path",
+        original_reference="/tmp/test.csv",
+        resolved_reference="/tmp/test.csv",
+        display_name="test.csv",
+        media_type="text/csv",
+        session_id="sess_stale_input",
+        run_id="stale_session_repopulate",
+    )
+    mocker.patch.object(infer_configs_tool, "get_input_descriptor", return_value=descriptor)
+
+    def fake_infer_configs(**kwargs):
+        return {"validation": "validation:\n  schema_validation:\n    run: true\n"}
+
+    infer_mod = types.ModuleType("analyst_toolkit_deploy.infer_configs")
+    setattr(infer_mod, "infer_configs", fake_infer_configs)
+    pkg_mod = types.ModuleType("analyst_toolkit_deploy")
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy", pkg_mod)
+    monkeypatch.setitem(sys.modules, "analyst_toolkit_deploy.infer_configs", infer_mod)
+
+    result = await infer_configs_tool._toolkit_infer_configs(
+        input_id="input_stale_session",
+        run_id="stale_session_repopulate",
+        modules=["validation"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["session_id"] == "sess_stale_input"
+    assert StateStore.get("sess_stale_input") is not None
+    assert StateStore.get_config("sess_stale_input", "validation") is not None
     StateStore.clear()
 
 

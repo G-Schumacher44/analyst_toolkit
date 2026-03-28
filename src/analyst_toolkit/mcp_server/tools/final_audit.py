@@ -12,7 +12,10 @@ from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
     run_final_audit_pipeline,
 )
-from analyst_toolkit.mcp_server.config_normalizers import normalize_final_audit_config
+from analyst_toolkit.mcp_server.config_normalizers import (
+    adapt_final_audit_config_to_dataframe,
+    normalize_final_audit_config,
+)
 from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor
 from analyst_toolkit.mcp_server.io import (
     ALLOW_EMPTY_CERT_RULES,
@@ -160,6 +163,7 @@ async def _toolkit_final_audit(
     )
     base_cfg = normalize_final_audit_config(config)
     df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+    base_cfg = adapt_final_audit_config_to_dataframe(base_cfg, df)
 
     # The M10 pipeline requires a raw_data_path to compute before/after row counts.
     # Write the current df to a temp CSV as the "raw" snapshot if not provided.
