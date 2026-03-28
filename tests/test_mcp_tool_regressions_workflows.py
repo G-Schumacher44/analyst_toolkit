@@ -384,7 +384,7 @@ async def test_toolkit_infer_configs_maps_generated_yaml_by_root_key(monkeypatch
     assert result["status"] == "pass"
     assert result["config_dir"] == str(generated_dir)
     assert "normalization" in result["configs"]
-    assert result["warnings"] == []
+    assert any("session was recreated before saving inferred configs" in w for w in result["warnings"])
 
 
 @pytest.mark.asyncio
@@ -426,7 +426,7 @@ async def test_toolkit_infer_configs_maps_autofill_files_with_metadata_prefix(
     assert result["config_dir"] == str(generated_dir)
     assert "outliers" in result["configs"]
     assert "validation" in result["configs"]
-    assert result["warnings"] == []
+    assert any("session was recreated before saving inferred configs" in w for w in result["warnings"])
 
 
 @pytest.mark.asyncio
