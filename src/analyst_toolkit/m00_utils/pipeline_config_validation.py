@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -72,20 +73,27 @@ def validate_runner_module_config(
     coerce_key = "outlier_detection" if runner_module_name == "outlier_detection" else module_name
     coerced = coerce_config(config, coerce_key)
     normalized = normalize_module_config(module_name, coerced)
+    model = CONFIG_MODELS.get(module_name)
+    if model is None:
+        raise PipelineConfigValidationError(
+            f"No shared config model is registered for runner module '{runner_module_name}' "
+            f"(resolved module '{module_name}')."
+        )
 
     try:
-        CONFIG_MODELS[module_name].model_validate(normalized)
+        model.model_validate(normalized)
     except ValidationError as exc:
         raise PipelineConfigValidationError(
             f"Invalid config for runner module '{runner_module_name}': {exc}"
         ) from exc
 
     effective = normalized
+    canonical = deepcopy(effective)
 
     return {
         "runner_module": runner_module_name,
         "module_name": module_name,
         "root_key": root_key,
         "effective_config": effective,
-        "canonical_config": {root_key: effective},
+        "canonical_config": {root_key: canonical},
     }
