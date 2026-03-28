@@ -227,6 +227,7 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a tool runs, it saves its output to an in-memory `StateStore` and returns a `session_id`. Pass that `session_id` to the next tool to operate on the already-transformed data — no intermediate files needed.
 
 For this release, session persistence is explicitly **in-memory only**. Sessions are bounded by TTL and max-entry eviction, and `manage_session` surfaces the live retention policy plus per-session expiry timestamps.
+Use `manage_session(action="inspect", include_configs=true)` when you need the stored inferred config payloads; the default inspect/list responses stay compact and only include config names/counts.
 
 ```text
 1. diagnostics(gcs_path="gs://bucket/path/file.parquet", run_id="my_run")
@@ -755,6 +756,7 @@ Boundary guards:
 Session lifecycle notes:
 - `manage_session(action="list")` returns the active retention policy (`backend`, `durable`, `ttl_sec`, `max_entries`) alongside the session summaries
 - `manage_session(action="inspect")` returns `last_accessed_at`, `expires_at`, and `expires_in_sec` for the selected session
+- `manage_session(action="inspect", include_configs=true)` retrieves the stored inferred config YAML payloads on demand
 - `manage_session(action="fork")` clones the in-memory DataFrame and optionally the stored inferred configs into a new session with its own run context
 
 > **Note:** Partition-style directory paths must end with `/`. Direct file paths (ending in `.parquet` or `.csv`) are read without listing.
