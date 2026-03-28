@@ -10,7 +10,15 @@ import analyst_toolkit.mcp_server.tools.imputation as imputation_tool
 import analyst_toolkit.mcp_server.tools.normalization as normalization_tool
 import analyst_toolkit.mcp_server.tools.outliers as outliers_tool
 import analyst_toolkit.mcp_server.tools.validation as validation_tool
+from analyst_toolkit.mcp_server.config_normalizers import _is_non_text_expected_type
 from analyst_toolkit.mcp_server.state import StateStore
+
+
+def test_is_non_text_expected_type_avoids_false_positive_substrings():
+    assert _is_non_text_expected_type("Int64") is True
+    assert _is_non_text_expected_type("datetime64[ns]") is True
+    assert _is_non_text_expected_type("coordinator") is False
+    assert _is_non_text_expected_type("interval") is False
 
 
 @pytest.mark.asyncio

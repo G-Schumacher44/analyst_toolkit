@@ -2,6 +2,7 @@
 config_normalizers.py — Shared config normalization helpers for MCP tools.
 """
 
+import re
 from copy import deepcopy
 from typing import Any
 
@@ -18,7 +19,13 @@ def _is_non_text_expected_type(expected_type: Any) -> bool:
     if not isinstance(expected_type, str):
         return False
     normalized = expected_type.strip().lower()
-    return any(marker in normalized for marker in (*_NUMERIC_TYPE_MARKERS, *_TEMPORAL_TYPE_MARKERS))
+    tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
+    markers = (*_NUMERIC_TYPE_MARKERS, *_TEMPORAL_TYPE_MARKERS)
+    return any(
+        token == marker or (token.startswith(marker) and token[len(marker) :].isdigit())
+        for token in tokens
+        for marker in markers
+    )
 
 
 def _is_non_text_observed_dtype(dtype: Any) -> bool:
