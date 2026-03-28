@@ -1,5 +1,6 @@
 import threading
 import time
+from pathlib import Path
 
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -114,3 +115,71 @@ def test_non_expired_session_survives_cleanup(sample_df, monkeypatch):
     sid = StateStore.save(sample_df)
     StateStore.cleanup()
     assert StateStore.get(sid) is not None
+
+
+def test_sqlite_backend_save_and_get(sample_df, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+
+    sid = StateStore.save(sample_df, run_id="sqlite_run")
+
+    assert StateStore.policy()["backend"] == "sqlite"
+    assert StateStore.policy()["durable"] is True
+    assert Path(StateStore.policy()["db_path"]).name == "session_store.db"
+    result = StateStore.get(sid)
+
+    import pandas as pd
+
+    pd.testing.assert_frame_equal(result, sample_df)
+    assert StateStore.get_run_id(sid) == "sqlite_run"
+
+
+def test_sqlite_backend_persists_configs_and_fork(sample_df, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+
+    sid = StateStore.save(sample_df, run_id="sqlite_run")
+    StateStore.save_config(sid, "validation", "validation:\n  run: true\n")
+
+    forked = StateStore.fork(sid, run_id="forked_sqlite_run", copy_configs=True)
+
+    assert forked is not None
+    assert StateStore.get_run_id(forked) == "forked_sqlite_run"
+    assert StateStore.get_config(forked, "validation") is not None
+
+
+def test_sqlite_backend_rebind_and_clear(sample_df, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+
+    sid = StateStore.save(sample_df, run_id="sqlite_run")
+
+    assert StateStore.rebind_run_id(sid, "sqlite_rebound") is True
+    assert StateStore.get_run_id(sid) == "sqlite_rebound"
+
+    StateStore.clear(sid)
+    assert StateStore.get(sid) is None
+
+
+def test_sqlite_backend_ttl_cleanup(sample_df, tmp_path, monkeypatch):
+    import analyst_toolkit.mcp_server.state as state_module
+
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    monkeypatch.setattr(state_module, "SESSION_TTL_SECONDS", 1)
+
+    sid = StateStore.save(sample_df, run_id="sqlite_run")
+
+    with StateStore._lock:
+        conn = StateStore._sqlite_connect_unsafe()
+        try:
+            conn.execute(
+                "UPDATE sessions SET last_accessed = ? WHERE session_id = ?",
+                (time.time() - 2, sid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    StateStore.cleanup()
+    assert StateStore.get(sid) is None
