@@ -33,6 +33,10 @@ import pandas as pd
 
 from analyst_toolkit.m00_utils.config_loader import load_config
 from analyst_toolkit.m00_utils.load_data import load_csv
+from analyst_toolkit.m00_utils.pipeline_config_validation import (
+    validate_pipeline_runner_config,
+    validate_runner_module_config,
+)
 
 # Import all module runners
 from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
@@ -49,21 +53,23 @@ from analyst_toolkit.m10_final_audit.final_audit_pipeline import run_final_audit
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+def _load_validated_module_config(runner_module_name: str, config_path: str) -> dict:
+    raw_config = load_config(config_path)
+    validated = validate_runner_module_config(runner_module_name, raw_config)
+    return validated["canonical_config"]
+
+
 def run_full_pipeline(config_path: str):
     """
     Executes the full data processing pipeline by chaining modules together.
     """
     logging.info(f"--- Loading Master Orchestration Config from {config_path} ---")
-    master_config = load_config(config_path)
+    master_config = validate_pipeline_runner_config(load_config(config_path))
 
     run_id = master_config.get("run_id", "default_run")
     notebook_mode = master_config.get("notebook", False)
     modules_to_run = master_config.get("modules", {})
-
-    # --- ROBUST INITIAL DATA LOAD ---
     entry_path = master_config.get("pipeline_entry_path")
-    if not entry_path:
-        raise ValueError("Master config is missing 'pipeline_entry_path'. Cannot start pipeline.")
 
     logging.info(f"--- 🚚 Loading initial data from {entry_path} ---")
     df: pd.DataFrame = load_csv(entry_path)
@@ -77,7 +83,7 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("diagnostics")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: DIAGNOSTICS ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config("diagnostics", module_info["config_path"])
         # The runner function does not modify the df, so no reassignment needed
         run_diag_pipeline(config=module_config, df=df, notebook=notebook_mode, run_id=run_id)
         logging.info("--- ✅ Finished Module: DIAGNOSTICS ---")
@@ -86,7 +92,7 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("validation")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: VALIDATION ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config("validation", module_info["config_path"])
         df = run_validation_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
@@ -96,7 +102,7 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("normalization")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: NORMALIZATION ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config("normalization", module_info["config_path"])
         df = run_normalization_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
@@ -106,7 +112,9 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("validation_gatekeeper")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: VALIDATION_GATEKEEPER ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config(
+            "validation_gatekeeper", module_info["config_path"]
+        )
         df = run_validation_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
@@ -116,7 +124,7 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("duplicates")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: DUPLICATES ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config("duplicates", module_info["config_path"])
         df = run_duplicates_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
@@ -126,7 +134,9 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("outlier_detection")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: OUTLIER_DETECTION ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config(
+            "outlier_detection", module_info["config_path"]
+        )
         df, detection_results = run_outlier_detection_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
@@ -154,7 +164,7 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("imputation")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: IMPUTATION ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config("imputation", module_info["config_path"])
         df = run_imputation_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
@@ -164,7 +174,7 @@ def run_full_pipeline(config_path: str):
     module_info = modules_to_run.get("final_audit")
     if module_info and module_info.get("run"):
         logging.info("--- 🚀 Starting Module: FINAL_AUDIT ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config("final_audit", module_info["config_path"])
         df = run_final_audit_pipeline(
             config=module_config, df=df, run_id=run_id, notebook=notebook_mode
         )
