@@ -43,10 +43,29 @@ async def test_manage_session_inspect():
     assert result["session"]["run_id"] == "inspect_run"
     assert result["session"]["row_count"] == 3
     assert "validation" in result["session"]["stored_configs"]
+    assert result["session"]["config_count"] == 1
+    assert "configs" not in result["session"]
     assert result["session_policy"]["persistence"] == "in_memory_only"
     assert result["session"]["last_accessed_at"]
     assert result["session"]["expires_at"]
     assert "next_actions" in result
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_inspect_can_include_configs():
+    StateStore.clear()
+    df = pd.DataFrame({"x": [1, 2, 3]})
+    sid = StateStore.save(df, run_id="inspect_run")
+    config_yaml = "validation:\n  run: true\n"
+    StateStore.save_config(sid, "validation", config_yaml)
+
+    result = await session_tool._toolkit_manage_session(
+        action="inspect", session_id=sid, include_configs=True
+    )
+    assert result["status"] == "pass"
+    assert result["session"]["configs"] == {"validation": config_yaml}
+    assert result["session"]["config_bytes"] == len(config_yaml.encode("utf-8"))
     StateStore.clear()
 
 

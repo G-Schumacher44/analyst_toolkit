@@ -7,10 +7,12 @@ from analyst_toolkit.mcp_server.response_utils import next_action, with_next_act
 from analyst_toolkit.mcp_server.state import StateStore
 
 
-def _session_summary(session_id: str) -> dict:
+def _session_summary(session_id: str, *, include_configs: bool = False) -> dict:
     """Build a compact summary dict for a session."""
     metadata = StateStore.get_metadata(session_id) or {}
     expiry = StateStore.get_expiry_info(session_id)
+    configs = StateStore.get_configs(session_id)
+    config_names = sorted(configs.keys())
     return {
         "session_id": session_id,
         "run_id": StateStore.get_run_id(session_id),
@@ -21,7 +23,16 @@ def _session_summary(session_id: str) -> dict:
         "last_accessed_at": expiry["last_accessed_at"],
         "expires_at": expiry["expires_at"],
         "expires_in_sec": expiry["expires_in_sec"],
-        "stored_configs": sorted(StateStore.get_configs(session_id).keys()),
+        "stored_configs": config_names,
+        "config_count": len(config_names),
+        **(
+            {
+                "configs": dict(configs),
+                "config_bytes": sum(len(value.encode("utf-8")) for value in configs.values()),
+            }
+            if include_configs
+            else {}
+        ),
     }
 
 
@@ -30,6 +41,7 @@ async def _toolkit_manage_session(
     session_id: str | None = None,
     run_id: str | None = None,
     copy_configs: bool = True,
+    include_configs: bool = False,
 ) -> dict:
     """
     Manage session lifecycle: list, inspect, fork, rebind, or clear.
@@ -72,7 +84,7 @@ async def _toolkit_manage_session(
                 "error": f"Session '{session_id}' not found or expired.",
                 "error_code": "SESSION_NOT_FOUND",
             }
-        summary = _session_summary(session_id)
+        summary = _session_summary(session_id, include_configs=include_configs)
         return with_next_actions(
             {
                 "status": "pass",
@@ -84,8 +96,18 @@ async def _toolkit_manage_session(
             [
                 next_action(
                     "manage_session",
+                    "Retrieve stored configs for this session.",
+                    {"action": "inspect", "session_id": session_id, "include_configs": True},
+                ),
+                next_action(
+                    "manage_session",
                     "Fork this session to start a new run.",
                     {"action": "fork", "session_id": session_id},
+                ),
+                next_action(
+                    "get_run_history",
+                    "Inspect the run history associated with this session.",
+                    {"run_id": summary["run_id"]},
                 ),
             ],
         )
@@ -248,6 +270,14 @@ _INPUT_SCHEMA = {
             "type": "boolean",
             "description": "Whether to copy inferred configs when forking. Defaults to true.",
             "default": True,
+        },
+        "include_configs": {
+            "type": "boolean",
+            "description": (
+                "When action=inspect, include the stored inferred config YAML payloads in the response. "
+                "Defaults to false to keep responses compact."
+            ),
+            "default": False,
         },
     },
     "required": ["action"],
