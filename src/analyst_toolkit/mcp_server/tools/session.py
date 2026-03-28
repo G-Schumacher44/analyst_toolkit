@@ -27,7 +27,7 @@ def _session_summary(session_id: str, *, include_configs: bool = False) -> dict:
         "config_count": len(config_names),
         **(
             {
-                "configs": dict(configs),
+                "configs": configs,
                 "config_bytes": sum(len(value.encode("utf-8")) for value in configs.values()),
             }
             if include_configs
@@ -85,20 +85,17 @@ async def _toolkit_manage_session(
                 "error_code": "SESSION_NOT_FOUND",
             }
         summary = _session_summary(session_id, include_configs=include_configs)
-        return with_next_actions(
-            {
-                "status": "pass",
-                "module": "manage_session",
-                "action": "inspect",
-                "session_policy": StateStore.policy(),
-                "session": summary,
-            },
-            [
+        actions = []
+        if not include_configs:
+            actions.append(
                 next_action(
                     "manage_session",
                     "Retrieve stored configs for this session.",
                     {"action": "inspect", "session_id": session_id, "include_configs": True},
-                ),
+                )
+            )
+        actions.extend(
+            [
                 next_action(
                     "manage_session",
                     "Fork this session to start a new run.",
@@ -109,7 +106,17 @@ async def _toolkit_manage_session(
                     "Inspect the run history associated with this session.",
                     {"run_id": summary["run_id"]},
                 ),
-            ],
+            ]
+        )
+        return with_next_actions(
+            {
+                "status": "pass",
+                "module": "manage_session",
+                "action": "inspect",
+                "session_policy": StateStore.policy(),
+                "session": summary,
+            },
+            actions,
         )
 
     if action == "fork":
