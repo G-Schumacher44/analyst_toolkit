@@ -96,7 +96,7 @@ def run_validation_pipeline(
             ]
             if failed_checks:
                 error_message = (
-                    "Validation Gatekeeper FAILED. The following checks did not pass:\n- "
+                    "Validation Gatekeeper failed. The following checks did not pass:\n- "
                     + "\n- ".join(failed_checks)
                 )
                 logging.error(error_message)
