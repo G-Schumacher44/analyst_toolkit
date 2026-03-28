@@ -171,14 +171,16 @@ async def test_infer_configs_strips_non_text_categorical_rules(monkeypatch, mock
 
     assert result["status"] == "pass"
     validation_yaml = result["configs"]["validation"]
-    assert "value:" not in validation_yaml.split("categorical_values:", 1)[1]
-    assert "captured_at:" not in validation_yaml.split("categorical_values:", 1)[1]
-    assert "status:" in validation_yaml.split("categorical_values:", 1)[1]
+    _, _, validation_categories = validation_yaml.partition("categorical_values:")
+    assert "value:" not in validation_categories
+    assert "captured_at:" not in validation_categories
+    assert "status:" in validation_categories
 
     final_yaml = result["configs"]["final_audit"]
-    assert "value:" not in final_yaml.split("categorical_values:", 1)[1]
-    assert "captured_at:" not in final_yaml.split("categorical_values:", 1)[1]
-    assert "status:" in final_yaml.split("categorical_values:", 1)[1]
+    _, _, final_categories = final_yaml.partition("categorical_values:")
+    assert "value:" not in final_categories
+    assert "captured_at:" not in final_categories
+    assert "status:" in final_categories
 
 
 @pytest.mark.asyncio
