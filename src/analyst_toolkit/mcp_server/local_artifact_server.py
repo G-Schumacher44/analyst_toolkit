@@ -337,7 +337,7 @@ def build_local_artifact_url(local_path: str) -> str:
         relative = candidate.relative_to(artifact_root)
     except ValueError:
         return ""
-    return f"{status['base_url']}/exports/{relative.as_posix()}"
+    return f"{status['base_url']}/{relative.as_posix()}"
 
 
 def _reset_local_artifact_server_for_tests() -> None:
