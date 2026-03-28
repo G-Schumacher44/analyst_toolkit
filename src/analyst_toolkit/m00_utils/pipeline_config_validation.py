@@ -30,6 +30,8 @@ class PipelineRunnerConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    # Historical runner behavior allows omitted run_id, but "default_run" is not
+    # appropriate for deterministic reruns because artifact/output names will collide.
     run_id: str = "default_run"
     notebook: bool = False
     pipeline_entry_path: str
@@ -42,7 +44,13 @@ _RUNNER_MODULE_SPECS: dict[str, dict[str, str]] = {
     "validation_gatekeeper": {"module_name": "validation", "root_key": "validation"},
     "normalization": {"module_name": "normalization", "root_key": "normalization"},
     "duplicates": {"module_name": "duplicates", "root_key": "duplicates"},
-    "outlier_detection": {"module_name": "outliers", "root_key": "outlier_detection"},
+    # Historical naming divergence: the public runner key is "outlier_detection"
+    # while the shared MCP/config model name is "outliers".
+    "outlier_detection": {
+        "module_name": "outliers",
+        "root_key": "outlier_detection",
+        "coerce_key": "outlier_detection",
+    },
     "imputation": {"module_name": "imputation", "root_key": "imputation"},
     "final_audit": {"module_name": "final_audit", "root_key": "final_audit"},
 }
@@ -74,7 +82,9 @@ def validate_runner_module_config(
         raise PipelineConfigValidationError(
             f"Invalid config for runner module '{runner_module_name}': expected a mapping."
         )
-    coerce_key = "outlier_detection" if runner_module_name == "outlier_detection" else module_name
+    # "outlier_detection" keeps its historical runner key for coercion even though
+    # the shared model/normalizer is registered under "outliers".
+    coerce_key = spec.get("coerce_key", module_name)
     coerced = coerce_config(config, coerce_key)
     normalized = normalize_module_config(module_name, coerced)
     model = CONFIG_MODELS.get(module_name)
@@ -92,7 +102,7 @@ def validate_runner_module_config(
         ) from exc
 
     effective = normalized
-    canonical = deepcopy(effective)
+    canonical = deepcopy(normalized)
 
     return {
         "runner_module": runner_module_name,

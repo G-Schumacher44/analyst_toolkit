@@ -5,6 +5,18 @@ import analyst_toolkit.run_toolkit_pipeline as pipeline_module
 from analyst_toolkit.m00_utils.pipeline_config_validation import PipelineConfigValidationError
 
 
+@pytest.fixture
+def mock_load_config(mocker):
+    def _configure(config_map):
+        mocker.patch.object(
+            pipeline_module,
+            "load_config",
+            side_effect=lambda path: config_map[path],
+        )
+
+    return _configure
+
+
 def test_run_full_pipeline_rejects_invalid_master_config(mocker):
     mocker.patch.object(
         pipeline_module,
@@ -23,7 +35,7 @@ def test_run_full_pipeline_rejects_invalid_master_config(mocker):
     load_csv.assert_not_called()
 
 
-def test_run_full_pipeline_rejects_invalid_module_config_before_runner(mocker):
+def test_run_full_pipeline_rejects_invalid_module_config_before_runner(mocker, mock_load_config):
     config_map = {
         "config/run_toolkit_config.yaml": {
             "run_id": "cli_run",
@@ -39,10 +51,7 @@ def test_run_full_pipeline_rejects_invalid_module_config_before_runner(mocker):
         "config/validation_config_template.yaml": [],
     }
 
-    def fake_load_config(path):
-        return config_map[path]
-
-    mocker.patch.object(pipeline_module, "load_config", side_effect=fake_load_config)
+    mock_load_config(config_map)
     mocker.patch.object(
         pipeline_module,
         "load_csv",
@@ -59,7 +68,7 @@ def test_run_full_pipeline_rejects_invalid_module_config_before_runner(mocker):
     run_validation.assert_not_called()
 
 
-def test_run_full_pipeline_passes_validated_canonical_config_to_runner(mocker):
+def test_run_full_pipeline_passes_validated_canonical_config_to_runner(mocker, mock_load_config):
     config_map = {
         "config/run_toolkit_config.yaml": {
             "run_id": "cli_run",
@@ -83,10 +92,7 @@ def test_run_full_pipeline_passes_validated_canonical_config_to_runner(mocker):
         },
     }
 
-    def fake_load_config(path):
-        return config_map[path]
-
-    mocker.patch.object(pipeline_module, "load_config", side_effect=fake_load_config)
+    mock_load_config(config_map)
     mocker.patch.object(
         pipeline_module,
         "load_csv",
