@@ -1,29 +1,29 @@
 # ------------------------------------------------------------------------------
-# 📄 Config File: run_certification_config.yaml
-# 🧩 Module: Validation (M02 - Certification Mode)
-# 📌 Purpose: Performs strict schema and content validation as a quality gate.
+# Config File: run_certification_config.yaml
+# Module: Validation (M02 - Certification Mode)
+# Purpose: Performs strict schema and content validation as a quality gate.
 # ------------------------------------------------------------------------------
 # This configuration is used as the final checkpoint before certifying the data.
 # It enforces a strict fail policy (`fail_on_error: true`) to stop the pipeline
 # if any schema or value rules are violated.
 # ------------------------------------------------------------------------------
 
-# 📥 Execution context
+# Execution context
 notebook: true
 run_id: "0002_QA"
 logging: "auto"              # Options: 'on', 'off', or 'auto'
 
-# 🧪 Validation settings
+# Validation settings
 validation:
   input_path: "data/raw/synthetic_penguins_v3.5.csv"
 
-  # ✅ Schema and content validation rules
+  # Schema and content validation rules
   schema_validation:
     run: true
     fail_on_error: true  # Hard stop if validation fails (certification mode)
 
     rules:
-      # 📐 Required column schema
+      # Required column schema
       expected_columns: 
         - "tag_id"
         - "species"
@@ -41,7 +41,7 @@ validation:
         - "clutch_completion"
         - "date_egg"
 
-      # 🔢 Expected data types (post-normalization)
+      # Expected data types (post-normalization)
       expected_types:
         tag_id: "object"
         species: "object"
@@ -59,7 +59,7 @@ validation:
         clutch_completion: "object"
         date_egg: "datetime64[ns]"
 
-      # 🧬 Valid categorical values (strict)
+      # Valid categorical values (strict)
       categorical_values:
         species: ["Adelie", "Chinstrap", "Gentoo"]
         island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut", "UNKNOWN"]
@@ -70,7 +70,7 @@ validation:
         health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
         study_name: ["PAPRI2019", "PAPRI2020", "PAPRI2021", "PAPRI2022", "PAPRI2023", "PAPRI2024", "UNKNOWN"]
 
-      # 📏 Numeric range validation
+      # Numeric range validation
       numeric_ranges:
         bill length (mm):
           min: 30.0
@@ -85,7 +85,7 @@ validation:
           min: 2300.0
           max: 7500.0
 
-  # 📤 Output and reporting
+  # Output and reporting
   settings:
     checkpoint: true
     checkpoint_path: "exports/joblib/{run_id}/{run_id}_m02_certified.joblib"

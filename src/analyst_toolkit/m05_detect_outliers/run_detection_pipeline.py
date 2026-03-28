@@ -1,5 +1,5 @@
 """
-🚀 Module: run_detection_pipeline.py
+Module: run_detection_pipeline.py
 
 Runner script for the M05 Outlier Detection module in the Analyst Toolkit.
 
@@ -119,6 +119,6 @@ def run_outlier_detection_pipeline(
         if not checkpoint_path:
             raise ValueError("Checkpoint enabled but 'checkpoint_path' is missing.")
         save_joblib(df_out, path=checkpoint_path)
-        logging.info(f"✅ Outlier-flagged DataFrame checkpoint saved to {checkpoint_path}")
+        logging.info("Outlier-flagged DataFrame checkpoint saved to %s", checkpoint_path)
 
     return df_out, detection_results

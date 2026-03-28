@@ -1,5 +1,5 @@
 """
-🚀 Module: run_dupes_pipeline.py
+Module: run_dupes_pipeline.py
 
 This module serves as the primary runner for the M04 Duplicates pipeline.
 It orchestrates the detection and handling of duplicate rows in a DataFrame,

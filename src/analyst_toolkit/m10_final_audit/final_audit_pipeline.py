@@ -1,5 +1,5 @@
 """
-✅ Module: final_audit_pipeline.py
+Module: final_audit_pipeline.py
 
 This is the main runner script for the M10 Final Audit & Certification module.
 
@@ -156,6 +156,6 @@ def run_final_audit_pipeline(
                 "report_html", "exports/reports/final_audit/{run_id}_final_audit_report.html"
             ).format(run_id=run_id)
             export_html_report(final_report, html_path, "Final Audit", run_id)
-        logging.info("✅ Final artifacts exported successfully.")
+        logging.info("Final artifacts exported successfully.")
 
     return df_certified

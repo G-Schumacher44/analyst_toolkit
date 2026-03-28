@@ -1,5 +1,5 @@
 """
-📦 export_utils.py
+export_utils.py
 
 Standardized export utilities for Analyst Toolkit pipeline modules.
 """
@@ -56,7 +56,7 @@ def export_dataframes(
                 filename = f"{base_stem}_{name}.csv"
                 df.to_csv(base_dir / filename, index=False, encoding=encoding)
         if logging_mode != "off":
-            logging.info(f"📊 Exported {len(data_dict)} CSV files to directory {base_dir}")
+            logging.info("Exported %s CSV files to directory %s", len(data_dict), base_dir)
 
     # Accept both 'excel' and 'xlsx' as valid identifiers for an Excel file.
     elif normalized_format in ["excel", "xlsx"]:
@@ -75,11 +75,12 @@ def export_dataframes(
                         df.columns = ["__".join(map(str, col)).strip() for col in df.columns.values]
                         if logging_mode != "off":
                             logging.info(
-                                f"⚠️ Flattened MultiIndex columns in sheet '{name}' for Excel compatibility."
+                                "Flattened MultiIndex columns in sheet '%s' for Excel compatibility.",
+                                name,
                             )
                     df.to_excel(writer, sheet_name=name[:31], index=False)
         if logging_mode != "off":
-            logging.info(f"📊 Exported {len(data_dict)} sheets to {path_with_run_id}")
+            logging.info("Exported %s sheets to %s", len(data_dict), path_with_run_id)
     else:
         raise ValueError(f"Unsupported file format: {file_format}")
 
@@ -126,7 +127,7 @@ def export_html_report(
         )
 
     path.write_text(html, encoding="utf-8")
-    logging.info(f"📄 HTML report written to {path.resolve()}")
+    logging.info("HTML report written to %s", path.resolve())
     return str(path.resolve())
 
 
@@ -237,7 +238,7 @@ def save_joblib(obj, path: str):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     dump(obj, path)
-    logging.info(f"💾 Checkpoint saved to {path}")
+    logging.info("Checkpoint saved to %s", path)
 
 
 def export_duplicates_report(report: dict, config: dict, run_id: str):

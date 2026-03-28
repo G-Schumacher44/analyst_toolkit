@@ -1,5 +1,5 @@
 """
-🚀 Module: run_handling_pipeline.py
+Module: run_handling_pipeline.py
 
 Runner script for the M06 Outlier Handling module in the Analyst Toolkit.
 

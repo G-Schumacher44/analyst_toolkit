@@ -1,7 +1,7 @@
 validation:
   input_path: "data/raw/example.csv"
 
-  # ✅ Schema and content validation rules
+  # Schema and content validation rules
   schema_validation:
     run: true
     fail_on_error: false   # Set to false in audit mode to detect all issues
