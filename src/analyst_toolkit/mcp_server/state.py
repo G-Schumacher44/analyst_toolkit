@@ -18,7 +18,14 @@ logger = logging.getLogger(__name__)
 
 SESSION_TTL_SECONDS = int(os.environ.get("ANALYST_MCP_SESSION_TTL_SEC", 3600))
 SESSION_MAX_ENTRIES = int(os.environ.get("ANALYST_MCP_SESSION_MAX_ENTRIES", 32))
-SESSION_SQLITE_PATH_DEFAULT = "exports/reports/state/session_store.db"
+SESSION_SQLITE_PATH_DEFAULT = "analyst_toolkit/session_store.db"
+
+
+def _session_state_home() -> Path:
+    xdg_state_home = os.environ.get("XDG_STATE_HOME", "").strip()
+    if xdg_state_home:
+        return Path(xdg_state_home).expanduser().resolve(strict=False)
+    return (Path.home() / ".local" / "state").resolve(strict=False)
 
 
 def _session_backend() -> str:
@@ -27,8 +34,20 @@ def _session_backend() -> str:
 
 
 def _sqlite_state_path() -> Path:
-    raw_path = os.environ.get("ANALYST_MCP_SESSION_DB_PATH", SESSION_SQLITE_PATH_DEFAULT).strip()
-    return Path(raw_path).expanduser().resolve(strict=False)
+    raw_path = os.environ.get("ANALYST_MCP_SESSION_DB_PATH", "").strip()
+    if raw_path:
+        path = Path(raw_path).expanduser().resolve(strict=False)
+    else:
+        path = (_session_state_home() / SESSION_SQLITE_PATH_DEFAULT).resolve(strict=False)
+
+    exports_root = (Path.cwd() / "exports").resolve(strict=False)
+    path_parents = {path, *path.parents}
+    if exports_root in path_parents:
+        raise ValueError(
+            "SQLite session persistence cannot use a path under ./exports; "
+            "choose a private state path outside public artifact roots."
+        )
+    return path
 
 
 class StateStore:

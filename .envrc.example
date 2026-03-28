@@ -99,7 +99,8 @@ export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8
 # export ANALYST_MCP_SESSION_BACKEND=memory
 
 # SQLite database path when ANALYST_MCP_SESSION_BACKEND=sqlite.
-# export ANALYST_MCP_SESSION_DB_PATH=exports/reports/state/session_store.db
+# Leave unset to use a private user-local state dir; paths under ./exports are rejected.
+# export ANALYST_MCP_SESSION_DB_PATH=$HOME/.local/state/analyst_toolkit/session_store.db
 
 # Maximum number of retained sessions before LRU eviction.
 # export ANALYST_MCP_SESSION_MAX_ENTRIES=32
