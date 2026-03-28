@@ -122,7 +122,7 @@ Release note:
 - The toolkit is production-oriented, but production claims should only be made for the deployment profile that matches the actual tested posture.
 - Current runtime behavior is localhost-first and logs when `ANALYST_MCP_AUTH_TOKEN` is unset on non-loopback binds. It does not currently hard-fail startup in that posture.
 - Treat HTTP access to local files and local artifact paths as privileged. If you intentionally expose non-loopback HTTP, pair it with token auth and normal network controls.
-- Enabling `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem at `ANALYST_MCP_SESSION_DB_PATH`. That is an explicit trust-boundary expansion: keep filesystem permissions narrow, prefer localhost binding, and do not persist long-lived sensitive session payloads unless the operator intentionally accepts that posture.
+- Enabling `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem at `ANALYST_MCP_SESSION_DB_PATH` or, if unset, to a private user-local state directory. That is an explicit trust-boundary expansion: keep filesystem permissions narrow, prefer localhost binding, and do not persist long-lived sensitive session payloads unless the operator intentionally accepts that posture.
 
 ## Operability Endpoints
 
@@ -711,7 +711,7 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_STRUCTURED_LOGS` | No | `false` | Emit JSON-structured request lifecycle logs (`trace_id`, method, tool, duration) |
 | `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
 | `ANALYST_MCP_SESSION_BACKEND` | No | `memory` | Session backend: `memory` or `sqlite` |
-| `ANALYST_MCP_SESSION_DB_PATH` | No | `exports/reports/state/session_store.db` | SQLite database path when `ANALYST_MCP_SESSION_BACKEND=sqlite` |
+| `ANALYST_MCP_SESSION_DB_PATH` | No | XDG/user-local state dir (`.../analyst_toolkit/session_store.db`) | SQLite database path when `ANALYST_MCP_SESSION_BACKEND=sqlite`; blank values fall back to the private default and paths under `./exports` are rejected |
 | `ANALYST_MCP_SESSION_TTL_SEC` | No | `3600` | Session time-to-live for both backends; SQLite cleanup is applied lazily on session reads/writes and explicit cleanup/list activity |
 | `ANALYST_MCP_SESSION_MAX_ENTRIES` | No | `32` | Maximum number of retained sessions for both backends before LRU eviction |
 | `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |

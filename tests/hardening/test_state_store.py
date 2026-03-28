@@ -1,6 +1,8 @@
 import threading
 import time
 
+import pytest
+
 from analyst_toolkit.mcp_server.state import StateStore
 
 
@@ -224,3 +226,34 @@ def test_sqlite_concurrent_reads_are_safe(sample_df, tmp_path, monkeypatch):
         thread.join()
 
     assert not errors
+
+
+def test_sqlite_state_path_defaults_to_private_state_dir(monkeypatch, tmp_path):
+    import analyst_toolkit.mcp_server.state as state_module
+
+    monkeypatch.delenv("ANALYST_MCP_SESSION_DB_PATH", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state_home"))
+
+    path = state_module._sqlite_state_path()
+
+    assert path == (tmp_path / "state_home" / "analyst_toolkit" / "session_store.db").resolve()
+
+
+def test_sqlite_state_path_treats_blank_env_as_unset(monkeypatch, tmp_path):
+    import analyst_toolkit.mcp_server.state as state_module
+
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", "   ")
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state_home"))
+
+    path = state_module._sqlite_state_path()
+
+    assert path == (tmp_path / "state_home" / "analyst_toolkit" / "session_store.db").resolve()
+
+
+def test_sqlite_state_path_rejects_exports_root(monkeypatch):
+    import analyst_toolkit.mcp_server.state as state_module
+
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", "exports/reports/state/session_store.db")
+
+    with pytest.raises(ValueError, match="cannot use a path under ./exports"):
+        state_module._sqlite_state_path()
