@@ -523,7 +523,7 @@ async def test_infer_configs_accepts_input_id_with_session_id(monkeypatch, mocke
 
 @pytest.mark.asyncio
 async def test_infer_configs_repopulates_stale_session_resolved_from_input_id(monkeypatch, mocker):
-    """infer_configs should recreate a cleared descriptor-linked session before saving configs."""
+    """infer_configs should allocate a fresh session when a descriptor-linked session is stale."""
     from analyst_toolkit.mcp_server.input.models import InputDescriptor
 
     df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
@@ -558,9 +558,11 @@ async def test_infer_configs_repopulates_stale_session_resolved_from_input_id(mo
     )
 
     assert result["status"] == "pass"
-    assert result["session_id"] == "sess_stale_input"
-    assert StateStore.get("sess_stale_input") is not None
-    assert StateStore.get_config("sess_stale_input", "validation") is not None
+    assert result["session_id"] != "sess_stale_input"
+    assert StateStore.get("sess_stale_input") is None
+    assert StateStore.get(result["session_id"]) is not None
+    assert StateStore.get_config(result["session_id"], "validation") is not None
+    assert any("saved to a new session" in warning for warning in result["warnings"])
     StateStore.clear()
 
 
