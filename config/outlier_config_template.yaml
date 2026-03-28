@@ -1,25 +1,25 @@
 # ------------------------------------------------------------------------------
-# 📄 Config File: run_outlier_detection_config.yaml
-# 🧩 Module: Outlier Detection (M05)
-# 📌 Purpose: Identifies numeric outliers using IQR or Z-score methods.
+# Config File: run_outlier_detection_config.yaml
+# Module: Outlier Detection (M05)
+# Purpose: Identifies numeric outliers using IQR or Z-score methods.
 # ------------------------------------------------------------------------------
 # This module flags outliers in numeric columns and supports visualization,
 # column-specific thresholds, and export of flagged results.
 # ------------------------------------------------------------------------------
 
-# 📥 Execution context
+# Execution context
 notebook: true
 run_id: "0002_QA"
 logging: "auto"               # Options: 'on', 'off', or 'auto'
 
-# 🚨 Outlier detection configuration
+# Outlier detection configuration
 outlier_detection:
   run: true
 
-  # 📂 Input data path
+  # Input data path
   input_path: "data/processed/df_validated.csv"
 
-  # ⚙️ Detection rules
+  # Detection rules
   detection_specs:
     # Per-column overrides
     bill_length_mm:
@@ -35,13 +35,13 @@ outlier_detection:
       method: 'iqr'
       iqr_multiplier: 2.0
 
-  # 🚫 Columns to exclude from analysis
+  # Columns to exclude from analysis
   exclude_columns: ['id', 'tag_id']
 
-  # 🏷️ Append boolean flags (e.g., 'bill_length_mm_outlier') to output
+  # Append boolean flags (e.g., 'bill_length_mm_outlier') to output
   append_flags: true
 
-  # 📊 Plotting settings
+  # Plotting settings
   plotting:
     run: true
     plot_save_dir: "exports/plots/outliers/{run_id}"
@@ -49,7 +49,7 @@ outlier_detection:
     show_plots_inline: true                    # Enables PlotViewer in notebook
     hue: "species"                             # Optional grouping variable for plots
 
-  # 📤 Export reports
+  # Export reports
   export:
     run: true
     export_dir: "exports/reports/outliers/detection/"
@@ -57,7 +57,7 @@ outlier_detection:
     export_html: true
     export_html_path: "exports/reports/outliers/detection/{run_id}_outlier_report.html"
 
-  # 💾 Checkpoint results
+  # Checkpoint results
   checkpoint:
     run: true
     checkpoint_path: "exports/joblib/{run_id}/{run_id}_m05_outliers_flagged.joblib"

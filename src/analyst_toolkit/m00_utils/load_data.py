@@ -1,5 +1,5 @@
 """
-📦 Module: load_data.py
+Module: load_data.py
 
 Utility functions for loading tabular data into pandas DataFrames.
 

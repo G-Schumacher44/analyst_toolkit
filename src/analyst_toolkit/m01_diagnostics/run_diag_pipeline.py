@@ -1,5 +1,5 @@
 """
-🚀 Module: run_diag_pipeline.py
+Module: run_diag_pipeline.py
 
 Runner script for the M01 Diagnostics module of the Analyst Toolkit.
 

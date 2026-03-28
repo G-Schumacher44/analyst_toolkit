@@ -1,5 +1,5 @@
 """
-🚀 Module: run_normalization_pipeline.py
+Module: run_normalization_pipeline.py
 
 Runner script for the M03 Normalization module of the Analyst Toolkit.
 

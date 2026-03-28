@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
-# 📄 Config File: nightly_silver_qa_config.yaml
-# 📌 Purpose: Pre-authored base config for the FridAI nightly silver QA spec.
+# Config File: nightly_silver_qa_config.yaml
+# Purpose: Pre-authored base config for the FridAI nightly silver QA spec.
 #
 # Used by the autonomous daily_silver_qa spec. The SLM passes relevant blocks
 # from this file as the `config` argument when calling toolkit MCP tools.
@@ -14,14 +14,14 @@
 # Data is loaded via GCS path — gcs_path is passed at runtime by the spec.
 # ------------------------------------------------------------------------------
 
-# 📥 Execution context
+# Execution context
 notebook: false
 run_id: "nightly_silver_qa"   # Overridden at runtime by FridAI spec with dated run_id
 logging: "on"
 
 
 # ==============================================================================
-# 🔍 DIAGNOSTICS
+# DIAGNOSTICS
 # Structural profile — types, nulls, cardinality, skew. Non-destructive.
 # ==============================================================================
 diagnostics:
@@ -91,7 +91,7 @@ diagnostics:
 
 
 # ==============================================================================
-# 🚨 OUTLIER DETECTION
+# OUTLIER DETECTION
 # Column-specific thresholds calibrated to ecom enriched silver distributions.
 # ==============================================================================
 outlier_detection:
