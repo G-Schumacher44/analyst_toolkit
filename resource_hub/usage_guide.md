@@ -330,7 +330,7 @@ ANALYST_MCP_ENABLE_ARTIFACT_SERVER=1    # enable the server
 ANALYST_MCP_ARTIFACT_SERVER_PORT=8765   # default port
 ```
 
-Once enabled, cockpit and module dashboard artifact references become live links (e.g., `http://127.0.0.1:8765/exports/reports/...`). Localhost-only by default.
+Once enabled, cockpit and module dashboard artifact references become live links (e.g., `http://127.0.0.1:8765/reports/...`). Localhost-only by default.
 
 Available as the `ensure_artifact_server` MCP tool.
 

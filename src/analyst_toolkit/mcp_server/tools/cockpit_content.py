@@ -60,7 +60,7 @@ def user_quickstart_payload() -> dict:
 - In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
 - Decision tree for accessing artifacts:
   1. Call `ensure_artifact_server` first to start the localhost artifact server.
-  2. Surface the `dashboard_url` (e.g. `http://127.0.0.1:8765/exports/...`) to the user — this is the preferred path.
+  2. Surface the `dashboard_url` (e.g. `http://127.0.0.1:8765/reports/...`) to the user — this is the preferred path.
   3. If the user reports the URL is unreachable, fall back to `read_artifact(artifact_path=<dashboard_path from tool output>)` to retrieve the HTML content directly through MCP.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
