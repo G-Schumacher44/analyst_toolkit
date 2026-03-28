@@ -116,11 +116,13 @@ Recommended environment posture:
 | `ANALYST_MCP_AUTH_TOKEN` | optional | strongly recommended | strongly recommended |
 | `ANALYST_MCP_ENABLE_ARTIFACT_SERVER` | optional | optional | only if intentionally exposed |
 | `ANALYST_MCP_ARTIFACT_SERVER_HOST` | loopback | loopback unless justified | loopback unless explicitly reviewed |
+| `ANALYST_MCP_SESSION_BACKEND` | `memory` or explicit `sqlite` | prefer `memory` unless operators accept durable local state | prefer `memory` unless durable local state is explicitly reviewed |
 
 Release note:
 - The toolkit is production-oriented, but production claims should only be made for the deployment profile that matches the actual tested posture.
 - Current runtime behavior is localhost-first and logs when `ANALYST_MCP_AUTH_TOKEN` is unset on non-loopback binds. It does not currently hard-fail startup in that posture.
 - Treat HTTP access to local files and local artifact paths as privileged. If you intentionally expose non-loopback HTTP, pair it with token auth and normal network controls.
+- Enabling `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem at `ANALYST_MCP_SESSION_DB_PATH`. That is an explicit trust-boundary expansion: keep filesystem permissions narrow, prefer localhost binding, and do not persist long-lived sensitive session payloads unless the operator intentionally accepts that posture.
 
 ## Operability Endpoints
 
@@ -226,7 +228,7 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 
 Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a tool runs, it saves its output to an in-memory `StateStore` and returns a `session_id`. Pass that `session_id` to the next tool to operate on the already-transformed data — no intermediate files needed.
 
-For this release, session persistence defaults to **in-memory only**, but a durable SQLite-backed session store is available via `ANALYST_MCP_SESSION_BACKEND=sqlite`. In both modes, sessions are bounded by TTL and max-entry eviction, and `manage_session` surfaces the live retention policy plus per-session expiry timestamps.
+For this release, session persistence defaults to **in-memory only**, but a durable SQLite-backed session store is available via `ANALYST_MCP_SESSION_BACKEND=sqlite`. In both modes, sessions are still bounded by `ANALYST_MCP_SESSION_TTL_SEC` and `ANALYST_MCP_SESSION_MAX_ENTRIES`: cleanup is enforced lazily on session reads, writes, and explicit `manage_session` / `cleanup` activity, so SQLite sessions can survive process restarts while still expiring or being evicted once the server touches the store again. `manage_session` surfaces the live retention policy plus per-session expiry timestamps.
 Use `manage_session(action="inspect", include_configs=true)` when you need the stored inferred config payloads; the default inspect/list responses stay compact and only include config names/counts.
 
 ```text
@@ -710,8 +712,8 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
 | `ANALYST_MCP_SESSION_BACKEND` | No | `memory` | Session backend: `memory` or `sqlite` |
 | `ANALYST_MCP_SESSION_DB_PATH` | No | `exports/reports/state/session_store.db` | SQLite database path when `ANALYST_MCP_SESSION_BACKEND=sqlite` |
-| `ANALYST_MCP_SESSION_TTL_SEC` | No | `3600` | Session time-to-live for in-memory `StateStore` entries |
-| `ANALYST_MCP_SESSION_MAX_ENTRIES` | No | `32` | Maximum number of in-memory sessions retained before LRU eviction |
+| `ANALYST_MCP_SESSION_TTL_SEC` | No | `3600` | Session time-to-live for both backends; SQLite cleanup is applied lazily on session reads/writes and explicit cleanup/list activity |
+| `ANALYST_MCP_SESSION_MAX_ENTRIES` | No | `32` | Maximum number of retained sessions for both backends before LRU eviction |
 | `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |
 | `ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT` | No | `true` | Default compact ledger mode for `get_run_history` when caller omits `summary_only` |
 | `ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT` | No | `50` | Default max ledger entries returned in compact mode when caller omits `limit` |
@@ -756,7 +758,7 @@ Boundary guards:
 - loaded DataFrames are rejected if they exceed `ANALYST_MCP_MAX_INPUT_ROWS` or `ANALYST_MCP_MAX_INPUT_MEMORY_BYTES`
 
 Session lifecycle notes:
-- `manage_session(action="list")` returns the active retention policy (`backend`, `durable`, `ttl_sec`, `max_entries`, and `db_path` for SQLite) alongside the session summaries
+- `manage_session(action="list")` returns the active retention policy (`backend`, `durable`, `ttl_sec`, `max_entries`) alongside the session summaries
 - `manage_session(action="inspect")` returns `last_accessed_at`, `expires_at`, and `expires_in_sec` for the selected session
 - `manage_session(action="inspect", include_configs=true)` retrieves the stored inferred config YAML payloads on demand
 - `manage_session(action="fork")` clones the in-memory DataFrame and optionally the stored inferred configs into a new session with its own run context

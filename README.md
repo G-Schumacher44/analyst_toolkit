@@ -182,6 +182,7 @@ Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an op
 | `ANALYST_MCP_STRUCTURED_LOGS=true` | Structured request lifecycle logging |
 | `ANALYST_MCP_AUTH_TOKEN` | Bearer token auth for networked deployments |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | Tune template/resource read timeouts |
+| `ANALYST_MCP_SESSION_BACKEND` | Keep session state in memory by default or opt into durable local SQLite persistence |
 
 ### Deployment Profiles
 
@@ -197,6 +198,7 @@ Notes:
 - Default HTTP posture is localhost-first. Do not treat `docker-compose` port publishing as a reason to skip auth.
 - If you set a non-loopback host, set `ANALYST_MCP_AUTH_TOKEN` as an operator policy. Current runtime behavior warns when the token is unset; it does not hard-fail startup.
 - The artifact server is also localhost-first by default and should only be widened deliberately.
+- `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem. Treat that as an explicit trust-boundary expansion: keep filesystem permissions narrow and prefer the default memory backend unless operators intentionally want restart-persistent sessions.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 

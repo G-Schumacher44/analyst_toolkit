@@ -27,7 +27,8 @@ def _session_backend() -> str:
 
 
 def _sqlite_state_path() -> Path:
-    return Path(os.environ.get("ANALYST_MCP_SESSION_DB_PATH", SESSION_SQLITE_PATH_DEFAULT))
+    raw_path = os.environ.get("ANALYST_MCP_SESSION_DB_PATH", SESSION_SQLITE_PATH_DEFAULT).strip()
+    return Path(raw_path).expanduser().resolve(strict=False)
 
 
 class StateStore:
@@ -53,7 +54,11 @@ class StateStore:
     def _sqlite_connect_unsafe(cls) -> sqlite3.Connection:
         path = _sqlite_state_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path)
+        conn = sqlite3.connect(path, timeout=10.0)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            logger.debug("Could not tighten SQLite session store permissions for %s", path)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -99,6 +104,7 @@ class StateStore:
 
     @classmethod
     def _sqlite_df_from_row(cls, row) -> pd.DataFrame:
+        # SQLite session blobs come only from this process's own StateStore writes.
         return pickle.loads(row[5])
 
     @classmethod
@@ -134,7 +140,6 @@ class StateStore:
             "persistence": "sqlite" if backend == "sqlite" else "in_memory_only",
             "ttl_sec": SESSION_TTL_SECONDS,
             "max_entries": SESSION_MAX_ENTRIES,
-            **({"db_path": str(_sqlite_state_path())} if backend == "sqlite" else {}),
         }
 
     @classmethod
@@ -197,6 +202,7 @@ class StateStore:
                             json.dumps(configs),
                         ),
                     )
+                    conn.commit()
                     cls._sqlite_cleanup_unsafe(conn)
                 finally:
                     conn.close()
@@ -310,7 +316,16 @@ class StateStore:
     def get_expiry_info(cls, session_id: str) -> dict[str, object]:
         """Return derived expiry information for a session."""
         with cls._lock:
-            last_accessed = cls._last_accessed.get(session_id)
+            if cls._using_sqlite():
+                conn = cls._sqlite_connect_unsafe()
+                try:
+                    cls._sqlite_cleanup_unsafe(conn)
+                    row = cls._sqlite_fetch_row_unsafe(conn, session_id)
+                    last_accessed = float(row[4]) if row is not None else None
+                finally:
+                    conn.close()
+            else:
+                last_accessed = cls._last_accessed.get(session_id)
         if last_accessed is None:
             return {
                 "last_accessed_at": None,
@@ -436,6 +451,7 @@ class StateStore:
                             json.dumps(configs),
                         ),
                     )
+                    conn.commit()
                     cls._sqlite_cleanup_unsafe(conn)
                     logger.info(
                         "Forked sqlite session %s → %s (run_id: %s, copy_configs: %s)",
@@ -601,3 +617,21 @@ class StateStore:
                 cls._session_run_ids.clear()
                 cls._session_start_times.clear()
                 cls._session_configs.clear()
+
+    @classmethod
+    def backdate_session_for_test(cls, session_id: str, timestamp: float) -> None:
+        """Test helper: set last_accessed to a known timestamp for TTL assertions."""
+        with cls._lock:
+            if cls._using_sqlite():
+                conn = cls._sqlite_connect_unsafe()
+                try:
+                    conn.execute(
+                        "UPDATE sessions SET last_accessed = ? WHERE session_id = ?",
+                        (timestamp, session_id),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+                return
+            if session_id in cls._last_accessed:
+                cls._last_accessed[session_id] = timestamp
