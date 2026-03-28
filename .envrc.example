@@ -95,7 +95,13 @@ export ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC=8
 # export ANALYST_MCP_ALLOW_EMPTY_CERT_RULES=false
 
 # --- MCP Session Store ---
-# Maximum number of sessions to keep in memory (LRU eviction when exceeded).
+# Session backend. Default memory keeps sessions process-local; sqlite persists them on disk.
+# export ANALYST_MCP_SESSION_BACKEND=memory
+
+# SQLite database path when ANALYST_MCP_SESSION_BACKEND=sqlite.
+# export ANALYST_MCP_SESSION_DB_PATH=exports/reports/state/session_store.db
+
+# Maximum number of retained sessions before LRU eviction.
 # export ANALYST_MCP_SESSION_MAX_ENTRIES=32
 
 # TTL (seconds) for sessions before eviction. Default 1 hour.

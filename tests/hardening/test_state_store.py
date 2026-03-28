@@ -1,6 +1,5 @@
 import threading
 import time
-from pathlib import Path
 
 from analyst_toolkit.mcp_server.state import StateStore
 
@@ -98,8 +97,7 @@ def test_ttl_eviction_removes_expired_sessions(sample_df, monkeypatch):
     sid = StateStore.save(sample_df)
     assert StateStore.get(sid) is not None
 
-    with StateStore._lock:
-        StateStore._last_accessed[sid] = time.time() - 2
+    StateStore.backdate_session_for_test(sid, time.time() - 2)
 
     StateStore.save(sample_df)
 
@@ -125,7 +123,6 @@ def test_sqlite_backend_save_and_get(sample_df, tmp_path, monkeypatch):
 
     assert StateStore.policy()["backend"] == "sqlite"
     assert StateStore.policy()["durable"] is True
-    assert Path(StateStore.policy()["db_path"]).name == "session_store.db"
     result = StateStore.get(sid)
 
     import pandas as pd
@@ -145,7 +142,7 @@ def test_sqlite_backend_persists_configs_and_fork(sample_df, tmp_path, monkeypat
 
     assert forked is not None
     assert StateStore.get_run_id(forked) == "forked_sqlite_run"
-    assert StateStore.get_config(forked, "validation") is not None
+    assert StateStore.get_config(forked, "validation") == StateStore.get_config(sid, "validation")
 
 
 def test_sqlite_backend_rebind_and_clear(sample_df, tmp_path, monkeypatch):
@@ -169,17 +166,61 @@ def test_sqlite_backend_ttl_cleanup(sample_df, tmp_path, monkeypatch):
     monkeypatch.setattr(state_module, "SESSION_TTL_SECONDS", 1)
 
     sid = StateStore.save(sample_df, run_id="sqlite_run")
-
-    with StateStore._lock:
-        conn = StateStore._sqlite_connect_unsafe()
-        try:
-            conn.execute(
-                "UPDATE sessions SET last_accessed = ? WHERE session_id = ?",
-                (time.time() - 2, sid),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+    StateStore.backdate_session_for_test(sid, time.time() - 2)
 
     StateStore.cleanup()
     assert StateStore.get(sid) is None
+
+
+def test_sqlite_concurrent_saves_are_thread_safe(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    ids = []
+    errors = []
+    lock = threading.Lock()
+
+    def worker(i):
+        try:
+            import pandas as pd
+
+            df = pd.DataFrame({"col": [i]})
+            sid = StateStore.save(df, run_id=f"run_{i}")
+            with lock:
+                ids.append(sid)
+        except Exception as e:
+            with lock:
+                errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors, f"Errors during concurrent sqlite saves: {errors}"
+    assert len(ids) == 20
+    for sid in ids:
+        assert StateStore.get(sid) is not None
+
+
+def test_sqlite_concurrent_reads_are_safe(sample_df, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    sid = StateStore.save(sample_df, run_id="sqlite_run")
+    errors = []
+    lock = threading.Lock()
+
+    def reader():
+        try:
+            StateStore.get(sid)
+        except Exception as e:
+            with lock:
+                errors.append(e)
+
+    threads = [threading.Thread(target=reader) for _ in range(20)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors

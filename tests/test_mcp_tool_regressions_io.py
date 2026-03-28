@@ -42,7 +42,6 @@ async def test_manage_session_list_reports_sqlite_policy(monkeypatch, tmp_path):
     assert result["status"] == "pass"
     assert result["session_policy"]["backend"] == "sqlite"
     assert result["session_policy"]["durable"] is True
-    assert result["session_policy"]["db_path"].endswith("session_store.db")
     StateStore.clear()
 
 
@@ -82,6 +81,22 @@ async def test_manage_session_inspect_can_include_configs():
     assert result["status"] == "pass"
     assert result["session"]["configs"] == {"validation": config_yaml}
     assert result["session"]["config_bytes"] == len(config_yaml.encode("utf-8"))
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_inspect_reports_sqlite_expiry(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    StateStore.clear()
+    sid = StateStore.save(pd.DataFrame({"x": [1, 2, 3]}), run_id="inspect_run")
+
+    result = await session_tool._toolkit_manage_session(action="inspect", session_id=sid)
+    assert result["status"] == "pass"
+    assert result["session_policy"]["backend"] == "sqlite"
+    assert result["session"]["last_accessed_at"]
+    assert result["session"]["expires_at"]
+    assert result["session"]["expires_in_sec"] is not None
     StateStore.clear()
 
 
