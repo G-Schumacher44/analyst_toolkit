@@ -38,14 +38,19 @@ def _normalize_allowed_values(allowed: Any) -> Any:
     if not isinstance(allowed, list):
         return allowed
     normalized: list[Any] = []
-    seen: set[str] = set()
+    seen: set[Any] = set()
     for value in allowed:
         candidate: Any = value
         if isinstance(value, str):
             candidate = value.strip().lower()
-            if candidate in seen:
-                continue
-            seen.add(candidate)
+        dedupe_key: Any = candidate
+        try:
+            hash(dedupe_key)
+        except TypeError:
+            dedupe_key = repr(dedupe_key)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
         normalized.append(candidate)
     return normalized
 
@@ -58,9 +63,10 @@ def _normalize_rule_contract(
 ) -> dict[str, Any]:
     normalized_rules = deepcopy(rules) if isinstance(rules, dict) else {}
     normalized_expected_types = deepcopy(expected_types) if isinstance(expected_types, dict) else {}
+    observed_columns = getattr(observed_df, "columns", []) if observed_df is not None else []
 
     if observed_df is not None and normalized_expected_types:
-        for column in getattr(observed_df, "columns", []):
+        for column in observed_columns:
             if column not in normalized_expected_types:
                 continue
             observed_dtype = getattr(observed_df[column], "dtype", None)
@@ -80,13 +86,16 @@ def _normalize_rule_contract(
 
     expected_columns = normalized_rules.get("expected_columns", [])
     if isinstance(expected_columns, list) and observed_df is not None:
-        for column in getattr(observed_df, "columns", []):
+        missing_generated_columns: list[str] = []
+        for column in observed_columns:
             if (
                 isinstance(column, str)
                 and column.endswith(_GENERATED_FLAG_SUFFIXES)
                 and column not in expected_columns
             ):
-                expected_columns.append(column)
+                missing_generated_columns.append(column)
+        if missing_generated_columns:
+            expected_columns.extend(sorted(missing_generated_columns))
         normalized_rules["expected_columns"] = expected_columns
 
     categorical_values = normalized_rules.get("categorical_values", {})
@@ -96,15 +105,18 @@ def _normalize_rule_contract(
     cleaned_categorical: dict[str, Any] = {}
     for column, allowed in categorical_values.items():
         observed_dtype = None
-        if observed_df is not None and column in getattr(observed_df, "columns", []):
+        if observed_df is not None and column in observed_columns:
             observed_dtype = getattr(observed_df[column], "dtype", None)
         if _is_non_text_expected_type(
             normalized_expected_types.get(column)
         ) or _is_non_text_observed_dtype(observed_dtype):
             continue
         normalized_allowed = allowed
-        if observed_df is not None and column in getattr(observed_df, "columns", []):
-            observed_values = observed_df[column].dropna().astype(object).head(100).tolist()
+        if observed_df is not None and column in observed_columns:
+            observed_values = sorted(
+                observed_df[column].dropna().astype(object).unique().tolist(),
+                key=lambda value: (type(value).__name__, repr(value)),
+            )[:100]
             if _looks_like_lowercased_text_values(observed_values):
                 normalized_allowed = _normalize_allowed_values(allowed)
         cleaned_categorical[column] = normalized_allowed

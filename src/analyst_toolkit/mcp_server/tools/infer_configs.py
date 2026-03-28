@@ -379,6 +379,8 @@ async def _toolkit_infer_configs(
     elif input_id:
         descriptor = get_input_descriptor(input_id)
 
+    session_recreated_warning: str | None = None
+
     # If we still don't have a session, start one
     if not session_id:
         session_id = save_to_session(df, run_id=run_id)
@@ -386,6 +388,10 @@ async def _toolkit_infer_configs(
         # input_id descriptors can outlive a cleared session; recreate the named
         # session so inferred configs have a live persistence target.
         session_id = save_to_session(df, session_id=session_id, run_id=run_id)
+        session_recreated_warning = (
+            f"Session {session_id} metadata was not found; the session was recreated before "
+            "saving inferred configs."
+        )
 
     # Always materialize an input snapshot locally for inference.
     # This avoids path-construction drift between modules and ensures deterministic reads.
@@ -419,6 +425,8 @@ async def _toolkit_infer_configs(
         }
 
     external_warnings: list[str] = []
+    if session_recreated_warning:
+        external_warnings.append(session_recreated_warning)
     generated_config_dir: str | None = None
     try:
         raw_configs, external_warnings = _call_external_infer_configs(
