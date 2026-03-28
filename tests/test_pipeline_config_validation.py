@@ -11,7 +11,7 @@ from analyst_toolkit.m00_utils.pipeline_config_validation import (
 
 
 def _load_yaml(path: str) -> dict:
-    resolved = (Path(__file__).resolve().parent.parent / path).resolve()
+    resolved = Path(__file__).resolve().parent.parent / path
     with resolved.open("r", encoding="utf-8") as handle:
         loaded = yaml.safe_load(handle)
     assert isinstance(loaded, dict)
