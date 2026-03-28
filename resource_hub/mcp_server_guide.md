@@ -215,7 +215,7 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `get_cockpit_dashboard` | Operator hub HTML artifact — recent-run cards, module dashboard links, artifact rows, data dictionary preview |
 | `get_pipeline_dashboard` | Combined multi-module HTML dashboard for a specific `run_id`; linked from the cockpit hub |
 | `data_dictionary` | Column-level schema report as a standalone HTML artifact; preview surfaced in the cockpit dictionary tab |
-| `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs |
+| `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs and returns `already_running=true` when the target server is already up |
 | `manage_session` | Session lifecycle: list active sessions, inspect details, fork a session into a new run context, or rebind a session to a different run_id |
 | `upload_input` | Upload a local file as base64-encoded content through the MCP protocol — use when the file is not server-visible (e.g., server runs in a container) |
 | `read_artifact` | Read a container-local artifact and return its content through MCP — use when localhost artifact URLs are not reachable from the client |
@@ -340,7 +340,7 @@ curl -X POST http://localhost:8001/rpc \
   }'
 ```
 
-The server binds to `127.0.0.1:8765` by default and serves the `exports/` directory. Artifact paths in subsequent tool responses will be replaced with `http://localhost:8765/...` URLs.
+The server binds to `127.0.0.1:8765` by default and serves the `exports/` directory. Artifact paths in subsequent tool responses will be replaced with `http://localhost:8765/...` URLs. If a compatible artifact server is already listening on that host/port, `ensure_artifact_server` returns a normal pass response with `summary.already_running=true` instead of failing on the occupied port.
 
 | Variable | Default | Description |
 |---|---|---|

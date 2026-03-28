@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import json
 import logging
@@ -178,6 +179,17 @@ def _probe_server(base_url: str, timeout_sec: float = 0.25) -> bool:
         return False
 
 
+def _read_server_health(base_url: str, timeout_sec: float = 0.25) -> dict[str, Any] | None:
+    try:
+        with urllib.request.urlopen(f"{base_url}/__health", timeout=timeout_sec) as response:
+            if response.status != 200:
+                return None
+            payload = json.loads(response.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
 def get_local_artifact_server_status() -> dict[str, Any]:
     with _SERVER_GUARD:
         running = bool(
@@ -231,11 +243,26 @@ def ensure_local_artifact_server() -> dict[str, Any]:
             root.mkdir(parents=True, exist_ok=True)
             host = _artifact_server_host()
             requested_port = _artifact_server_port()
-            server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
+            advertised_host = "127.0.0.1" if host == "0.0.0.0" else host
+            base_url = f"http://{advertised_host}:{requested_port}"
+            try:
+                server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
+            except OSError as exc:
+                if exc.errno == errno.EADDRINUSE:
+                    health = _read_server_health(base_url)
+                    if health is not None:
+                        return {
+                            "status": "pass",
+                            "enabled": True,
+                            "running": True,
+                            "already_running": True,
+                            "base_url": str(health.get("base_url") or base_url),
+                            "root": str(health.get("root") or root),
+                        }
+                raise
             server.artifact_root = root
             # Advertise 127.0.0.1 in URLs even when bound to 0.0.0.0 —
             # 0.0.0.0 is not a valid browsable address.
-            advertised_host = "127.0.0.1" if host == "0.0.0.0" else host
             server.base_url = f"http://{advertised_host}:{server.server_address[1]}"
             thread = threading.Thread(
                 target=server.serve_forever,

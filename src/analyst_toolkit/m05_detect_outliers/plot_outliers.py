@@ -12,6 +12,10 @@ returned for optional widget-based viewing or HTML inclusion.
 import logging
 from pathlib import Path
 
+from analyst_toolkit.m00_utils.plot_runtime import configure_plot_runtime_env
+
+configure_plot_runtime_env()
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
