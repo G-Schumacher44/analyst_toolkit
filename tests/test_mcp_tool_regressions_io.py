@@ -31,6 +31,22 @@ async def test_manage_session_list():
 
 
 @pytest.mark.asyncio
+async def test_manage_session_list_reports_sqlite_policy(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    StateStore.clear()
+    df = pd.DataFrame({"a": [1, 2]})
+    StateStore.save(df, run_id="sqlite_run")
+
+    result = await session_tool._toolkit_manage_session(action="list")
+    assert result["status"] == "pass"
+    assert result["session_policy"]["backend"] == "sqlite"
+    assert result["session_policy"]["durable"] is True
+    assert result["session_policy"]["db_path"].endswith("session_store.db")
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
 async def test_manage_session_inspect():
     StateStore.clear()
     df = pd.DataFrame({"x": [1, 2, 3]})
