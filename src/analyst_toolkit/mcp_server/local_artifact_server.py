@@ -148,10 +148,12 @@ class _ArtifactRequestHandler(SimpleHTTPRequestHandler):
         if artifact_root is None:
             logger.error("artifact_root not set on artifact server instance")
             return str(Path("__missing__").resolve(strict=False))
-        if parsed_path in {"/exports", "/exports/"}:
+        if parsed_path in {"/exports", "/exports/", "/reports", "/reports/"}:
             relative = PurePosixPath(".")
         elif parsed_path.startswith("/exports/"):
             relative = PurePosixPath(parsed_path.removeprefix("/exports/"))
+        elif parsed_path.startswith("/reports/"):
+            relative = PurePosixPath(parsed_path.removeprefix("/"))
         else:
             return str((artifact_root / "__missing__").resolve(strict=False))
         if ".." in relative.parts:
