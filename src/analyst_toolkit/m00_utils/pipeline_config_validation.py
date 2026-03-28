@@ -70,6 +70,10 @@ def validate_runner_module_config(
 
     module_name = spec["module_name"]
     root_key = spec["root_key"]
+    if not isinstance(config, dict):
+        raise PipelineConfigValidationError(
+            f"Invalid config for runner module '{runner_module_name}': expected a mapping."
+        )
     coerce_key = "outlier_detection" if runner_module_name == "outlier_detection" else module_name
     coerced = coerce_config(config, coerce_key)
     normalized = normalize_module_config(module_name, coerced)
