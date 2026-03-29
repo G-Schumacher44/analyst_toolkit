@@ -100,6 +100,36 @@ def test_inputs_upload_reuses_input_id_for_same_payload(client, clean_input_env)
     assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
 
 
+def test_inputs_upload_reuses_session_for_anonymous_idempotent_retry(client, clean_input_env):
+    response_one = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-retry",
+            "run_id": "retry_upload_run",
+        },
+    )
+    response_two = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-retry",
+            "run_id": "retry_upload_run",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+    assert response_one.json()["session_id"] == response_two.json()["session_id"]
+
+
 def test_inputs_register_server_path_loads_into_session(client, clean_input_env):
     tmp_path = clean_input_env
 
@@ -161,6 +191,37 @@ def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, cle
     assert response_one.json()["status"] == "pass"
     assert response_two.json()["status"] == "pass"
     assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+
+
+def test_inputs_register_reuses_session_for_anonymous_idempotent_retry(client, clean_input_env):
+    tmp_path = clean_input_env
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+    assert response_one.json()["session_id"] == response_two.json()["session_id"]
 
 
 def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(

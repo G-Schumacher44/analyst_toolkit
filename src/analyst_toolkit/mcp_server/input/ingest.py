@@ -45,6 +45,25 @@ def get_input_descriptor(input_id: str) -> InputDescriptor | None:
     return get_descriptor(input_id)
 
 
+def _reuse_live_bound_session_id(
+    *,
+    input_id: str,
+    requested_session_id: str | None,
+) -> str | None:
+    """Reuse an existing bound session for anonymous idempotent retries."""
+    if requested_session_id is not None:
+        return requested_session_id
+
+    existing_descriptor = get_descriptor(input_id)
+    if existing_descriptor is None or existing_descriptor.session_id is None:
+        return None
+
+    if StateStore.get_metadata(existing_descriptor.session_id) is None:
+        return None
+
+    return existing_descriptor.session_id
+
+
 def ingest_uploaded_bytes(
     *,
     filename: str,
@@ -62,8 +81,9 @@ def ingest_uploaded_bytes(
     Full run/session idempotency still requires callers to provide stable session_id/run_id.
     """
     staged_path, digest, size = stage_uploaded_file(filename=filename, payload=payload)
+    input_id = _new_input_id(idempotency_key or f"upload:{Path(filename).name}:{digest}")
     descriptor = InputDescriptor(
-        input_id=_new_input_id(idempotency_key or f"upload:{Path(filename).name}:{digest}"),
+        input_id=input_id,
         source_type="upload",
         original_reference=filename,
         resolved_reference=str(staged_path),
@@ -77,8 +97,16 @@ def ingest_uploaded_bytes(
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:
+        effective_session_id = _reuse_live_bound_session_id(
+            input_id=input_id,
+            requested_session_id=session_id,
+        )
         df = load_dataframe_from_descriptor(descriptor)
-        effective_session_id = StateStore.save(df, session_id=session_id, run_id=run_id)
+        effective_session_id = StateStore.save(
+            df,
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
         descriptor = descriptor.with_runtime_binding(
             session_id=effective_session_id,
             run_id=run_id,
@@ -107,8 +135,9 @@ def register_input_source(
     resolved_type, resolved_reference, display_name = resolve_source_reference(
         reference, source_type
     )
+    input_id = _new_input_id(idempotency_key or f"source:{resolved_reference}")
     descriptor = InputDescriptor(
-        input_id=_new_input_id(idempotency_key or f"source:{resolved_reference}"),
+        input_id=input_id,
         source_type=resolved_type,
         original_reference=reference,
         resolved_reference=resolved_reference,
@@ -120,8 +149,16 @@ def register_input_source(
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:
+        effective_session_id = _reuse_live_bound_session_id(
+            input_id=input_id,
+            requested_session_id=session_id,
+        )
         df = load_dataframe_from_descriptor(descriptor)
-        effective_session_id = StateStore.save(df, session_id=session_id, run_id=run_id)
+        effective_session_id = StateStore.save(
+            df,
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
         descriptor = descriptor.with_runtime_binding(
             session_id=effective_session_id,
             run_id=run_id,
