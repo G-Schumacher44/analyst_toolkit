@@ -28,6 +28,37 @@ _CONTENT_TYPES = {
 }
 
 
+def _gcs_url(bucket_name: str, blob_path: str) -> str:
+    return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
+
+
+def _gcs_uri(bucket_name: str, blob_path: str) -> str:
+    return f"gs://{bucket_name}/{blob_path}"
+
+
+def _blob_exists(bucket: object, blob_path: str) -> bool:
+    get_blob = getattr(bucket, "get_blob", None)
+    if callable(get_blob):
+        try:
+            return get_blob(blob_path) is not None
+        except Exception:
+            return False
+
+    blob_factory = getattr(bucket, "blob", None)
+    if callable(blob_factory):
+        try:
+            blob = blob_factory(blob_path)
+        except Exception:
+            return False
+        exists = getattr(blob, "exists", None)
+        if callable(exists):
+            try:
+                return bool(exists())
+            except Exception:
+                return False
+    return False
+
+
 def _read_csv_with_limits(path: Path, *, reference: str) -> pd.DataFrame:
     return materialize_chunked_frames(
         pd.read_csv(path, low_memory=False, chunksize=50_000),
@@ -225,10 +256,14 @@ def save_output(df: pd.DataFrame, path: str) -> str:
 
                 client = storage.Client()
                 bucket = client.bucket(bucket_name)
+                if _blob_exists(bucket, blob_path):
+                    return _gcs_uri(bucket_name, blob_path)
                 blob = bucket.blob(blob_path)
                 try:
                     blob.upload_from_filename(tmp_path, content_type=content_type)
                 except Exception as first_exc:
+                    if _blob_exists(bucket, blob_path):
+                        return _gcs_uri(bucket_name, blob_path)
                     alt_blob_path = _versioned_blob_path(blob_path)
                     alt_blob = bucket.blob(alt_blob_path)
                     try:
@@ -301,11 +336,15 @@ def upload_artifact(
     def _upload(path: str) -> str:
         blob = bucket.blob(path)
         blob.upload_from_filename(str(p), content_type=content_type)
-        return f"https://storage.googleapis.com/{bucket_name}/{path}"
+        return _gcs_url(bucket_name, path)
 
+    if _blob_exists(bucket, blob_path):
+        return _gcs_url(bucket_name, blob_path)
     try:
         return _upload(blob_path)
     except Exception as first_exc:
+        if _blob_exists(bucket, blob_path):
+            return _gcs_url(bucket_name, blob_path)
         # Fallback for idempotent reruns where same-key overwrite/delete permissions vary.
         alt_name = f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"
         alt_path = f"{prefix}/{path_root}/{module}/{alt_name}"

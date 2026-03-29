@@ -231,6 +231,11 @@ Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a t
 For this release, session persistence defaults to **in-memory only**, but a durable SQLite-backed session store is available via `ANALYST_MCP_SESSION_BACKEND=sqlite`. In both modes, sessions are still bounded by `ANALYST_MCP_SESSION_TTL_SEC` and `ANALYST_MCP_SESSION_MAX_ENTRIES`: cleanup is enforced lazily on session reads, writes, and explicit `manage_session` / `cleanup` activity, so SQLite sessions can survive process restarts while still expiring or being evicted once the server touches the store again. `manage_session` surfaces the live retention policy plus per-session expiry timestamps.
 Use `manage_session(action="inspect", include_configs=true)` when you need the stored inferred config payloads; the default inspect/list responses stay compact and only include config names/counts.
 
+Retry contract:
+- `register_input` and `upload_input` are input-idempotent when you provide a stable `idempotency_key`.
+- If `load_into_session=true` and no explicit `session_id` is supplied, anonymous retries reuse the existing live bound session for that canonical `input_id` instead of allocating a fresh session on every retry.
+- Repeating the same-run module or dashboard call now reuses the primary remote artifact object when it already exists. UUID-suffixed fallback objects are reserved for true first-write collisions or permission failures, not normal retries.
+
 ```text
 1. diagnostics(gcs_path="gs://bucket/path/file.parquet", run_id="my_run")
      → creates session_id: "sess_abc123", establishes baseline profile
@@ -661,6 +666,9 @@ Add to `~/.config/claude/claude_desktop_config.json` (Mac: `~/Library/Applicatio
   }
 }
 ```
+
+Operational note:
+- In stdio/local mode, keep one `analyst_toolkit` MCP server instance per client. Repeated reconnects can orphan extra `python -m analyst_toolkit.mcp_server.server --stdio` workers, which can make session visibility and input bindings look inconsistent because some MCP state is still process-local. If behavior looks split-brain during QA, terminate stale stdio workers and relaunch one clean instance before debugging tool behavior.
 
 ### FridAI (HTTP Transport)
 

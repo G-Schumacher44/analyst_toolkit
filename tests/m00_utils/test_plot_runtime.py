@@ -2,10 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from analyst_toolkit.m00_utils.plot_runtime import (
-    _is_writable_path,
-    configure_plot_runtime_env,
-)
+from analyst_toolkit.m00_utils.plot_runtime import configure_plot_runtime_env
 
 
 def test_configure_plot_runtime_env_uses_writable_tmp_cache(monkeypatch, tmp_path):
@@ -43,16 +40,17 @@ def test_configure_plot_runtime_env_respects_existing_settings(monkeypatch, tmp_
 def test_configure_plot_runtime_env_uses_existing_xdg_cache_when_mpl_is_unset(
     monkeypatch, tmp_path
 ):
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
     xdg_dir = tmp_path / "cache"
     xdg_dir.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("XDG_CACHE_HOME", str(xdg_dir))
     monkeypatch.delenv("MPLCONFIGDIR", raising=False)
 
     configure_plot_runtime_env()
 
-    expected_mpl_dir = Path.home() / ".matplotlib"
-    if not _is_writable_path(expected_mpl_dir):
-        expected_mpl_dir = xdg_dir / "matplotlib"
+    expected_mpl_dir = fake_home / ".matplotlib"
 
     assert os.environ["XDG_CACHE_HOME"] == str(xdg_dir)
     assert os.environ["MPLCONFIGDIR"] == str(expected_mpl_dir)

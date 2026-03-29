@@ -199,8 +199,15 @@ Notes:
 - If you set a non-loopback host, set `ANALYST_MCP_AUTH_TOKEN` as an operator policy. Current runtime behavior warns when the token is unset; it does not hard-fail startup.
 - The artifact server is also localhost-first by default and should only be widened deliberately.
 - `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem. By default the database lives in a private user-local state directory, not under `exports/`. Treat that as an explicit trust-boundary expansion: keep filesystem permissions narrow and prefer the default memory backend unless operators intentionally want restart-persistent sessions.
+- In stdio/local mode, run one `analyst_toolkit` MCP server instance per client. Repeated reconnects can orphan extra stdio workers, which can make session visibility and input bindings look inconsistent during QA. If behavior looks split-brain, restart the client and terminate stale `python -m analyst_toolkit.mcp_server.server --stdio` processes before retesting.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
+
+### MCP Retry Semantics
+
+- `register_input` and `upload_input` are input-idempotent when you provide a stable `idempotency_key`.
+- If `load_into_session=true` and you do not provide an explicit `session_id`, anonymous retries now reuse the existing live bound session for that canonical input instead of minting a new session each time.
+- Repeating the same-run module and dashboard calls now reuses the primary remote artifact object when it already exists. Versioned fallback object names are reserved for true first-write collisions or permission failures, not normal retries.
 
 ---
 
