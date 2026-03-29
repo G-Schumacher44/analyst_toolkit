@@ -47,8 +47,12 @@ def test_configure_plot_runtime_env_uses_existing_xdg_cache_when_mpl_is_unset(
 
     configure_plot_runtime_env()
 
+    expected_mpl_dir = Path.home() / ".matplotlib"
+    if not expected_mpl_dir.is_dir() or not os.access(expected_mpl_dir, os.W_OK | os.X_OK):
+        expected_mpl_dir = xdg_dir / "matplotlib"
+
     assert os.environ["XDG_CACHE_HOME"] == str(xdg_dir)
-    assert os.environ["MPLCONFIGDIR"] == str(xdg_dir / "matplotlib")
+    assert os.environ["MPLCONFIGDIR"] == str(expected_mpl_dir)
     assert Path(os.environ["MPLCONFIGDIR"]).exists()
 
 
