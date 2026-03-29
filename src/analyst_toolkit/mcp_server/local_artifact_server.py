@@ -185,10 +185,28 @@ def _read_server_health(base_url: str, timeout_sec: float = 0.25) -> dict[str, A
     try:
         with urllib.request.urlopen(f"{base_url}/__health", timeout=timeout_sec) as response:
             if response.status != 200:
+                logger.debug(
+                    "Artifact server health probe to %s returned non-200 status %s",
+                    base_url,
+                    response.status,
+                )
                 return None
             payload = json.loads(response.read().decode("utf-8"))
-            return payload if isinstance(payload, dict) else None
-    except Exception:
+            if not isinstance(payload, dict):
+                logger.debug(
+                    "Artifact server health probe to %s returned non-dict payload %r",
+                    base_url,
+                    payload,
+                )
+                return None
+            return payload
+    except Exception as exc:
+        logger.debug(
+            "Artifact server health probe to %s failed (timeout=%ss): %s",
+            base_url,
+            timeout_sec,
+            exc,
+        )
         return None
 
 
@@ -253,14 +271,52 @@ def ensure_local_artifact_server() -> dict[str, Any]:
                 if exc.errno == errno.EADDRINUSE:
                     health = _read_server_health(base_url)
                     if health is not None:
+                        health_root = Path(str(health.get("root", ""))).resolve(strict=False)
+                        health_base_url = str(health.get("base_url", ""))
+                        expected_base_url = base_url
+                        if health_root == root and health_base_url == expected_base_url:
+                            return {
+                                "status": "pass",
+                                "enabled": True,
+                                "running": True,
+                                "already_running": True,
+                                "base_url": expected_base_url,
+                                "root": str(root),
+                            }
+                        logger.warning(
+                            "Artifact server port %s is occupied by an incompatible server "
+                            "(expected root=%s, base_url=%s; got root=%s, base_url=%s)",
+                            requested_port,
+                            root,
+                            expected_base_url,
+                            health_root,
+                            health_base_url,
+                        )
                         return {
-                            "status": "pass",
+                            "status": "error",
+                            "error_code": "ARTIFACT_SERVER_BIND_CONFLICT",
                             "enabled": True,
-                            "running": True,
-                            "already_running": True,
-                            "base_url": str(health.get("base_url") or base_url),
-                            "root": str(health.get("root") or root),
+                            "running": False,
+                            "already_running": False,
+                            "base_url": "",
+                            "root": str(root),
+                            "message": (
+                                "Artifact server port is already in use by an incompatible server."
+                            ),
                         }
+                    return {
+                        "status": "error",
+                        "error_code": "ARTIFACT_SERVER_BIND_CONFLICT",
+                        "enabled": True,
+                        "running": False,
+                        "already_running": False,
+                        "base_url": "",
+                        "root": str(root),
+                        "message": (
+                            "Artifact server port is already in use and no compatible health "
+                            "response was found."
+                        ),
+                    }
                 raise
             server.artifact_root = root
             # Advertise 127.0.0.1 in URLs even when bound to 0.0.0.0 —

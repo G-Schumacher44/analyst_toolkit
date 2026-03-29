@@ -100,7 +100,7 @@ def test_translate_path_accepts_reports_prefix(tmp_path):
     assert translated == (root / "reports" / "pipeline" / "run1_dashboard.html")
 
 
-def test_ensure_local_artifact_server_reraises_addrinuse_without_health_match(
+def test_ensure_local_artifact_server_returns_conflict_without_health_match(
     monkeypatch, tmp_path, reset_artifact_server
 ):
     root = tmp_path / "exports"
@@ -121,8 +121,43 @@ def test_ensure_local_artifact_server_reraises_addrinuse_without_health_match(
         lambda *_args, **_kwargs: None,
     )
 
-    try:
-        artifact_server_module.ensure_local_artifact_server()
-        raise AssertionError("expected OSError")
-    except OSError as exc:
-        assert exc.errno == errno.EADDRINUSE
+    result = artifact_server_module.ensure_local_artifact_server()
+
+    assert result["status"] == "error"
+    assert result["error_code"] == "ARTIFACT_SERVER_BIND_CONFLICT"
+    assert result["already_running"] is False
+    assert result["base_url"] == ""
+    assert "no compatible health response" in result["message"]
+
+
+def test_ensure_local_artifact_server_returns_conflict_for_incompatible_health(
+    monkeypatch, tmp_path, reset_artifact_server
+):
+    root = tmp_path / "exports"
+    root.mkdir(parents=True)
+
+    monkeypatch.setenv("ANALYST_MCP_ENABLE_ARTIFACT_SERVER", "true")
+    monkeypatch.setenv("ANALYST_MCP_ARTIFACT_SERVER_HOST", "127.0.0.1")
+    monkeypatch.setenv("ANALYST_MCP_ARTIFACT_SERVER_PORT", "8765")
+    monkeypatch.setenv("ANALYST_MCP_ARTIFACT_SERVER_ROOT", str(root))
+    monkeypatch.setattr(
+        artifact_server_module,
+        "_ArtifactHTTPServer",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError(errno.EADDRINUSE, "in use")),
+    )
+    monkeypatch.setattr(
+        artifact_server_module,
+        "_read_server_health",
+        lambda *_args, **_kwargs: {
+            "base_url": "http://127.0.0.1:8765",
+            "root": str((tmp_path / "other_exports").resolve(strict=False)),
+        },
+    )
+
+    result = artifact_server_module.ensure_local_artifact_server()
+
+    assert result["status"] == "error"
+    assert result["error_code"] == "ARTIFACT_SERVER_BIND_CONFLICT"
+    assert result["already_running"] is False
+    assert result["base_url"] == ""
+    assert "incompatible server" in result["message"]
