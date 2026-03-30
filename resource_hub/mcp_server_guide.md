@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -19,17 +19,15 @@
 
 The analyst toolkit MCP server exposes every toolkit module as a callable tool over the [Model Context Protocol](https://modelcontextprotocol.io). Any MCP-compatible host — FridAI, Claude Desktop, VS Code, or a plain JSON-RPC 2.0 client — can invoke toolkit operations against local or GCS-hosted data without any Python dependency on the host side.
 
-## 🆕 Version 0.4.4 Highlights
+## 🆕 Version 0.5.0 Highlights
 
-- **Full Dashboard Surface:** Every pipeline module now produces a standalone HTML dashboard artifact — diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, data dictionary, and final audit. Dashboard artifact paths are returned in tool responses.
-- **Cockpit Hub:** `get_cockpit_dashboard` returns a unified operator hub linking recent-run cards, module dashboards, artifact rows, and a data dictionary preview into a single HTML artifact.
-- **Local Artifact Server:** `ensure_artifact_server` starts an optional localhost file server so cockpit and module artifact references become browser-openable URLs instead of raw file paths.
-- **Data Dictionary:** `data_dictionary` is now fully implemented — generates a column-level schema report as a standalone HTML artifact and surfaces a preview in the cockpit dictionary tab.
-- **Pipeline Dashboard:** `get_pipeline_dashboard` produces a combined multi-module dashboard for a specific run, linked from the cockpit hub.
-- **Resource Inventory:** Quickstart, agent playbook, and capability catalog are now exposed as first-class MCP resources (in addition to tools) via `resources/list` and `resources/read`.
+- **Input Ingest First:** `register_input` and `upload_input` are now the recommended entrypoints for MCP clients, with canonical `input_id`s, stable idempotency keys, and conflict-safe error semantics.
+- **Session Lifecycle Management:** `manage_session` exposes list/inspect/fork/rebind/clear actions plus live retention policy and optional stored inferred configs.
+- **Durable SQLite Sessions:** `ANALYST_MCP_SESSION_BACKEND=sqlite` now provides restart-persistent session state with explicit trust-boundary guidance and private default storage paths.
+- **Retry-Safe Artifacts:** same-run module and dashboard retries now reuse primary remote artifact identities instead of silently drifting to suffixed fallback objects on normal reruns.
+- **Full Dashboard Surface:** Cockpit, diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, data dictionary, and final audit all emit standalone HTML artifacts.
+- **Artifact Access:** `read_artifact` and the localhost artifact server make report surfaces usable across stdio, HTTP, and containerized clients.
 - **Observability + Auth:** `/ready`, `/metrics`, structured lifecycle logs (`ANALYST_MCP_STRUCTURED_LOGS`), and optional bearer token auth (`ANALYST_MCP_AUTH_TOKEN`).
-- **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
-- **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.
 
 ---
 
@@ -82,7 +80,7 @@ curl http://localhost:8001/health | python3 -m json.tool
 ```json
 {
   "status": "ok",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "uptime_sec": 42,
   "tools": [
     "diagnostics", "validation", "outliers", "normalization",
@@ -93,7 +91,7 @@ curl http://localhost:8001/health | python3 -m json.tool
     "get_run_history", "get_data_health_report",
     "data_dictionary", "get_pipeline_dashboard", "get_cockpit_dashboard",
     "ensure_artifact_server", "manage_session",
-    "upload_input", "read_artifact"
+    "register_input", "upload_input", "read_artifact"
   ]
 }
 ```
@@ -217,6 +215,7 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `data_dictionary` | Column-level schema report as a standalone HTML artifact; preview surfaced in the cockpit dictionary tab |
 | `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs and returns `summary.already_running=true` only when a compatible artifact server is already running on the configured host/port |
 | `manage_session` | Session lifecycle: list active sessions, inspect details, fork a session into a new run context, or rebind a session to a different run_id |
+| `register_input` | Register a server-visible local path or `gs://` URI as a canonical input reference and optionally bind it into a session |
 | `upload_input` | Upload a local file as base64-encoded content through the MCP protocol — use when the file is not server-visible (e.g., server runs in a container) |
 | `read_artifact` | Read a container-local artifact and return its content through MCP — use when localhost artifact URLs are not reachable from the client |
 

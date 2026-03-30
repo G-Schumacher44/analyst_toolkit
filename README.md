@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -17,14 +17,14 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
-## 🆕 Version 0.4.4: Full Dashboard Rollout
+## 🆕 Version 0.5.0: MCP Platform Upgrade
 
-Every pipeline module now produces a standalone, exportable HTML dashboard. The toolkit went from a few report surfaces to a complete, artifact-first audit trail — end to end.
+This release turns the MCP server into a fuller product surface, not just a dashboard add-on.
 
-1. **See Everything:** Cockpit, diagnostics, normalization, duplicates, outlier detection, outlier handling, imputation, final audit, auto-heal, and data dictionary — each as a self-contained HTML artifact.
-2. **Navigate with the Cockpit Hub:** A single landing page links every module dashboard for a run into one reviewable session view.
-3. **Browse Locally:** An optional artifact server turns cockpit artifact references into stable browser links — no manual file paths.
-4. **Share Templates:** MCP `resources/list` and `resources/read` now expose the full template and resource inventory directly to clients and agents.
+1. **Ingest First:** `register_input` and `upload_input` establish canonical `input_id`s, deterministic error handling, and retry-aware session reuse.
+2. **Durable Sessions:** `manage_session` plus the optional SQLite backend make session lifecycle explicit: list, inspect, fork, rebind, clear, and survive restarts when operators opt in.
+3. **Artifact-First UX:** `read_artifact`, stable local artifact URLs, and the localhost artifact server make dashboards and reports usable across stdio, HTTP, and containerized clients.
+4. **Safer Contracts:** config normalization, certification alignment, and retry/idempotency hardening now keep MCP behavior deterministic under reruns and partial failures.
 
 ---
 
@@ -356,6 +356,13 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 
 <details>
 <summary><strong>🫆 Version Release Notes</strong></summary>
+
+**v0.5.0 — MCP Platform Upgrade**
+- **Input Ingest + Retry Semantics:** Added `register_input` and `upload_input` as first-class MCP flows with canonical `input_id`s, stable idempotency keys, and conflict-safe retry handling.
+- **Session Lifecycle Management:** Added `manage_session` with retention policy visibility, on-demand config inspection, fork/rebind support, and an optional SQLite-backed durable session store.
+- **Artifact Access + Delivery:** Added `read_artifact`, hardened local artifact server routing, and stabilized same-run remote artifact identities on retry.
+- **Certification + Contract Alignment:** `infer_configs`, `validation`, and `final_audit` now align inferred rules to transformed session state instead of failing on obvious runtime drift.
+- **Operator Hardening:** Improved trust boundaries around artifact serving, SQLite state paths, input registry/session behavior, and stdio troubleshooting guidance.
 
 **v0.4.4 — Full Dashboard Rollout**
 - **Complete Dashboard Surface:** All ten pipeline modules now produce standalone exportable HTML dashboards — cockpit, diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, and data dictionary.

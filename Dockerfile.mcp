@@ -27,7 +27,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV ANALYST_MCP_HOST=0.0.0.0
 
-EXPOSE 8001
+EXPOSE 8001 8765
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=5 \

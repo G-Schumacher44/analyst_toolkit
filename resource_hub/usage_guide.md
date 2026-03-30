@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -51,7 +51,7 @@ pip install "analyst_toolkit[notebook] @ git+https://github.com/G-Schumacher44/a
 pip install git+https://github.com/G-Schumacher44/analyst_toolkit.git
 ```
 
-This installs the latest version from main. To target a specific branch or tag, append `@branchname` or `@v0.4.4` to the URL.
+This installs the latest version from main. To target a specific branch or tag, append `@branchname` or `@v0.5.0` to the URL.
 
 ---
 
