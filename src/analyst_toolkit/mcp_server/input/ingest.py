@@ -58,6 +58,10 @@ def _reuse_live_bound_session_id(
     if existing_descriptor is None or existing_descriptor.session_id is None:
         return None
 
+    bound_input_id = get_session_input_id(existing_descriptor.session_id)
+    if bound_input_id != input_id:
+        return None
+
     if StateStore.get_metadata(existing_descriptor.session_id) is None:
         return None
 

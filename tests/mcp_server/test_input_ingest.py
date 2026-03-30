@@ -224,6 +224,61 @@ def test_inputs_register_reuses_session_for_anonymous_idempotent_retry(client, c
     assert response_one.json()["session_id"] == response_two.json()["session_id"]
 
 
+def test_inputs_register_allocates_new_session_when_old_binding_was_reused_for_other_input(
+    client, clean_input_env
+):
+    tmp_path = clean_input_env
+
+    source_one = tmp_path / "dirty_penguins.csv"
+    source_two = tmp_path / "different_penguins.csv"
+    _write_sample_csv(source_one)
+    pd.DataFrame(
+        {
+            "species": ["Chinstrap"],
+            "bill_length_mm": [50.0],
+        }
+    ).to_csv(source_two, index=False)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+    assert response_one.status_code == 200
+    original_session_id = response_one.json()["session_id"]
+
+    competing_response = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_two),
+            "load_into_session": True,
+            "session_id": original_session_id,
+            "run_id": "other_register_run",
+        },
+    )
+    assert competing_response.status_code == 200
+    assert competing_response.json()["session_id"] == original_session_id
+
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+    assert response_two.json()["session_id"] != original_session_id
+    assert StateStore.get_metadata(response_two.json()["session_id"]) is not None
+
+
 def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(
     client, clean_input_env
 ):

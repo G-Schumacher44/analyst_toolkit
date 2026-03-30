@@ -256,8 +256,6 @@ def save_output(df: pd.DataFrame, path: str) -> str:
 
                 client = storage.Client()
                 bucket = client.bucket(bucket_name)
-                if _blob_exists(bucket, blob_path):
-                    return _gcs_uri(bucket_name, blob_path)
                 blob = bucket.blob(blob_path)
                 try:
                     blob.upload_from_filename(tmp_path, content_type=content_type)
@@ -338,8 +336,6 @@ def upload_artifact(
         blob.upload_from_filename(str(p), content_type=content_type)
         return _gcs_url(bucket_name, path)
 
-    if _blob_exists(bucket, blob_path):
-        return _gcs_url(bucket_name, blob_path)
     try:
         return _upload(blob_path)
     except Exception as first_exc:

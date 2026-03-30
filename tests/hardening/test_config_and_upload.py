@@ -173,12 +173,15 @@ def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
     _install_fake_google_storage(monkeypatch, calls)
 
     path = "gs://example-bucket/runs/shared_run/imputation_output.csv"
-    save_output(sample_df, path)
-    save_output(sample_df, path)
+    out_one = save_output(sample_df, path)
+    out_two = save_output(sample_df, path)
 
+    assert out_one == path
+    assert out_two == path
     uploads = [c for c in calls if c[0] == "upload"]
-    assert len(uploads) == 1
+    assert len(uploads) == 2
     assert uploads[0][1] == "runs/shared_run/imputation_output.csv"
+    assert uploads[1][1] == "runs/shared_run/imputation_output.csv"
 
 
 def test_save_output_gcs_falls_back_to_versioned_key_on_primary_failure(sample_df, monkeypatch):
@@ -358,4 +361,5 @@ def test_upload_artifact_reuses_existing_remote_object_for_same_path(monkeypatch
     )
 
     assert out_one == out_two
-    assert len(upload_calls) == 1
+    assert len(upload_calls) == 2
+    assert upload_calls[0] == upload_calls[1]
