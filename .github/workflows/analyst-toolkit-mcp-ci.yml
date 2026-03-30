@@ -283,16 +283,26 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download wheel artifact
         uses: actions/download-artifact@v4
         with:
           name: python-dist
           path: dist
 
+      - name: Build config template bundle
+        run: |
+          cd config
+          zip -r ../dist/config.zip .
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.whl
+          files: |
+            dist/*.whl
+            dist/config.zip
           generate_release_notes: true
           draft: false
           prerelease: false
