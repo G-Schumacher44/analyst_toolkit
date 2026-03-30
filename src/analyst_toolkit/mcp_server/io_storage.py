@@ -39,23 +39,14 @@ def _gcs_uri(bucket_name: str, blob_path: str) -> str:
 def _blob_exists(bucket: object, blob_path: str) -> bool:
     get_blob = getattr(bucket, "get_blob", None)
     if callable(get_blob):
-        try:
-            return get_blob(blob_path) is not None
-        except Exception:
-            return False
+        return get_blob(blob_path) is not None
 
     blob_factory = getattr(bucket, "blob", None)
     if callable(blob_factory):
-        try:
-            blob = blob_factory(blob_path)
-        except Exception:
-            return False
+        blob = blob_factory(blob_path)
         exists = getattr(blob, "exists", None)
         if callable(exists):
-            try:
-                return bool(exists())
-            except Exception:
-                return False
+            return bool(exists())
     return False
 
 

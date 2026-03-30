@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from analyst_toolkit.mcp_server.input.adapters import resolve_source_reference
-from analyst_toolkit.mcp_server.input.errors import InputNotFoundError
+from analyst_toolkit.mcp_server.input.errors import InputConflictError, InputNotFoundError
 from analyst_toolkit.mcp_server.input.loaders import load_dataframe_from_descriptor
 from analyst_toolkit.mcp_server.input.models import (
     INPUT_ID_HEX_LENGTH,
@@ -68,6 +68,16 @@ def _reuse_live_bound_session_id(
     return existing_descriptor.session_id
 
 
+def _ensure_descriptor_compatible(descriptor: InputDescriptor) -> None:
+    """Abort idempotent retries before mutating session state on descriptor mismatch."""
+    existing_descriptor = get_descriptor(descriptor.input_id)
+    if existing_descriptor is None:
+        return
+    if existing_descriptor.same_canonical_input(descriptor):
+        return
+    raise InputConflictError(f"Conflicting descriptor for input_id '{descriptor.input_id}'.")
+
+
 def ingest_uploaded_bytes(
     *,
     filename: str,
@@ -98,6 +108,7 @@ def ingest_uploaded_bytes(
         session_id=session_id,
         run_id=run_id,
     )
+    _ensure_descriptor_compatible(descriptor)
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:
@@ -150,6 +161,7 @@ def register_input_source(
         session_id=session_id,
         run_id=run_id,
     )
+    _ensure_descriptor_compatible(descriptor)
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:

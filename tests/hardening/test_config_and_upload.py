@@ -1,6 +1,8 @@
 import sys
 import types
 
+import pytest
+
 from analyst_toolkit.mcp_server.io import (
     check_upload,
     coerce_config,
@@ -9,7 +11,7 @@ from analyst_toolkit.mcp_server.io import (
     save_output,
     upload_artifact,
 )
-from analyst_toolkit.mcp_server.io_storage import should_export_html
+from analyst_toolkit.mcp_server.io_storage import _blob_exists, should_export_html
 from analyst_toolkit.mcp_server.state import StateStore
 
 
@@ -106,7 +108,7 @@ def test_should_export_html_honors_nested_module_config(monkeypatch):
     assert should_export_html({"normalization": {"settings": {"export_html": ["true"]}}}) is False
 
 
-def _install_fake_google_storage(monkeypatch, calls: list):
+def _install_fake_google_storage(monkeypatch, calls: list, *, fail_on_existing: bool = False):
     existing_blobs: set[str] = set()
 
     class FakeBlob:
@@ -115,6 +117,8 @@ def _install_fake_google_storage(monkeypatch, calls: list):
 
         def upload_from_filename(self, filename: str, content_type: str | None = None):
             calls.append(("upload", self.name, content_type, filename))
+            if fail_on_existing and self.name in existing_blobs:
+                raise FileExistsError(f"blob already exists: {self.name}")
             existing_blobs.add(self.name)
 
         def exists(self):
@@ -170,7 +174,7 @@ def test_save_output_gcs_uses_storage_upload(sample_df, monkeypatch):
 
 def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
     calls: list = []
-    _install_fake_google_storage(monkeypatch, calls)
+    _install_fake_google_storage(monkeypatch, calls, fail_on_existing=True)
 
     path = "gs://example-bucket/runs/shared_run/imputation_output.csv"
     out_one = save_output(sample_df, path)
@@ -182,6 +186,7 @@ def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
     assert len(uploads) == 2
     assert uploads[0][1] == "runs/shared_run/imputation_output.csv"
     assert uploads[1][1] == "runs/shared_run/imputation_output.csv"
+    assert not any(call[1].startswith("runs/shared_run/imputation_output_") for call in uploads)
 
 
 def test_save_output_gcs_falls_back_to_versioned_key_on_primary_failure(sample_df, monkeypatch):
@@ -316,6 +321,8 @@ def test_upload_artifact_reuses_existing_remote_object_for_same_path(monkeypatch
 
         def upload_from_filename(self, filename: str, content_type: str | None = None):
             upload_calls.append(self.name)
+            if self.name in existing_blobs:
+                raise FileExistsError(f"blob already exists: {self.name}")
             existing_blobs.add(self.name)
 
         def exists(self):
@@ -363,3 +370,12 @@ def test_upload_artifact_reuses_existing_remote_object_for_same_path(monkeypatch
     assert out_one == out_two
     assert len(upload_calls) == 2
     assert upload_calls[0] == upload_calls[1]
+
+
+def test_blob_exists_propagates_lookup_errors():
+    class BrokenBucket:
+        def get_blob(self, _blob_name: str):
+            raise PermissionError("denied")
+
+    with pytest.raises(PermissionError):
+        _blob_exists(BrokenBucket(), "reports/run/report.html")

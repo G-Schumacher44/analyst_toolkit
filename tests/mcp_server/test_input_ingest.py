@@ -130,6 +130,50 @@ def test_inputs_upload_reuses_session_for_anonymous_idempotent_retry(client, cle
     assert response_one.json()["session_id"] == response_two.json()["session_id"]
 
 
+def test_inputs_upload_conflict_does_not_mutate_original_session_or_descriptor(
+    client, clean_input_env
+):
+    response_one = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-conflict",
+            "run_id": "retry_upload_conflict_run",
+        },
+    )
+    assert response_one.status_code == 200
+    payload_one = response_one.json()
+    input_id = payload_one["input"]["input_id"]
+    session_id = payload_one["session_id"]
+
+    response_two = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nGentoo,46.5\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-conflict",
+            "run_id": "retry_upload_conflict_run",
+        },
+    )
+
+    assert response_two.status_code == 409
+    detail = response_two.json()["detail"]
+    assert detail["code"] == "INPUT_CONFLICT"
+    assert input_registry.get_session_input_id(session_id) == input_id
+    descriptor = input_registry.get_descriptor(input_id)
+    assert descriptor is not None
+    assert descriptor.sha256 == payload_one["input"]["sha256"]
+    assert descriptor.session_id == session_id
+    session_df = StateStore.get(session_id)
+    assert session_df is not None
+    assert session_df.iloc[0]["species"] == "Adelie"
+
+
 def test_inputs_register_server_path_loads_into_session(client, clean_input_env):
     tmp_path = clean_input_env
 
@@ -390,6 +434,58 @@ def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(client, 
     detail = second.json()["detail"]
     assert detail["code"] == "INPUT_CONFLICT"
     assert isinstance(detail["trace_id"], str)
+
+
+def test_inputs_register_conflict_does_not_mutate_original_session_or_descriptor(
+    client, clean_input_env
+):
+    tmp_path = clean_input_env
+
+    source_one = tmp_path / "dirty_penguins.csv"
+    source_two = tmp_path / "clean_penguins.csv"
+    _write_sample_csv(source_one)
+    pd.DataFrame(
+        {
+            "species": ["Chinstrap"],
+            "bill_length_mm": [50.0],
+        }
+    ).to_csv(source_two, index=False)
+
+    first = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": True,
+            "idempotency_key": "shared-session-key",
+            "run_id": "register_conflict_run",
+        },
+    )
+    assert first.status_code == 200
+    first_payload = first.json()
+    input_id = first_payload["input"]["input_id"]
+    session_id = first_payload["session_id"]
+
+    second = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_two),
+            "load_into_session": True,
+            "idempotency_key": "shared-session-key",
+            "run_id": "register_conflict_run",
+        },
+    )
+
+    assert second.status_code == 409
+    detail = second.json()["detail"]
+    assert detail["code"] == "INPUT_CONFLICT"
+    assert input_registry.get_session_input_id(session_id) == input_id
+    descriptor = input_registry.get_descriptor(input_id)
+    assert descriptor is not None
+    assert descriptor.original_reference == str(source_one)
+    assert descriptor.session_id == session_id
+    session_df = StateStore.get(session_id)
+    assert session_df is not None
+    assert session_df.iloc[0]["species"] == "Adelie"
 
 
 def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(client, clean_input_env):
