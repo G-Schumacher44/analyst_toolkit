@@ -25,7 +25,11 @@ For MCP-specific template/resource exposure and remote tool usage, see the [MCP 
 
 ### Downloadable YAML Templates
 
->[Download Templates](config.zip)
+Download the bundled templates from the latest GitHub Release:
+
+>[Download Templates](https://github.com/G-Schumacher44/analyst_toolkit/releases/latest/download/config.zip)
+
+Prefer browsing the live source templates in [`config/`](../config/) when you want the exact in-repo files before a tagged release is cut.
 ___
 
 ## 📚 YAML Setup Guidebook
