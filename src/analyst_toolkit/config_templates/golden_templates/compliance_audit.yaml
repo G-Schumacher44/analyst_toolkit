@@ -1,0 +1,10 @@
+# Golden Config: Compliance Audit
+# Purpose: Focused on PII and regulatory compliance: strict null checks and categorical validation.
+description: "Focused on PII and regulatory compliance: strict null checks and categorical validation."
+validation:
+  rules:
+    schema_validation:
+      rules:
+        disallowed_null_columns: ["ssn_hash", "consent_flag", "user_id"]
+    categorical_checks:
+      consent_flag: {"allowed_values": ["Y", "N", "PENDING"]}

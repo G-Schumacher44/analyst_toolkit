@@ -3,12 +3,37 @@ import base64
 import pandas as pd
 import pytest
 
+import analyst_toolkit.mcp_server.io as io_module
 import analyst_toolkit.mcp_server.tools.read_artifact as read_artifact_tool
 import analyst_toolkit.mcp_server.tools.session as session_tool
 import analyst_toolkit.mcp_server.tools.upload_input as upload_input_tool
 from analyst_toolkit.mcp_server.state import StateStore
 
 # ── manage_session tool tests ──
+
+
+def _configure_sqlite_state_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    state_home = tmp_path / "state_home"
+    db_path = state_home / "analyst_toolkit" / "session_store.db"
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(db_path))
+
+
+def test_history_lock_for_does_not_evict_in_use_lock(tmp_path, monkeypatch):
+    monkeypatch.setattr(io_module, "_MAX_HISTORY_LOCKS", 1)
+    monkeypatch.setattr(io_module, "_HISTORY_LOCKS", io_module.OrderedDict())
+
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+
+    with io_module._history_lock(first):
+        first_lock = io_module._history_lock_for(first)
+        second_lock = io_module._history_lock_for(second)
+        same_first_lock = io_module._history_lock_for(first)
+
+        assert second_lock is not first_lock
+        assert same_first_lock is first_lock
 
 
 @pytest.mark.asyncio
@@ -32,8 +57,7 @@ async def test_manage_session_list():
 
 @pytest.mark.asyncio
 async def test_manage_session_list_reports_sqlite_policy(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
     StateStore.clear()
     df = pd.DataFrame({"a": [1, 2]})
     StateStore.save(df, run_id="sqlite_run")
@@ -86,8 +110,7 @@ async def test_manage_session_inspect_can_include_configs():
 
 @pytest.mark.asyncio
 async def test_manage_session_inspect_reports_sqlite_expiry(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
     StateStore.clear()
     sid = StateStore.save(pd.DataFrame({"x": [1, 2, 3]}), run_id="inspect_run")
 
@@ -178,6 +201,35 @@ async def test_manage_session_fork_missing_source():
     )
     assert result["status"] == "error"
     assert result["error_code"] == "SESSION_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_manage_session_clear_all_requires_confirmation():
+    StateStore.clear()
+    StateStore.save(pd.DataFrame({"a": [1]}), run_id="run_1")
+
+    result = await session_tool._toolkit_manage_session(action="clear")
+
+    assert result["status"] == "error"
+    assert result["error_code"] == "CLEAR_ALL_CONFIRMATION_REQUIRED"
+    assert len(StateStore.list_sessions()) == 1
+    StateStore.clear()
+
+
+@pytest.mark.asyncio
+async def test_manage_session_clear_all_with_confirmation():
+    StateStore.clear()
+    StateStore.save(pd.DataFrame({"a": [1]}), run_id="run_1")
+    StateStore.save(pd.DataFrame({"a": [2]}), run_id="run_2")
+
+    result = await session_tool._toolkit_manage_session(
+        action="clear",
+        confirm_clear_all=True,
+    )
+
+    assert result["status"] == "pass"
+    assert result["cleared_count"] == 2
+    assert StateStore.list_sessions() == {}
 
 
 @pytest.mark.asyncio
@@ -352,3 +404,22 @@ async def test_read_artifact_stdio_mode_allows_cwd_path(tmp_path, monkeypatch):
     )
     assert result["status"] == "pass"
     assert result["encoding"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_omits_large_text_payload(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "exports" / "reports" / "validation"
+    artifact_dir.mkdir(parents=True)
+    artifact = artifact_dir / "run1_validation_report.html"
+    artifact.write_text("x" * 256, encoding="utf-8")
+    monkeypatch.setattr(read_artifact_tool, "_ARTIFACT_ROOT", tmp_path / "exports")
+    monkeypatch.setattr(read_artifact_tool, "_MAX_INLINE_TEXT_BYTES", 128)
+
+    result = await read_artifact_tool._toolkit_read_artifact(
+        artifact_path=str(artifact),
+    )
+    assert result["status"] == "pass"
+    assert result["encoding"] == "text"
+    assert "artifact_content" not in result
+    assert result["artifact_reference"] == str(artifact)
+    assert "Use the local artifact server" in result["message"]

@@ -57,3 +57,21 @@ def test_markdown_helpers_fall_back_without_ipython(monkeypatch, capsys):
     assert "### Warnings" in out
     assert "- first" in out
     assert "- second" in out
+
+
+def test_display_markdown_summary_falls_back_when_to_markdown_import_errors(monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "IPython", None)
+    monkeypatch.setitem(sys.modules, "IPython.display", None)
+    module = _import_rendering_utils()
+
+    def raise_import_error(*args, **kwargs):
+        raise ImportError("tabulate missing")
+
+    monkeypatch.setattr(pd.DataFrame, "to_markdown", raise_import_error)
+
+    module.display_markdown_summary("Summary", pd.DataFrame({"col": [1, 2]}), max_rows=1)
+
+    out = capsys.readouterr().out
+    assert "### Summary" in out
+    assert "col" in out
+    assert "1" in out

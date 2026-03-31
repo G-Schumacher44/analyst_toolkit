@@ -216,3 +216,14 @@ def test_apply_final_edits_handles_dtype_coercion_failures():
     assert out["flag"].dtype == "int64"
     assert out["score"].tolist() == ["bad", "2"]
     assert set(changelog["Action"]) == {"coerce_dtypes", "coerce_dtypes_failed"}
+
+
+def test_apply_final_edits_logs_dtype_coercion_failures(caplog):
+    from analyst_toolkit.m10_final_audit.final_audit_producer import _apply_final_edits
+
+    df = pd.DataFrame({"score": ["bad"]})
+
+    with caplog.at_level("WARNING"):
+        _apply_final_edits(df, {"coerce_dtypes": {"score": "float64"}})
+
+    assert "Final audit dtype coercion failed" in caplog.text

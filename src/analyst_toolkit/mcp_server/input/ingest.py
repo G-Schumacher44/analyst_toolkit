@@ -78,6 +78,18 @@ def _ensure_descriptor_compatible(descriptor: InputDescriptor) -> None:
     raise InputConflictError(f"Conflicting descriptor for input_id '{descriptor.input_id}'.")
 
 
+def _ensure_session_binding_compatible(*, session_id: str | None, input_id: str) -> None:
+    """Abort before session mutation if an explicit session is already bound elsewhere."""
+    if session_id is None:
+        return
+    bound_input_id = get_session_input_id(session_id)
+    if bound_input_id is None or bound_input_id == input_id:
+        return
+    raise InputConflictError(
+        f"Session '{session_id}' is already bound to input_id '{bound_input_id}'."
+    )
+
+
 def ingest_uploaded_bytes(
     *,
     filename: str,
@@ -109,6 +121,7 @@ def ingest_uploaded_bytes(
         run_id=run_id,
     )
     _ensure_descriptor_compatible(descriptor)
+    _ensure_session_binding_compatible(session_id=session_id, input_id=input_id)
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:
@@ -162,6 +175,7 @@ def register_input_source(
         run_id=run_id,
     )
     _ensure_descriptor_compatible(descriptor)
+    _ensure_session_binding_compatible(session_id=session_id, input_id=input_id)
     df: pd.DataFrame | None = None
     effective_session_id = session_id
     if load_into_session:

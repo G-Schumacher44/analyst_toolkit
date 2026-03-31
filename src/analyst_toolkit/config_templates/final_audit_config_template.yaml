@@ -1,0 +1,77 @@
+final_audit:
+  run: true
+
+  input_df_path: "data/processed/example_cleaned.joblib"
+  raw_data_path: "data/raw/example.csv"
+
+  final_edits:
+    run: true
+    drop_columns:
+      - 'body_mass_g_zscore_outlier'
+      - 'bill_length_mm_iqr_outlier'
+    rename_columns: {}
+    coerce_dtypes: {}
+
+  certification:
+    run: true
+    schema_validation:
+      run: true
+      fail_on_error: true
+      rules:
+        expected_columns:
+          - "tag_id"
+          - "species"
+          - "bill_length_mm"
+          - "bill_depth_mm"
+          - "flipper_length_mm"
+          - "body_mass_g"
+          - "age_group"
+          - "sex"
+          - "colony_id"
+          - "island"
+          - "capture_date"
+          - "health_status"
+          - "study_name"
+          - "clutch_completion"
+          - "date_egg"
+
+        expected_types:
+          tag_id: "object"
+          species: "object"
+          bill_length_mm: "float64"
+          bill_depth_mm: "float64"
+          flipper_length_mm: "float64"
+          body_mass_g: "float64"
+          age_group: "object"
+          sex: "object"
+          colony_id: "object"
+          island: "object"
+          capture_date: "datetime64[ns]"
+          health_status: "object"
+          study_name: "object"
+          clutch_completion: "object"
+          date_egg: "datetime64[ns]"
+
+        categorical_values:
+          species: ["Adelie", "Chinstrap", "Gentoo", "UNKNOWN"]
+          island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut", "UNKNOWN"]
+          sex: ["MALE", "FEMALE", "UNKNOWN"]
+          clutch_completion: ["yes", "no", "UNKNOWN"]
+          age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
+          health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
+
+        disallowed_null_columns:
+          - 'tag_id'
+          - 'species'
+          - 'island'
+          - 'sex'
+          - 'body_mass_g'
+
+  settings:
+    export_html: true
+    paths:
+      report_excel: "exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
+      report_joblib: "exports/reports/final_audit/{run_id}_final_audit_report.joblib"
+      report_html: "exports/reports/final_audit/{run_id}_final_audit_report.html"
+      checkpoint_csv: "exports/data/final_audit/{run_id}_certified.csv"
+      checkpoint_joblib: "exports/joblib/{run_id}/{run_id}_certified.joblib"

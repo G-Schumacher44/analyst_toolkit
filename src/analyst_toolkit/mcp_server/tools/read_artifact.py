@@ -1,4 +1,4 @@
-"""MCP tool: read_artifact — read container-local artifact content through MCP."""
+"""MCP tool: read_artifact — read small container-local artifacts through MCP."""
 
 import base64
 import logging
@@ -22,6 +22,9 @@ def _is_stdio_mode() -> bool:
 
 
 _MAX_ARTIFACT_BYTES = int(os.environ.get("ANALYST_MCP_MAX_ARTIFACT_READ_BYTES", 10 * 1024 * 1024))
+_MAX_INLINE_TEXT_BYTES = int(
+    os.environ.get("ANALYST_MCP_MAX_INLINE_TEXT_ARTIFACT_BYTES", 100 * 1024)
+)
 
 _ARTIFACT_ROOT = Path(os.environ.get("ANALYST_MCP_ARTIFACT_SERVER_ROOT", "exports")).resolve(
     strict=False
@@ -95,12 +98,13 @@ async def _toolkit_read_artifact(
 ) -> dict:
     """Read a container-local artifact and return its content through MCP.
 
-    This bridges the container isolation gap: when the artifact server at
-    127.0.0.1:8765 is not reachable from the client, agents can use this
-    tool to retrieve artifact content directly through the MCP protocol.
+    This bridges the container isolation gap: when the local artifact server
+    is not reachable from the client, agents can use this tool to retrieve
+    artifact content directly through the MCP protocol.
 
-    Text artifacts (HTML, CSV, JSON, etc.) are returned as plain text.
-    Binary artifacts are returned as base64-encoded strings.
+    Small text artifacts (HTML, CSV, JSON, etc.) are returned inline as plain text.
+    Binary artifacts are returned as base64-encoded strings. Large text artifacts
+    return a compact reference instead of in-band content.
     """
     trace_id = new_trace_id()
 
@@ -140,6 +144,23 @@ async def _toolkit_read_artifact(
 
     try:
         if is_text:
+            if file_size > _MAX_INLINE_TEXT_BYTES:
+                return {
+                    "status": "pass",
+                    "module": "read_artifact",
+                    "artifact_path": str(resolved),
+                    "filename": resolved.name,
+                    "media_type": media_type,
+                    "encoding": "text",
+                    "size_bytes": file_size,
+                    "artifact_reference": str(resolved),
+                    "message": (
+                        "Artifact content omitted from the MCP response because the text file "
+                        f"is {file_size} bytes. Use the local artifact server or read the file "
+                        "directly for large dashboards and logs."
+                    ),
+                    "trace_id": trace_id,
+                }
             content = resolved.read_text(encoding="utf-8")
             return {
                 "status": "pass",
@@ -182,9 +203,12 @@ register_tool(
     fn=_toolkit_read_artifact,
     description=(
         "Read a container-local artifact file and return its content through MCP. "
-        "Use this when localhost artifact URLs are not reachable from the client. "
-        "Text files (HTML, CSV, JSON) are returned as plain text; binary files "
-        "as base64. Pass the artifact_path returned by module tools."
+        "Use this for small config, log, or report files when the local artifact server "
+        "is not reachable from the client. Small text files (HTML, CSV, JSON) are returned "
+        "inline as plain text; binary files are returned as base64. Large dashboards and "
+        "logs return a compact artifact reference instead. Prefer the artifact server for "
+        "large HTML dashboards or other bulky artifacts. Pass the artifact_path returned by "
+        "module tools."
     ),
     input_schema={
         "type": "object",

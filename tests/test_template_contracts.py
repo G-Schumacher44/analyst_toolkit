@@ -24,6 +24,11 @@ from analyst_toolkit.mcp_server.tools.preflight_config import (
     _unknown_effective_keys,
 )
 
+_RUNNER_COERCE_KEYS = {
+    # Historical runner/public key for the outliers module uses outlier_detection.
+    "outliers": "outlier_detection",
+}
+
 
 def test_template_resource_uris_cover_template_files():
     resources = list_template_resources()
@@ -47,6 +52,12 @@ def test_template_resource_uris_cover_template_files():
     assert "analyst://templates/config/run_toolkit_config.yaml" not in uris
     assert "analyst://templates/config/handling_config_template.yaml" not in uris
     assert "analyst://templates/config/certification_config_template.yaml" not in uris
+
+
+def test_template_specs_resolve_to_bundled_package_resources():
+    for spec in list_config_template_specs():
+        assert spec.path.is_file(), spec.filename
+        assert "config_templates" in str(spec.path), spec.filename
 
 
 def test_all_template_resources_parse_as_yaml_mapping():
@@ -86,7 +97,7 @@ def test_public_module_templates_match_current_config_contracts():
         assert isinstance(raw.get(spec.config_root), dict), spec.filename
 
         module_name = spec.tool
-        coerce_key = "outlier_detection" if module_name == "outliers" else module_name
+        coerce_key = _RUNNER_COERCE_KEYS.get(module_name, module_name)
         coerced = coerce_config(raw, coerce_key)
         normalized = normalize_module_config(module_name, coerced)
 
@@ -106,6 +117,8 @@ def test_workflow_request_templates_match_public_tool_input_contracts():
             (Path(__file__).resolve().parent.parent / "config" / filename).read_text()
         )
         assert isinstance(raw, dict), filename
-        assert all(key in schema["properties"] for key in raw), filename
+        assert "properties" in schema, filename
+        assert isinstance(schema.get("properties"), dict), filename
+        assert all(key in schema.get("properties", {}) for key in raw), filename
         assert "runtime" in raw, filename
         assert not any(key in raw for key in ("auto_heal", "data_dictionary")), filename

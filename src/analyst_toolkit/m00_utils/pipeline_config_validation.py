@@ -30,12 +30,51 @@ class PipelineRunnerConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    # Historical runner behavior allows omitted run_id, but "default_run" is not
-    # appropriate for deterministic reruns because artifact/output names will collide.
-    run_id: str = "default_run"
+    run_id: str
     notebook: bool = False
     pipeline_entry_path: str
     modules: dict[str, PipelineModuleSelection] = Field(default_factory=dict)
+
+
+class OutlierHandlingExportConfig(BaseModel):
+    run: bool = False
+    export_path: str | None = None
+    as_csv: bool = False
+    export_html: bool = False
+    export_html_path: str | None = None
+
+
+class OutlierHandlingCheckpointConfig(BaseModel):
+    run: bool = False
+    checkpoint_path: str | None = None
+
+
+class OutlierHandlingSettingsConfig(BaseModel):
+    show_inline: bool = True
+    export: OutlierHandlingExportConfig = Field(default_factory=OutlierHandlingExportConfig)
+    checkpoint: OutlierHandlingCheckpointConfig = Field(
+        default_factory=OutlierHandlingCheckpointConfig
+    )
+
+
+class OutlierHandlingConfig(BaseModel):
+    run: bool = False
+    input_df_path: str | None = None
+    detection_results_path: str | None = None
+    handling_specs: dict[str, Any] = Field(default_factory=dict)
+    settings: OutlierHandlingSettingsConfig = Field(default_factory=OutlierHandlingSettingsConfig)
+
+
+class RunnerValidationSchemaConfig(BaseModel):
+    run: bool = True
+    fail_on_error: bool = False
+    rules: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunnerValidationConfig(BaseModel):
+    schema_validation: RunnerValidationSchemaConfig = Field(
+        default_factory=RunnerValidationSchemaConfig
+    )
 
 
 _RUNNER_MODULE_SPECS: dict[str, dict[str, str]] = {
@@ -51,8 +90,17 @@ _RUNNER_MODULE_SPECS: dict[str, dict[str, str]] = {
         "root_key": "outlier_detection",
         "coerce_key": "outlier_detection",
     },
+    "outlier_handling": {
+        "module_name": "outlier_handling",
+        "root_key": "outlier_handling",
+    },
     "imputation": {"module_name": "imputation", "root_key": "imputation"},
     "final_audit": {"module_name": "final_audit", "root_key": "final_audit"},
+}
+
+_RUNNER_ONLY_MODELS: dict[str, type[BaseModel]] = {
+    "validation": RunnerValidationConfig,
+    "outlier_handling": OutlierHandlingConfig,
 }
 
 
@@ -87,7 +135,7 @@ def validate_runner_module_config(
     coerce_key = spec.get("coerce_key", module_name)
     coerced = coerce_config(config, coerce_key)
     normalized = normalize_module_config(module_name, coerced)
-    model = CONFIG_MODELS.get(module_name)
+    model = _RUNNER_ONLY_MODELS.get(module_name) or CONFIG_MODELS.get(module_name)
     if model is None:
         raise PipelineConfigValidationError(
             f"No shared config model is registered for runner module '{runner_module_name}' "
@@ -95,14 +143,18 @@ def validate_runner_module_config(
         )
 
     try:
-        model.model_validate(normalized)
+        validated = model.model_validate(normalized)
     except ValidationError as exc:
         raise PipelineConfigValidationError(
             f"Invalid config for runner module '{runner_module_name}': {exc}"
         ) from exc
 
-    effective = normalized
-    canonical = deepcopy(normalized)
+    validated_dump = validated.model_dump()
+    if root_key in validated_dump and isinstance(validated_dump[root_key], dict):
+        effective = validated_dump[root_key]
+    else:
+        effective = validated_dump
+    canonical = deepcopy(effective)
 
     return {
         "runner_module": runner_module_name,

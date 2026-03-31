@@ -4,6 +4,7 @@ templates.py — Template discovery for tool calls and MCP resources.
 
 from dataclasses import dataclass
 from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -12,12 +13,9 @@ import yaml
 RESOURCE_SCHEME = "analyst"
 RESOURCE_HOST = "templates"
 
-# Resolve config/ relative to the project root, not CWD.
-# This ensures templates are found regardless of where the process starts
-# (e.g. stdio mode spawned from a different workspace).
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-CONFIG_DIR = _PROJECT_ROOT / "config"
-GOLDEN_TEMPLATE_DIR = CONFIG_DIR / "golden_templates"
+_SOURCE_CONFIG_DIR = _PROJECT_ROOT / "config"
+_BUNDLED_CONFIG_ROOT = resources.files("analyst_toolkit.config_templates")
 GOLDEN_TEMPLATE_FILENAMES: tuple[str, ...] = (
     "compliance_audit.yaml",
     "fraud_detection.yaml",
@@ -35,7 +33,7 @@ class TemplateSpec:
 
     @property
     def path(self) -> Path:
-        return CONFIG_DIR / self.filename
+        return _config_template_path(self.filename)
 
     @property
     def relative_path(self) -> str:
@@ -123,10 +121,28 @@ CONFIG_TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
 
 def _iter_golden_template_files() -> list[Path]:
     return [
-        GOLDEN_TEMPLATE_DIR / filename
+        _golden_template_dir() / filename
         for filename in GOLDEN_TEMPLATE_FILENAMES
-        if (GOLDEN_TEMPLATE_DIR / filename).is_file()
+        if (_golden_template_dir() / filename).is_file()
     ]
+
+
+def _bundled_config_dir() -> Path:
+    candidate = Path(str(_BUNDLED_CONFIG_ROOT))
+    if candidate.exists():
+        return candidate
+    return _SOURCE_CONFIG_DIR
+
+
+def _golden_template_dir() -> Path:
+    return _bundled_config_dir() / "golden_templates"
+
+
+def _config_template_path(filename: str) -> Path:
+    bundled = _bundled_config_dir() / filename
+    if bundled.is_file():
+        return bundled
+    return _SOURCE_CONFIG_DIR / filename
 
 
 @lru_cache(maxsize=1)
@@ -200,12 +216,12 @@ def resolve_template_uri(uri: str) -> Path:
     if group == "golden":
         if filename not in GOLDEN_TEMPLATE_FILENAMES:
             raise FileNotFoundError(f"Golden resource is not in the exposed allowlist: {uri}")
-        base = GOLDEN_TEMPLATE_DIR
+        base = _golden_template_dir()
     elif group == "config":
         allowed = {spec.filename for spec in list_config_template_specs()}
         if filename not in allowed:
             raise FileNotFoundError(f"Config resource is not in the exposed allowlist: {uri}")
-        base = CONFIG_DIR
+        base = _bundled_config_dir()
     else:
         raise FileNotFoundError(f"Unknown template group in URI: {uri}")
 

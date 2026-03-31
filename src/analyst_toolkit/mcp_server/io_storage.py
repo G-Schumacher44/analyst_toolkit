@@ -5,7 +5,6 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Callable
-from uuid import uuid4
 
 import pandas as pd
 
@@ -250,16 +249,10 @@ def save_output(df: pd.DataFrame, path: str) -> str:
                 blob = bucket.blob(blob_path)
                 try:
                     blob.upload_from_filename(tmp_path, content_type=content_type)
-                except Exception as first_exc:
+                except Exception:
                     if _blob_exists(bucket, blob_path):
                         return _gcs_uri(bucket_name, blob_path)
-                    alt_blob_path = _versioned_blob_path(blob_path)
-                    alt_blob = bucket.blob(alt_blob_path)
-                    try:
-                        alt_blob.upload_from_filename(tmp_path, content_type=content_type)
-                    except Exception:
-                        raise first_exc
-                    return f"gs://{bucket_name}/{alt_blob_path}"
+                    raise
             except ImportError:
                 # Backward-compatible fallback for environments using gcsfs-style paths.
                 if suffix == ".parquet":
@@ -332,20 +325,5 @@ def upload_artifact(
     except Exception as first_exc:
         if _blob_exists(bucket, blob_path):
             return _gcs_url(bucket_name, blob_path)
-        # Fallback for idempotent reruns where same-key overwrite/delete permissions vary.
-        alt_name = f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"
-        alt_path = f"{prefix}/{path_root}/{module}/{alt_name}"
-        try:
-            return _upload(alt_path)
-        except Exception:
-            logger.warning(
-                "Artifact upload failed for primary and fallback paths: %s ; %s",
-                first_exc,
-                alt_path,
-            )
-            return ""
-
-
-def _versioned_blob_path(blob_path: str) -> str:
-    p = Path(blob_path)
-    return str(p.with_name(f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"))
+        logger.warning("Artifact upload failed for primary path: %s", first_exc)
+        return ""

@@ -84,7 +84,7 @@ def enforce_tabular_limits(
             f"({row_count} rows > {row_limit})."
         )
 
-    memory_limit = max_input_memory_bytes()
+    memory_limit = _env_int(memory_env_name, max_input_memory_bytes())
     if memory_limit and memory_usage_bytes > memory_limit:
         raise InputPayloadTooLargeError(
             f"Input '{reference}' exceeds {memory_env_name} "

@@ -144,7 +144,8 @@ async def _toolkit_validation(
                     violations_found.append(check_name)
                     violations_detail[check_name] = make_json_safe(check.get("details", {}))
 
-    passed = len(violations_found) == 0
+    has_validation_config = has_actionable_validation_config(base_cfg)
+    passed = has_validation_config and len(violations_found) == 0
 
     artifact_path = ""
     artifact_url = ""
@@ -156,7 +157,7 @@ async def _toolkit_validation(
     status_warnings.extend(lifecycle["warnings"])
     status_warnings.extend(runtime_warnings)
     status_warnings.extend(runtime_meta["runtime_warnings"])
-    if not has_actionable_validation_config(base_cfg):
+    if not has_validation_config:
         advisory_warnings.append(INFER_CONFIG_REQUIRED_WARNING)
     status_warnings.extend(export_delivery["warnings"])
     if should_export_html(config):
@@ -196,7 +197,10 @@ async def _toolkit_validation(
         probe_local_paths=True,
     )
     warnings = status_warnings + advisory_warnings + artifact_contract["artifact_warnings"]
-    base_status = "fail" if violations_found else ("warn" if status_warnings else "pass")
+    if not has_validation_config:
+        base_status = "warn"
+    else:
+        base_status = "fail" if violations_found else ("warn" if status_warnings else "pass")
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]
     )

@@ -189,7 +189,7 @@ def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
     assert not any(call[1].startswith("runs/shared_run/imputation_output_") for call in uploads)
 
 
-def test_save_output_gcs_falls_back_to_versioned_key_on_primary_failure(sample_df, monkeypatch):
+def test_save_output_gcs_raises_on_primary_failure_without_existing_object(sample_df, monkeypatch):
     calls: list[tuple[str, str]] = []
 
     class FakeBlob:
@@ -220,12 +220,10 @@ def test_save_output_gcs_falls_back_to_versioned_key_on_primary_failure(sample_d
     monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_mod)
 
     path = "gs://example-bucket/runs/run_1/imputation_output.csv"
-    out = save_output(sample_df, path)
+    with pytest.raises(PermissionError):
+        save_output(sample_df, path)
 
-    assert out.startswith("gs://example-bucket/runs/run_1/")
-    assert out.endswith(".csv")
-    assert out != path
-    assert len([c for c in calls if c[0] == "upload"]) == 2
+    assert len([c for c in calls if c[0] == "upload"]) == 1
 
 
 def test_load_input_auto_normalizes_bucket_like_path(monkeypatch):
@@ -256,7 +254,9 @@ def test_resolve_run_context_dedupes_mismatch_warning(sample_df, monkeypatch):
     assert lifecycle_b["warnings"] == []
 
 
-def test_upload_artifact_falls_back_to_versioned_key_on_primary_failure(monkeypatch, tmp_path):
+def test_upload_artifact_returns_empty_on_primary_failure_without_existing_object(
+    monkeypatch, tmp_path
+):
     local = tmp_path / "report.html"
     local.write_text("<html>ok</html>", encoding="utf-8")
 
@@ -301,11 +301,9 @@ def test_upload_artifact_falls_back_to_versioned_key_on_primary_failure(monkeypa
         session_id="sess_retry",
     )
 
-    assert out.startswith("https://storage.googleapis.com/example-bucket/")
-    assert len(upload_calls) == 2
+    assert out == ""
+    assert len(upload_calls) == 1
     assert upload_calls[0].endswith("/imputation/report.html")
-    assert upload_calls[1].endswith(".html")
-    assert upload_calls[1] != upload_calls[0]
 
 
 def test_upload_artifact_reuses_existing_remote_object_for_same_path(monkeypatch, tmp_path):

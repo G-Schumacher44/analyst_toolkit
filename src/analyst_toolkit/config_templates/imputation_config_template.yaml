@@ -1,0 +1,48 @@
+imputation:
+  run: true
+
+  input_path: "data/processed/example.csv"
+
+  rules:
+    strategies:
+      bill_length_mm: 'mean'
+      body_mass_g: 'mean'
+      bill_depth_mm: 'median'
+      flipper_length_mm: 'median'
+
+      sex: 'mode'
+
+      tag_id:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      species:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      age_group:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      colony_id:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      island:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      study_name:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      capture_date:
+        strategy: 'constant'
+        value: "1900-01-01"
+      date_egg:
+        strategy: 'constant'
+        value: "1900-01-01"
+      clutch_completion:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+      health_status:
+        strategy: 'constant'
+        value: 'UNKNOWN'
+
+  settings:
+    export_html: true
+    export_html_path: "exports/reports/imputation/{run_id}_imputation_report.html"

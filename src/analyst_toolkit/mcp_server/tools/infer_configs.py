@@ -1,6 +1,7 @@
 """MCP tool: toolkit_infer_configs — config generation via analyst_toolkit_deploy."""
 
 import inspect
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -21,12 +22,14 @@ from analyst_toolkit.mcp_server.io import (
     save_session_config,
     save_to_session,
 )
-from analyst_toolkit.mcp_server.response_utils import next_action, with_next_actions
+from analyst_toolkit.mcp_server.response_utils import new_trace_id, next_action, with_next_actions
 from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
     runtime_to_tool_overrides,
 )
 from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
+
+logger = logging.getLogger("analyst_toolkit.mcp_server.infer_configs")
 
 _SUPPORTED_INFER_MODULES = {
     "diagnostics",
@@ -339,7 +342,6 @@ async def _toolkit_infer_configs(
     session_id = session_id or runtime_overrides.get("session_id")
     input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
-    run_id, _lifecycle = resolve_run_context(run_id, session_id)
     options = options or {}
 
     # When input_id is provided with session_id, use input_id as the data source
@@ -362,12 +364,15 @@ async def _toolkit_infer_configs(
     try:
         df = load_input(gcs_path, session_id=load_session, input_id=input_id)
     except Exception as exc:
+        trace_id = new_trace_id()
+        logger.exception("infer_configs input load failed (trace_id=%s)", trace_id, exc_info=exc)
         return {
             "status": "error",
             "module": "infer_configs",
-            "error": f"Failed to load input: {type(exc).__name__}: {exc}",
+            "error": "Failed to load input. See trace_id.",
             "error_code": "INPUT_LOAD_FAILED",
             "config_yaml": "",
+            "trace_id": trace_id,
         }
 
     # Resolve session_id from input descriptor if not provided
@@ -382,6 +387,8 @@ async def _toolkit_infer_configs(
         descriptor = get_input_descriptor(input_id)
 
     session_recreated_warning: str | None = None
+    if descriptor and descriptor.run_id and not run_id:
+        run_id = descriptor.run_id
 
     # If we still don't have a session, start one
     if not session_id:
@@ -404,6 +411,8 @@ async def _toolkit_infer_configs(
                 f"Session {session_id} metadata was not found; the session was recreated "
                 "before saving inferred configs."
             )
+
+    run_id, _lifecycle = resolve_run_context(run_id, session_id)
 
     # Always materialize an input snapshot locally for inference.
     # This avoids path-construction drift between modules and ensures deterministic reads.

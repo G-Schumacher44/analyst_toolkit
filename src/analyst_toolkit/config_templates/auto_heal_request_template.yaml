@@ -1,0 +1,20 @@
+gcs_path: "gs://bucket/path/to/input.csv"
+session_id: null
+input_id: null
+run_id: "auto_heal_run_001"
+async_mode: false
+
+runtime:
+  run:
+    run_id: "auto_heal_run_001"
+    input_path: "gs://bucket/path/to/input.csv"
+  artifacts:
+    export_html: true
+    plotting: false
+  destinations:
+    gcs:
+      enabled: false
+      bucket_uri: "gs://bucket/path/to/reviews"
+      prefix: "auto_heal"
+  execution:
+    upload_artifacts: true

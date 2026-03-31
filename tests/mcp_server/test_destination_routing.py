@@ -2,7 +2,10 @@ import logging
 from pathlib import Path
 
 from analyst_toolkit.mcp_server import destination_routing
-from analyst_toolkit.mcp_server.destination_routing import deliver_artifact
+from analyst_toolkit.mcp_server.destination_routing import (
+    compact_destination_metadata,
+    deliver_artifact,
+)
 
 
 def test_deliver_artifact_mirrors_to_local_root(tmp_path, monkeypatch):
@@ -241,3 +244,17 @@ def test_local_relative_path_strips_exports_for_absolute_path_inside_cwd(
     assert routed == tmp_path / "exports" / "reports" / "data_dictionary" / "run1_report.html"
     assert "requested_root_status" not in delivery["destinations"]["local"]
     assert not any("rejected" in rec.getMessage().lower() for rec in caplog.records)
+
+
+def test_compact_destination_metadata_preserves_requested_root_status():
+    compact = compact_destination_metadata(
+        {
+            "local": {
+                "status": "available",
+                "path": "/tmp/report.html",
+                "requested_root_status": "rejected",
+            }
+        }
+    )
+
+    assert compact["local"]["requested_root_status"] == "rejected"

@@ -109,20 +109,21 @@ class JobStore:
             for job_id in expired:
                 cls._jobs.pop(job_id, None)
 
-        overflow = len(cls._jobs) - cls._max_jobs
+        terminal_jobs = [
+            (job_id, job)
+            for job_id, job in cls._jobs.items()
+            if str(job.get("state")) in {"succeeded", "failed"}
+        ]
+        overflow = len(terminal_jobs) - cls._max_jobs
         if overflow <= 0:
             return
 
         def sort_key(item: tuple[str, dict[str, Any]]) -> tuple[int, float]:
             _, job = item
-            state = str(job.get("state"))
-            terminal_rank = 0 if state in {"succeeded", "failed"} else 1
             timestamp = float(job.get("finished_at") or job.get("updated_at") or 0)
-            return terminal_rank, timestamp
+            return 0, timestamp
 
-        for job_id, _job in sorted(cls._jobs.items(), key=sort_key):
-            if len(cls._jobs) <= cls._max_jobs:
-                break
+        for job_id, _job in sorted(terminal_jobs, key=sort_key)[:overflow]:
             cls._jobs.pop(job_id, None)
 
     @classmethod

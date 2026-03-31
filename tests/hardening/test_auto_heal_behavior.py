@@ -177,7 +177,9 @@ async def test_auto_heal_returns_error_when_step_raises(monkeypatch):
     assert res["status"] == "error"
     assert "normalization" in res["failed_steps"]
     assert "normalization" in res["summary"]
-    assert "normalization boom" in res["summary"]["normalization"]["error"]
+    assert res["summary"]["normalization"]["error_code"] == "NORMALIZATION_FAILED"
+    assert isinstance(res["summary"]["normalization"]["trace_id"], str)
+    assert res["summary"]["normalization"]["trace_id"]
     assert all(action["tool"] != "final_audit" for action in res["next_actions"])
 
 

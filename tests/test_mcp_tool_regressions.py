@@ -739,7 +739,12 @@ async def test_toolkit_validation_warns_without_inferred_or_explicit_config(mock
         config={},
     )
 
+    assert result["status"] == "warn"
+    assert result["passed"] is False
+    assert result["summary"]["passed"] is False
     assert any("Run infer_configs first" in warning for warning in result["warnings"])
+    assert result["next_actions"][0]["tool"] == "infer_configs"
+    assert all(action["tool"] != "final_audit" for action in result["next_actions"])
 
 
 @pytest.mark.asyncio
@@ -1116,6 +1121,77 @@ async def test_final_audit_auto_discovers_inferred_cert_config(mocker, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_final_audit_uses_configured_artifact_paths_and_strips_nested_transient_paths(
+    mocker, monkeypatch, tmp_path
+):
+    df = pd.DataFrame({"value": [1]})
+    run_id = "final_audit_custom_paths"
+    session_id = "sess_final_custom"
+    monkeypatch.chdir(tmp_path)
+
+    html_rel = f"exports/reports/custom/{run_id}_custom.html"
+    xlsx_rel = f"exports/reports/custom/{run_id}_custom.xlsx"
+    delivered_paths: list[str] = []
+    captured_config: dict = {}
+
+    def fake_run_final_audit_pipeline(*, config, df, run_id, notebook):
+        captured_config.update(config)
+        html_path = tmp_path / html_rel
+        xlsx_path = tmp_path / xlsx_rel
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text("<html>final</html>", encoding="utf-8")
+        xlsx_path.write_text("xlsx", encoding="utf-8")
+        return df
+
+    def fake_deliver_artifact(local_path, *args, **kwargs):
+        delivered_paths.append(local_path)
+        return {
+            "reference": local_path,
+            "local_path": local_path,
+            "url": "",
+            "warnings": [],
+            "destinations": {},
+        }
+
+    mocker.patch.object(final_audit_tool, "load_input", return_value=df)
+    mocker.patch.object(
+        final_audit_tool, "run_final_audit_pipeline", side_effect=fake_run_final_audit_pipeline
+    )
+    mocker.patch.object(final_audit_tool, "save_to_session", return_value=session_id)
+    mocker.patch.object(final_audit_tool, "get_session_metadata", return_value={"row_count": 1})
+    mocker.patch.object(final_audit_tool, "save_output", return_value="gs://dummy/final.csv")
+    mocker.patch.object(final_audit_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(final_audit_tool, "deliver_artifact", side_effect=fake_deliver_artifact)
+    mocker.patch.object(
+        final_audit_tool,
+        "run_validation_suite",
+        return_value={"schema_conformity": {"passed": True, "details": {}}},
+    )
+
+    result = await final_audit_tool._toolkit_final_audit(
+        session_id=session_id,
+        run_id=run_id,
+        config={
+            "final_audit": {
+                "raw_data_path": "/tmp/stale.csv",
+                "certification": {"schema_validation": {"rules": {"expected_columns": ["value"]}}},
+                "settings": {
+                    "paths": {
+                        "report_html": html_rel,
+                        "report_excel": xlsx_rel,
+                    }
+                },
+            }
+        },
+    )
+
+    assert result["status"] in {"pass", "warn"}
+    assert html_rel in delivered_paths
+    assert xlsx_rel in delivered_paths
+    assert captured_config["final_audit"]["raw_data_path"] != "/tmp/stale.csv"
+
+
+@pytest.mark.asyncio
 async def test_final_audit_explicit_config_overrides_inferred(mocker, monkeypatch):
     """Explicit config should take precedence over inferred session config."""
     df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
@@ -1366,6 +1442,7 @@ async def test_final_audit_resolves_session_from_input_id(mocker, monkeypatch):
     )
 
     # Should discover cert rules from the input_id's linked session
+    assert result["run_id"] == "fa_input_id_run"
     assert "rule_contract_missing" not in result.get("violations_found", [])
     cert_cfg = result["effective_config"].get("certification", {})
     schema_cfg = cert_cfg.get("schema_validation", {})

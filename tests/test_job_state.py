@@ -99,3 +99,33 @@ def test_job_store_caps_retained_jobs(tmp_path, monkeypatch):
     assert len(jobs) == 3
     assert created[0] not in job_ids
     assert created[1] not in job_ids
+
+
+def test_job_store_does_not_prune_in_flight_jobs(tmp_path, monkeypatch):
+    _reset_job_store(tmp_path, monkeypatch)
+    monkeypatch.setattr(JobStore, "_max_jobs", 1)
+    monkeypatch.setattr(JobStore, "_job_ttl_sec", 0.0)
+
+    first_succeeded = JobStore.create(module="auto_heal", run_id="done_1")
+    JobStore.mark_running(first_succeeded)
+    JobStore.mark_succeeded(first_succeeded, result={"status": "pass"})
+
+    queued = JobStore.create(module="auto_heal", run_id="queued")
+    running = JobStore.create(module="auto_heal", run_id="running")
+    JobStore.mark_running(running)
+    second_succeeded = JobStore.create(module="auto_heal", run_id="done_2")
+    JobStore.mark_running(second_succeeded)
+    JobStore.mark_succeeded(second_succeeded, result={"status": "pass"})
+
+    queued_job = JobStore.get(queued)
+    running_job = JobStore.get(running)
+    first_succeeded_job = JobStore.get(first_succeeded)
+    second_succeeded_job = JobStore.get(second_succeeded)
+
+    assert queued_job is not None
+    assert queued_job["state"] == "queued"
+    assert running_job is not None
+    assert running_job["state"] == "running"
+    assert first_succeeded_job is None
+    assert second_succeeded_job is not None
+    assert second_succeeded_job["state"] == "succeeded"

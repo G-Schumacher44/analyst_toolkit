@@ -1,0 +1,14 @@
+# Golden Config: Quick Migration
+# Purpose: Fast data prep for database migration: heavy on renaming and type coercion.
+description: "Fast data prep for database migration: heavy on renaming and type coercion."
+normalization:
+  rules:
+    standardize_text_columns: ["first_name", "last_name", "city"]
+    coerce_dtypes:
+      user_id: "int64"
+      created_at: "datetime64[ns]"
+      is_active: "bool"
+imputation:
+  rules:
+    strategies:
+      default: "mode"

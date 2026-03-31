@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from analyst_toolkit.mcp_server.input.adapters import detect_source_type
 from analyst_toolkit.mcp_server.input.errors import InputPayloadTooLargeError
 from analyst_toolkit.mcp_server.input.loaders import load_dataframe_from_descriptor
 from analyst_toolkit.mcp_server.input.models import InputDescriptor
@@ -141,3 +142,17 @@ def test_load_dataframe_from_descriptor_rejects_gcs_prefix_over_object_limit(mon
 
     with pytest.raises(InputPayloadTooLargeError, match="ANALYST_MCP_MAX_GCS_PREFIX_OBJECTS"):
         load_dataframe_from_descriptor(descriptor)
+
+
+def test_load_dataframe_from_descriptor_accepts_uppercase_csv_suffix(tmp_path):
+    source = tmp_path / "rows.CSV"
+    pd.DataFrame({"a": [1, 2]}).to_csv(source, index=False)
+
+    result = load_dataframe_from_descriptor(_descriptor_for(source))
+
+    assert list(result["a"]) == [1, 2]
+
+
+def test_detect_source_type_accepts_windows_absolute_paths():
+    assert detect_source_type(r"C:\data\dirty_penguins.csv") == "server_path"
+    assert detect_source_type("D:/datasets/dirty_penguins.csv") == "server_path"

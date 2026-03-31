@@ -3,12 +3,12 @@
 import json
 import logging
 import os
-import pickle
 import sqlite3
 import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -36,9 +36,15 @@ def _session_backend() -> str:
 def _sqlite_state_path() -> Path:
     raw_path = os.environ.get("ANALYST_MCP_SESSION_DB_PATH", "").strip()
     if raw_path:
-        path = Path(raw_path).expanduser().resolve(strict=False)
+        raw_candidate = Path(raw_path).expanduser()
+        if raw_candidate.is_symlink():
+            raise ValueError("SQLite session persistence cannot use a symlinked database path.")
+        path = raw_candidate.resolve(strict=False)
     else:
         path = (_session_state_home() / SESSION_SQLITE_PATH_DEFAULT).resolve(strict=False)
+
+    if not path.is_absolute():
+        raise ValueError("SQLite session persistence requires an absolute path.")
 
     exports_root = (Path.cwd() / "exports").resolve(strict=False)
     path_parents = {path, *path.parents}
@@ -47,6 +53,15 @@ def _sqlite_state_path() -> Path:
             "SQLite session persistence cannot use a path under ./exports; "
             "choose a private state path outside public artifact roots."
         )
+
+    private_root = _session_state_home()
+    try:
+        path.relative_to(private_root)
+    except ValueError as exc:
+        raise ValueError(
+            "SQLite session persistence must use a path under the private session state root."
+        ) from exc
+
     return path
 
 
@@ -73,11 +88,26 @@ class StateStore:
     def _sqlite_connect_unsafe(cls) -> sqlite3.Connection:
         path = _sqlite_state_path()
         path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if path.parent.is_symlink():
+                raise ValueError(
+                    "SQLite session persistence cannot use a symlinked parent directory."
+                )
+            os.chmod(path.parent, 0o700)
+        except OSError as exc:
+            raise ValueError(
+                f"Could not enforce private permissions on SQLite session directory: {path.parent}"
+            ) from exc
         conn = sqlite3.connect(path, timeout=10.0)
         try:
             os.chmod(path, 0o600)
-        except OSError:
-            logger.debug("Could not tighten SQLite session store permissions for %s", path)
+            stat_result = path.stat()
+            if hasattr(os, "getuid") and stat_result.st_uid != os.getuid():
+                raise ValueError("SQLite session store must be owned by the current user.")
+        except OSError as exc:
+            raise ValueError(
+                f"Could not tighten SQLite session store permissions for {path}"
+            ) from exc
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -86,20 +116,29 @@ class StateStore:
                 started_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 last_accessed REAL NOT NULL,
+                dataframe_format TEXT NOT NULL,
                 dataframe_blob BLOB NOT NULL,
                 metadata_json TEXT NOT NULL,
                 configs_json TEXT NOT NULL
             )
             """
         )
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall() if len(row) > 1
+        }
+        if "dataframe_format" not in columns:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN dataframe_format TEXT NOT NULL DEFAULT 'pickle'"
+            )
+            conn.commit()
         return conn
 
     @classmethod
     def _sqlite_fetch_row_unsafe(cls, conn: sqlite3.Connection, session_id: str):
         cursor = conn.execute(
             """
-            SELECT session_id, run_id, started_at, updated_at, last_accessed, dataframe_blob,
-                   metadata_json, configs_json
+            SELECT session_id, run_id, started_at, updated_at, last_accessed, dataframe_format,
+                   dataframe_blob, metadata_json, configs_json
             FROM sessions
             WHERE session_id = ?
             """,
@@ -109,22 +148,31 @@ class StateStore:
 
     @classmethod
     def _sqlite_configs_from_row(cls, row) -> Dict[str, str]:
+        if row is None or not row[8]:
+            return {}
+        loaded = json.loads(row[8])
+        return loaded if isinstance(loaded, dict) else {}
+
+    @classmethod
+    def _sqlite_metadata_from_row(cls, row) -> dict:
         if row is None or not row[7]:
             return {}
         loaded = json.loads(row[7])
         return loaded if isinstance(loaded, dict) else {}
 
     @classmethod
-    def _sqlite_metadata_from_row(cls, row) -> dict:
-        if row is None or not row[6]:
-            return {}
-        loaded = json.loads(row[6])
-        return loaded if isinstance(loaded, dict) else {}
+    def _sqlite_df_from_row(cls, row) -> pd.DataFrame:
+        fmt = row[5]
+        blob = row[6]
+        if fmt != "parquet":
+            raise ValueError(f"Unsupported SQLite session dataframe format: {fmt}")
+        return pd.read_parquet(BytesIO(blob))
 
     @classmethod
-    def _sqlite_df_from_row(cls, row) -> pd.DataFrame:
-        # SQLite session blobs come only from this process's own StateStore writes.
-        return pickle.loads(row[5])
+    def _sqlite_df_blob(cls, df: pd.DataFrame) -> bytes:
+        buf = BytesIO()
+        df.to_parquet(buf, index=False)
+        return buf.getvalue()
 
     @classmethod
     def _sqlite_evict_session_unsafe(cls, conn: sqlite3.Connection, sid: str, reason: str) -> None:
@@ -198,14 +246,15 @@ class StateStore:
                         """
                         INSERT INTO sessions (
                             session_id, run_id, started_at, updated_at, last_accessed,
-                            dataframe_blob, metadata_json, configs_json
+                            dataframe_format, dataframe_blob, metadata_json, configs_json
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(session_id) DO UPDATE SET
                             run_id = excluded.run_id,
                             started_at = excluded.started_at,
                             updated_at = excluded.updated_at,
                             last_accessed = excluded.last_accessed,
+                            dataframe_format = excluded.dataframe_format,
                             dataframe_blob = excluded.dataframe_blob,
                             metadata_json = excluded.metadata_json,
                             configs_json = excluded.configs_json
@@ -216,7 +265,8 @@ class StateStore:
                             started_at,
                             now_iso,
                             time.time(),
-                            sqlite3.Binary(pickle.dumps(df, protocol=pickle.HIGHEST_PROTOCOL)),
+                            "parquet",
+                            sqlite3.Binary(cls._sqlite_df_blob(df)),
                             json.dumps(metadata),
                             json.dumps(configs),
                         ),
@@ -453,9 +503,9 @@ class StateStore:
                         """
                         INSERT INTO sessions (
                             session_id, run_id, started_at, updated_at, last_accessed,
-                            dataframe_blob, metadata_json, configs_json
+                            dataframe_format, dataframe_blob, metadata_json, configs_json
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             new_session_id,
@@ -463,9 +513,8 @@ class StateStore:
                             now_ts.strftime("%Y%m%d_%H%M%S"),
                             now_iso,
                             time.time(),
-                            sqlite3.Binary(
-                                pickle.dumps(df.copy(), protocol=pickle.HIGHEST_PROTOCOL)
-                            ),
+                            "parquet",
+                            sqlite3.Binary(cls._sqlite_df_blob(df.copy())),
                             json.dumps(metadata),
                             json.dumps(configs),
                         ),

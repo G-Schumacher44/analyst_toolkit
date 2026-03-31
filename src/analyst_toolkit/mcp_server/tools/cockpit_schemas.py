@@ -86,8 +86,8 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
         "session_id": {
             "type": "string",
             "description": (
-                "Optional in-memory session identifier to use as the primary input source "
-                "when building from an existing run context."
+                "Identifier for an existing session/run context (may be in-memory or "
+                "persisted by the session backend, e.g., SQLite)."
             ),
         },
         **INPUT_ID_PROP,
@@ -119,7 +119,7 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
             "description": "Reserve a prelaunch dictionary/readiness surface seeded from infer_configs.",
         },
     },
-    "anyOf": [
+    "oneOf": [
         {"required": ["gcs_path"]},
         {"required": ["session_id"]},
         {"required": ["input_id"]},

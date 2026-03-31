@@ -26,6 +26,7 @@ def _descriptor(
     session_id: str | None = None,
     run_id: str | None = None,
     sha256: str | None = None,
+    metadata: dict | None = None,
 ) -> InputDescriptor:
     return InputDescriptor(
         input_id=input_id,
@@ -38,7 +39,7 @@ def _descriptor(
         sha256=sha256,
         session_id=session_id,
         run_id=run_id,
-        metadata={"kind": "test"},
+        metadata=metadata or {"kind": "test"},
     )
 
 
@@ -65,6 +66,27 @@ def test_registry_rejects_conflicting_descriptor_reuse(clean_registry):
     original = input_registry.get_descriptor("input_conflict")
     assert original is not None
     assert original.sha256 == "abc"
+
+
+def test_registry_rejects_conflicting_session_rebind_via_descriptor(clean_registry):
+    input_registry.save_descriptor(_descriptor("input_a", session_id="sess_conflict"))
+
+    with pytest.raises(InputConflictError, match="already bound"):
+        input_registry.save_descriptor(_descriptor("input_b", session_id="sess_conflict"))
+
+    assert input_registry.get_session_input_id("sess_conflict") == "input_a"
+    assert input_registry.get_descriptor("input_b") is None
+
+
+def test_bind_session_input_rejects_conflicting_rebind(clean_registry):
+    input_registry.save_descriptor(_descriptor("input_a"))
+    input_registry.save_descriptor(_descriptor("input_b"))
+    input_registry.bind_session_input("sess_conflict", "input_a")
+
+    with pytest.raises(InputConflictError, match="already bound"):
+        input_registry.bind_session_input("sess_conflict", "input_b")
+
+    assert input_registry.get_session_input_id("sess_conflict") == "input_a"
 
 
 def test_registry_evicts_oldest_entries_when_capacity_is_exceeded(monkeypatch):
@@ -115,6 +137,19 @@ def test_get_registry_stats_reports_current_counts(clean_registry):
     assert stats["session_binding_count"] == 1
     assert stats["max_entries"] == 8
     assert stats["ttl_sec"] == 3600.0
+
+
+def test_input_descriptor_metadata_is_deeply_frozen(clean_registry):
+    nested = {"kind": "test", "nested": {"labels": ["a", "b"]}}
+    descriptor = _descriptor("input_nested", metadata=nested)
+
+    nested["nested"]["labels"].append("c")
+
+    assert descriptor.metadata["nested"]["labels"] == ("a", "b")
+    assert descriptor.to_dict()["metadata"] == {
+        "kind": "test",
+        "nested": {"labels": ["a", "b"]},
+    }
 
 
 def test_new_input_id_uses_16_hex_entropy_budget():
