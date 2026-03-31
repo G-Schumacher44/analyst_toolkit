@@ -40,7 +40,7 @@ def compact_destination_metadata(destinations: dict[str, Any]) -> dict[str, Any]
         if status in {"", "disabled"}:
             continue
         item = {"status": status}
-        for key in ("path", "url", "folder_id"):
+        for key in ("path", "url", "folder_id", "requested_root_status"):
             value = payload.get(key)
             if value:
                 item[key] = value
@@ -53,16 +53,29 @@ def _local_relative_path(local_path: str) -> Path:
     if any(part == ".." for part in path.parts):
         raise ValueError("Local artifact path must not contain parent-directory traversal.")
     resolved = path.resolve(strict=False)
+
+    def _strip_leading_exports(candidate: Path) -> Path:
+        if candidate.parts and candidate.parts[0] == "exports" and len(candidate.parts) > 1:
+            return Path(*candidate.parts[1:])
+        return candidate
+
     if not path.is_absolute():
-        return path
+        # Strip a leading "exports" segment so that combining with a
+        # local_output_root that already points to "exports" doesn't
+        # produce "exports/exports/...".
+        return _strip_leading_exports(path)
 
     cwd = Path.cwd()
     try:
-        return resolved.relative_to(cwd.resolve(strict=False))
+        return _strip_leading_exports(resolved.relative_to(cwd.resolve(strict=False)))
     except ValueError:
         if "exports" in resolved.parts:
             exports_index = resolved.parts.index("exports")
-            return Path(*resolved.parts[exports_index:])
+            # Return path *after* "exports" to avoid doubled prefix when the
+            # local_output_root already resolves to an exports directory.
+            after_exports = resolved.parts[exports_index + 1 :]
+            if after_exports:
+                return Path(*after_exports)
     return Path(resolved.name)
 
 
@@ -84,7 +97,7 @@ def _resolve_local_output_root(root: str) -> Path:
 
 
 def _copy_to_local_root(local_path: str, root: str) -> str:
-    source = Path(local_path)
+    source = Path(local_path).resolve(strict=False)
     relative = _local_relative_path(local_path)
     resolved_root = _resolve_local_output_root(root)
     destination = (resolved_root / relative).resolve(strict=False)
@@ -94,6 +107,8 @@ def _copy_to_local_root(local_path: str, root: str) -> str:
         raise ValueError(
             "Resolved local artifact destination escapes the configured root."
         ) from exc
+    if destination == source:
+        return str(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return str(destination)
@@ -156,7 +171,11 @@ def deliver_artifact(
                 local_root,
                 exc,
             )
-            result["destinations"]["local"] = {"status": "rejected", "path": ""}
+            result["destinations"]["local"] = {
+                "status": "available",
+                "path": effective_local_path,
+                "requested_root_status": "rejected",
+            }
             result["warnings"].append(str(exc))
 
     drive_folder_id = str(config.get("drive_folder_id") or "").strip()

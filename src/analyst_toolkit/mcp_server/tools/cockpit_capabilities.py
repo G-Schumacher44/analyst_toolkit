@@ -123,8 +123,19 @@ _WORKFLOW_TOOL_METADATA: dict[str, dict[str, Any]] = {
         "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
     },
     "data_dictionary": {
-        "description": "Artifact-first prelaunch dictionary flow seeded by infer_configs and surfaced through cockpit/dashboard artifacts.",
+        "description": (
+            "Artifact-first prelaunch dictionary flow seeded by infer_configs "
+            "and surfaced through cockpit/dashboard artifacts."
+        ),
         "outputs": ["dashboard_url?", "dashboard_path?", "xlsx_url?", "summary"],
+    },
+    "manage_session": {
+        "description": (
+            "Session lifecycle management: list, inspect, fork, or rebind. "
+            "Use fork to start a new run context from an existing session "
+            "without re-downloading data or re-running infer_configs."
+        ),
+        "outputs": ["session_id", "new_session_id?", "run_id", "sessions?"],
     },
 }
 
@@ -161,9 +172,9 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
         raise ValueError("Runtime template inventory is empty.")
     if len(runtime_template_specs) > 1:
         raise ValueError("Multiple runtime templates are not supported in capability catalog.")
-    runtime_template_path = runtime_template_specs[0].path.as_posix()
+    runtime_template_path = runtime_template_specs[0].relative_path
     workflow_template_paths = {
-        spec.tool: spec.path.as_posix() for spec in workflow_template_specs if spec.tool
+        spec.tool: spec.relative_path for spec in workflow_template_specs if spec.tool
     }
 
     modules: list[dict[str, Any]] = []
@@ -172,7 +183,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             continue
         tool_name = spec.tool
         root_key = spec.config_root
-        template_path = spec.path.as_posix()
+        template_path = spec.relative_path
         root = _load_template_root(root_key, template_path)
         knobs = []
         for knob in _KEY_KNOBS.get(tool_name, []):
@@ -226,6 +237,16 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             {
                 "path": "runtime.artifacts.plotting",
                 "description": "Use one plotting toggle for the active run instead of editing each module config.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.destinations.local.enabled",
+                "description": "Mirror artifacts to a local output directory.",
+                "user_editable": True,
+            },
+            {
+                "path": "runtime.destinations.local.root",
+                "description": "Relative path for local artifact output (e.g. 'exports'). Must be within the configured local output base.",
                 "user_editable": True,
             },
             {
@@ -287,6 +308,8 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
                     "runtime.run.input_path",
                     "runtime.artifacts.export_html",
                     "runtime.artifacts.plotting",
+                    "runtime.destinations.local.enabled",
+                    "runtime.destinations.local.root",
                     "runtime.destinations.gcs.enabled",
                     "runtime.destinations.gcs.bucket_uri",
                     "runtime.destinations.gcs.prefix",
@@ -322,7 +345,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
         "workflow_templates": [
             {
                 "tool": spec.tool,
-                "template_path": spec.path.as_posix(),
+                "template_path": spec.relative_path,
                 **_WORKFLOW_TOOL_METADATA[spec.tool],
             }
             for spec in workflow_template_specs

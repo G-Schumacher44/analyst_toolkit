@@ -1,3 +1,7 @@
+import analyst_toolkit.mcp_server.tools.diagnostics as diagnostics_tool
+from analyst_toolkit.mcp_server.input.errors import InputPayloadTooLargeError
+
+
 def test_rpc_preflight_config_normalizes_validation_shape(client):
     payload = {
         "jsonrpc": "2.0",
@@ -246,4 +250,28 @@ def test_rpc_tools_call_returns_structured_error_envelope_for_tool_failure(clien
     assert result["error"]["category"] == "internal"
     assert result["error"]["code"] == "tool_execution_failed"
     assert result["error"]["retryable"] is False
+    assert result["error"]["trace_id"] == result["trace_id"]
+
+
+def test_rpc_tools_call_surfaces_stable_input_error_for_capacity_guardrail(client, monkeypatch):
+    def raise_input_limit(*args, **kwargs):
+        raise InputPayloadTooLargeError("Input exceeds ANALYST_MCP_MAX_INPUT_ROWS")
+
+    monkeypatch.setattr(diagnostics_tool, "load_input", raise_input_limit)
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "tools/call",
+        "params": {"name": "diagnostics", "arguments": {"gcs_path": "gs://bucket/data.csv"}},
+    }
+
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["module"] == "diagnostics"
+    assert result["code"] == "INPUT_PAYLOAD_TOO_LARGE"
+    assert isinstance(result.get("trace_id"), str)
+    assert result["trace_id"]
+    assert result["error"]["code"] == "input_payload_too_large"
     assert result["error"]["trace_id"] == result["trace_id"]

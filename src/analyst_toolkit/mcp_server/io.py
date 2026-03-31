@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import threading
+from collections import OrderedDict
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -22,6 +24,7 @@ from analyst_toolkit.mcp_server.destination_routing import (
 from analyst_toolkit.mcp_server.destination_routing import (
     split_artifact_reference as _split_artifact_reference,
 )
+from analyst_toolkit.mcp_server.input.ingest import load_dataframe as _load_input_dataframe
 from analyst_toolkit.mcp_server.io_history_files import (
     read_history_file_safe as _read_history_file_safe,
 )
@@ -39,14 +42,8 @@ from analyst_toolkit.mcp_server.io_serialization import (
     fold_status_with_artifacts,
     make_json_safe,
 )
-from analyst_toolkit.mcp_server.io_storage import (
-    load_from_gcs,
-    save_output,
-    should_export_html,
-)
-from analyst_toolkit.mcp_server.io_storage import (
-    upload_artifact as _upload_artifact,
-)
+from analyst_toolkit.mcp_server.io_storage import save_output, should_export_html
+from analyst_toolkit.mcp_server.io_storage import upload_artifact as _upload_artifact
 from analyst_toolkit.mcp_server.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -62,12 +59,15 @@ def _env_bool(name: str, default: bool) -> bool:
 RUN_ID_OVERRIDE_ALLOWED = _env_bool("ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE", False)
 DEDUP_RUN_ID_WARNINGS = _env_bool("ANALYST_MCP_DEDUP_RUN_ID_WARNINGS", True)
 _HISTORY_LOCKS_GUARD = threading.Lock()
-_HISTORY_LOCKS: dict[str, threading.Lock] = {}
+_MAX_HISTORY_LOCKS = 256
+_HISTORY_LOCKS: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _LIFECYCLE_WARNINGS_GUARD = threading.Lock()
+_MAX_LIFECYCLE_WARNING_KEYS = 512
 _SEEN_LIFECYCLE_WARNING_KEYS: set[tuple[str, str]] = set()
 ALLOW_EMPTY_CERT_RULES = _env_bool("ANALYST_MCP_ALLOW_EMPTY_CERT_RULES", False)
 _HISTORY_READ_META_GUARD = threading.Lock()
-_LAST_HISTORY_READ_META: dict[tuple[str, Optional[str]], dict[str, Any]] = {}
+_MAX_HISTORY_READ_META = 256
+_LAST_HISTORY_READ_META: OrderedDict[tuple[str, Optional[str]], dict[str, Any]] = OrderedDict()
 
 
 def coerce_config(config: Optional[dict], module: str) -> dict:
@@ -186,34 +186,33 @@ def resolve_run_context(
     return effective_run_id, lifecycle
 
 
-def load_input(path: Optional[str] = None, session_id: Optional[str] = None) -> pd.DataFrame:
-    """Load data from GCS, local file, or in-memory session."""
-    if session_id:
-        df = StateStore.get(session_id)
-        if df is not None:
-            logger.info(f"Loaded from session: {session_id}")
-            return df
-        elif not path:
-            raise ValueError(f"Session {session_id} not found and no path provided.")
+def load_input(
+    path: Optional[str] = None,
+    session_id: Optional[str] = None,
+    input_id: Optional[str] = None,
+) -> pd.DataFrame:
+    """Load data from a canonical input reference, GCS, local file, or in-memory session."""
+    normalized_path = path
+    if normalized_path:
+        normalized_path, path_warning = _normalize_input_path(normalized_path)
+        if path_warning:
+            logger.warning(path_warning)
+        if _looks_like_bucket_path(normalized_path):
+            raise ValueError(
+                f"[INVALID_PATH_FORMAT] Path '{normalized_path}' looks like a bucket path "
+                f"but is missing the scheme. Did you mean 'gs://{normalized_path}'?"
+            )
 
-    if not path:
-        raise ValueError("Either 'path' (gcs_path) or 'session_id' must be provided.")
-
-    path, path_warning = _normalize_input_path(path)
-    if path_warning:
-        logger.warning(path_warning)
-
-    if path.startswith("gs://"):
-        return load_from_gcs(path)
-    if path.endswith(".parquet"):
-        return pd.read_parquet(path)
-    if Path(path).exists():
-        return pd.read_csv(path, low_memory=False)
-
-    if _looks_like_bucket_path(path):
-        raise FileNotFoundError(f"Input path not found: '{path}'. Did you mean 'gs://{path}'?")
-
-    raise FileNotFoundError(f"Input path not found: '{path}'")
+    session_data_available = (
+        session_id is not None
+        and not normalized_path
+        and not input_id
+        and StateStore.get(session_id) is not None
+    )
+    df = _load_input_dataframe(path=normalized_path, session_id=session_id, input_id=input_id)
+    if session_data_available:
+        logger.info(f"Loaded from session: {session_id}")
+    return df
 
 
 def save_to_session(
@@ -221,6 +220,49 @@ def save_to_session(
 ) -> str:
     """Save to in-memory store."""
     return StateStore.save(df, session_id, run_id=run_id)
+
+
+def save_session_config(session_id: str, module: str, config_yaml: str) -> None:
+    """Persist an inferred config YAML string for a module in session scope."""
+    StateStore.save_config(session_id, module, config_yaml)
+
+
+def get_session_config(session_id: str, module: str) -> Optional[str]:
+    """Retrieve a previously stored inferred config for a module."""
+    return StateStore.get_config(session_id, module)
+
+
+def get_inferred_config(session_id: str | None, module: str) -> dict:
+    """Retrieve and parse the inferred config for *module* from the session store.
+
+    Returns an empty dict when no session or no stored config exists.
+    The returned dict is unwrapped from the module-level key if present
+    (e.g. ``{"normalization": {...}}`` → ``{...}``).
+    """
+    if not session_id:
+        return {}
+    raw_yaml = get_session_config(session_id, module)
+    if not raw_yaml:
+        return {}
+    try:
+        parsed = yaml.safe_load(raw_yaml)
+    except yaml.YAMLError:
+        logger.warning("Failed to parse stored %s config for session %s", module, session_id)
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    # Unwrap module-level key so the structure matches what resolve_layered_config expects
+    if module in parsed and isinstance(parsed[module], dict):
+        parsed = parsed[module]
+    return parsed
+
+
+def missing_config_warning(runtime_meta: dict[str, Any]) -> str | None:
+    """Return a user-facing warning when no executable config layers were supplied."""
+    resolved_layers = runtime_meta.get("resolved_layers", {})
+    if any(resolved_layers.get(layer) for layer in ("inferred", "provided", "explicit")):
+        return None
+    return "No inferred or explicit config found. Run infer_configs first for meaningful results."
 
 
 def get_session_run_id(session_id: str) -> Optional[str]:
@@ -340,8 +382,7 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     history_dir.mkdir(parents=True, exist_ok=True)
 
     history_file = history_dir / f"{run_id}_history.json"
-    lock = _history_lock_for(history_file)
-    with lock:
+    with _history_lock(history_file):
         history, parse_meta = _read_history_file_safe(history_file)
         if parse_meta["parse_errors"]:
             logger.warning(
@@ -384,8 +425,7 @@ def _get_run_history_with_meta(
         path_root = _resolve_path_root(run_id, session_id)
         history_file = history_root / path_root / f"{run_id}_history.json"
         if history_file.exists():
-            lock = _history_lock_for(history_file)
-            with lock:
+            with _history_lock(history_file):
                 return _read_history_file_safe(history_file)
         return [], meta
 
@@ -395,8 +435,7 @@ def _get_run_history_with_meta(
         reverse=True,
     )
     if candidates:
-        lock = _history_lock_for(candidates[0])
-        with lock:
+        with _history_lock(candidates[0]):
             return _read_history_file_safe(candidates[0])
     return [], meta
 
@@ -404,11 +443,43 @@ def _get_run_history_with_meta(
 def _history_lock_for(path: Path) -> threading.Lock:
     key = str(path.resolve())
     with _HISTORY_LOCKS_GUARD:
-        lock = _HISTORY_LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _HISTORY_LOCKS[key] = lock
+        entry = _HISTORY_LOCKS.get(key)
+        if entry is not None:
+            _HISTORY_LOCKS.move_to_end(key)
+            return entry["lock"]
+        if len(_HISTORY_LOCKS) >= _MAX_HISTORY_LOCKS:
+            for stale_key, stale_entry in list(_HISTORY_LOCKS.items()):
+                if stale_entry["use_count"] == 0:
+                    _HISTORY_LOCKS.pop(stale_key)
+                    break
+        lock = threading.Lock()
+        _HISTORY_LOCKS[key] = {"lock": lock, "use_count": 0}
         return lock
+
+
+def _release_history_lock(path: Path) -> None:
+    key = str(path.resolve())
+    with _HISTORY_LOCKS_GUARD:
+        entry = _HISTORY_LOCKS.get(key)
+        if entry is None:
+            return
+        entry["use_count"] = max(0, int(entry.get("use_count", 0)) - 1)
+        _HISTORY_LOCKS.move_to_end(key)
+
+
+@contextmanager
+def _history_lock(path: Path):
+    key = str(path.resolve())
+    lock = _history_lock_for(path)
+    with _HISTORY_LOCKS_GUARD:
+        entry = _HISTORY_LOCKS.get(key)
+        if entry is not None:
+            entry["use_count"] += 1
+    try:
+        with lock:
+            yield
+    finally:
+        _release_history_lock(path)
 
 
 def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bool:
@@ -418,6 +489,8 @@ def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bo
     with _LIFECYCLE_WARNINGS_GUARD:
         if key in _SEEN_LIFECYCLE_WARNING_KEYS:
             return False
+        if len(_SEEN_LIFECYCLE_WARNING_KEYS) >= _MAX_LIFECYCLE_WARNING_KEYS:
+            _SEEN_LIFECYCLE_WARNING_KEYS.clear()
         _SEEN_LIFECYCLE_WARNING_KEYS.add(key)
         return True
 
@@ -425,7 +498,11 @@ def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bo
 def _set_last_history_meta(run_id: str, session_id: Optional[str], meta: dict[str, Any]) -> None:
     key = (run_id, session_id)
     with _HISTORY_READ_META_GUARD:
+        if key in _LAST_HISTORY_READ_META:
+            _LAST_HISTORY_READ_META.move_to_end(key)
         _LAST_HISTORY_READ_META[key] = {
             "parse_errors": list(meta.get("parse_errors", [])),
             "skipped_records": int(meta.get("skipped_records", 0)),
         }
+        while len(_LAST_HISTORY_READ_META) > _MAX_HISTORY_READ_META:
+            _LAST_HISTORY_READ_META.popitem(last=False)

@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -19,23 +19,22 @@
 
 The analyst toolkit MCP server exposes every toolkit module as a callable tool over the [Model Context Protocol](https://modelcontextprotocol.io). Any MCP-compatible host — FridAI, Claude Desktop, VS Code, or a plain JSON-RPC 2.0 client — can invoke toolkit operations against local or GCS-hosted data without any Python dependency on the host side.
 
-## 🆕 Version 0.4.4 Highlights
+## 🆕 Version 0.5.0 Highlights
 
-- **Full Dashboard Surface:** Every pipeline module now produces a standalone HTML dashboard artifact — diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, data dictionary, and final audit. Dashboard artifact paths are returned in tool responses.
-- **Cockpit Hub:** `get_cockpit_dashboard` returns a unified operator hub linking recent-run cards, module dashboards, artifact rows, and a data dictionary preview into a single HTML artifact.
-- **Local Artifact Server:** `ensure_artifact_server` starts an optional localhost file server so cockpit and module artifact references become browser-openable URLs instead of raw file paths.
-- **Data Dictionary:** `data_dictionary` is now fully implemented — generates a column-level schema report as a standalone HTML artifact and surfaces a preview in the cockpit dictionary tab.
-- **Pipeline Dashboard:** `get_pipeline_dashboard` produces a combined multi-module dashboard for a specific run, linked from the cockpit hub.
-- **Resource Inventory:** Quickstart, agent playbook, and capability catalog are now exposed as first-class MCP resources (in addition to tools) via `resources/list` and `resources/read`.
+- **Input Ingest First:** `register_input` and `upload_input` are now the recommended entrypoints for MCP clients, with canonical `input_id`s, stable idempotency keys, and conflict-safe error semantics.
+- **Session Lifecycle Management:** `manage_session` exposes list/inspect/fork/rebind/clear actions plus live retention policy and optional stored inferred configs.
+- **Durable SQLite Sessions:** `ANALYST_MCP_SESSION_BACKEND=sqlite` now provides restart-persistent session state with explicit trust-boundary guidance and private default storage paths.
+- **Retry-Safe Artifacts:** same-run module and dashboard retries now reuse primary remote artifact identities instead of silently drifting to suffixed fallback objects on normal reruns.
+- **Full Dashboard Surface:** Cockpit, diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, data dictionary, and final audit all emit standalone HTML artifacts.
+- **Artifact Access:** `read_artifact` and the localhost artifact server make report surfaces usable across stdio, HTTP, and containerized clients.
 - **Observability + Auth:** `/ready`, `/metrics`, structured lifecycle logs (`ANALYST_MCP_STRUCTURED_LOGS`), and optional bearer token auth (`ANALYST_MCP_AUTH_TOKEN`).
-- **Manual Pipeline:** Recommended workflow — diagnostics → infer → normalize → dedupe → outliers → impute → validate → final audit.
-- **GCS Direct File Loading:** Pass a direct `.parquet` or `.csv` GCS URI — no trailing slash required.
 
 ---
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Deployment Profiles](#deployment-profiles)
 - [Operability Endpoints](#operability-endpoints)
 - [Tool Reference](#tool-reference) ▾
 - [Pipeline Mode](#pipeline-mode-state-management)
@@ -81,7 +80,7 @@ curl http://localhost:8001/health | python3 -m json.tool
 ```json
 {
   "status": "ok",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "uptime_sec": 42,
   "tools": [
     "diagnostics", "validation", "outliers", "normalization",
@@ -91,10 +90,37 @@ curl http://localhost:8001/health | python3 -m json.tool
     "get_agent_playbook", "get_user_quickstart", "get_capability_catalog",
     "get_run_history", "get_data_health_report",
     "data_dictionary", "get_pipeline_dashboard", "get_cockpit_dashboard",
-    "ensure_artifact_server"
+    "ensure_artifact_server", "manage_session",
+    "register_input", "upload_input", "read_artifact"
   ]
 }
 ```
+
+## Deployment Profiles
+
+Choose an operating mode explicitly. The server is designed to be frictionless locally and explicit when you widen the trust boundary.
+
+| Profile | Host/Auth Posture | Intended Use | Minimum Expectations |
+| --- | --- | --- | --- |
+| `local-dev` | loopback bind, auth token optional | local development, desktop MCP hosts, local FridAI integration | localhost-only exposure, local review workflow |
+| `internal-trusted` | explicit non-loopback bind, bearer token strongly recommended | private team/internal network deployment | documented environment, normal network controls, token policy applied by operator |
+| `public-or-prod` | explicit non-loopback bind, bearer token strongly recommended | managed or internet-reachable deployment | secure deployment review complete, token policy applied by operator, operator docs reviewed |
+
+Recommended environment posture:
+
+| Setting | `local-dev` | `internal-trusted` | `public-or-prod` |
+| --- | --- | --- | --- |
+| `ANALYST_MCP_HOST` | default loopback | explicit non-loopback | explicit non-loopback |
+| `ANALYST_MCP_AUTH_TOKEN` | optional | strongly recommended | strongly recommended |
+| `ANALYST_MCP_ENABLE_ARTIFACT_SERVER` | optional | optional | only if intentionally exposed |
+| `ANALYST_MCP_ARTIFACT_SERVER_HOST` | loopback | loopback unless justified | loopback unless explicitly reviewed |
+| `ANALYST_MCP_SESSION_BACKEND` | `memory` or explicit `sqlite` | prefer `memory` unless operators accept durable local state | prefer `memory` unless durable local state is explicitly reviewed |
+
+Release note:
+- The toolkit is production-oriented, but production claims should only be made for the deployment profile that matches the actual tested posture.
+- Current runtime behavior is localhost-first and logs when `ANALYST_MCP_AUTH_TOKEN` is unset on non-loopback binds. It does not currently hard-fail startup in that posture.
+- Treat HTTP access to local files and local artifact paths as privileged. If you intentionally expose non-loopback HTTP, pair it with token auth and normal network controls.
+- Enabling `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem at `ANALYST_MCP_SESSION_DB_PATH` or, if unset, to a private user-local state directory. That is an explicit trust-boundary expansion: keep filesystem permissions narrow, prefer localhost binding, and do not persist long-lived sensitive session payloads unless the operator intentionally accepts that posture.
 
 ## Operability Endpoints
 
@@ -187,7 +213,11 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 | `get_cockpit_dashboard` | Operator hub HTML artifact — recent-run cards, module dashboard links, artifact rows, data dictionary preview |
 | `get_pipeline_dashboard` | Combined multi-module HTML dashboard for a specific `run_id`; linked from the cockpit hub |
 | `data_dictionary` | Column-level schema report as a standalone HTML artifact; preview surfaced in the cockpit dictionary tab |
-| `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs |
+| `ensure_artifact_server` | Start/status the local artifact server — converts artifact file paths into browser-openable localhost URLs and returns `summary.already_running=true` only when a compatible artifact server is already running on the configured host/port |
+| `manage_session` | Session lifecycle: list active sessions, inspect details, fork a session into a new run context, or rebind a session to a different run_id |
+| `register_input` | Register a server-visible local path or `gs://` URI as a canonical input reference and optionally bind it into a session |
+| `upload_input` | Upload a local file as base64-encoded content through the MCP protocol — use when the file is not server-visible (e.g., server runs in a container) |
+| `read_artifact` | Read a container-local artifact and return its content through MCP — use when localhost artifact URLs are not reachable from the client |
 
 </details>
 
@@ -196,6 +226,14 @@ When diagnosing failures, use `trace_id` from the JSON-RPC error payload and cor
 ## Pipeline Mode (State Management)
 
 Every tool accepts either a `gcs_path`/file path **or** a `session_id`. When a tool runs, it saves its output to an in-memory `StateStore` and returns a `session_id`. Pass that `session_id` to the next tool to operate on the already-transformed data — no intermediate files needed.
+
+For this release, session persistence defaults to **in-memory only**, but a durable SQLite-backed session store is available via `ANALYST_MCP_SESSION_BACKEND=sqlite`. In both modes, sessions are still bounded by `ANALYST_MCP_SESSION_TTL_SEC` and `ANALYST_MCP_SESSION_MAX_ENTRIES`: cleanup is enforced lazily on session reads, writes, and explicit `manage_session` / `cleanup` activity, so SQLite sessions can survive process restarts while still expiring or being evicted once the server touches the store again. `manage_session` surfaces the live retention policy plus per-session expiry timestamps.
+Use `manage_session(action="inspect", include_configs=true)` when you need the stored inferred config payloads; the default inspect/list responses stay compact and only include config names/counts.
+
+Retry contract:
+- `register_input` and `upload_input` are input-idempotent when you provide a stable `idempotency_key`.
+- If `load_into_session=true` and no explicit `session_id` is supplied, anonymous retries reuse the existing live bound session for that canonical `input_id` instead of allocating a fresh session on every retry.
+- Repeating the same-run module or dashboard call now reuses the primary remote artifact object when it already exists. UUID-suffixed fallback objects are reserved for true first-write collisions or permission failures, not normal retries.
 
 ```text
 1. diagnostics(gcs_path="gs://bucket/path/file.parquet", run_id="my_run")
@@ -225,6 +263,8 @@ A `run_id` ties all steps together in the Healing Ledger. Pass the same `run_id`
 If a tool call provides both `session_id` and `run_id`, the server enforces lifecycle consistency by default:
 - If the session already has a bound run id and it differs from the requested run id, the tool coerces to the session run id and emits a warning.
 - To allow explicit overrides, set `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE=1`.
+- To start a new run context without re-downloading data, use `manage_session(action="fork", session_id="...", run_id="new_run")`. This clones the session's DataFrame and inferred configs into a fresh session with its own run_id.
+- To change the run_id on an existing session in-place, use `manage_session(action="rebind", session_id="...", run_id="new_run")`.
 
 > **Config structure note:** `infer_configs` returns YAML strings. Parse each one with `yaml.safe_load` and pass the resulting dict directly to the relevant tool. Never flatten nested keys — for normalization, `standardize_text_columns`, `coerce_dtypes`, etc. must stay nested inside `rules:` or the pipeline will skip all transformations.
 >
@@ -304,7 +344,7 @@ curl -X POST http://localhost:8001/rpc \
   }'
 ```
 
-The server binds to `127.0.0.1:8765` by default and serves the `exports/` directory. Artifact paths in subsequent tool responses will be replaced with `http://localhost:8765/...` URLs.
+The server binds to `127.0.0.1:8765` by default and serves the `exports/` directory. Artifact paths in subsequent tool responses will be replaced with `http://localhost:8765/...` URLs. `ensure_artifact_server` performs an active health check against `GET /__health` on the configured host/port and only returns a normal pass response with `summary.already_running=true` when that server reports the same `base_url` and artifact-root path. If the port is occupied and the health check is missing or reports a different root/base URL, the tool returns `status=error` with `error_code=ARTIFACT_SERVER_BIND_CONFLICT` instead of adopting the other process.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -626,6 +666,9 @@ Add to `~/.config/claude/claude_desktop_config.json` (Mac: `~/Library/Applicatio
 }
 ```
 
+Operational note:
+- In stdio/local mode, keep one `analyst_toolkit` MCP server instance per client. Repeated reconnects can orphan extra `python -m analyst_toolkit.mcp_server.server --stdio` workers, which can make session visibility and input bindings look inconsistent because some MCP state is still process-local. If behavior looks split-brain during QA, terminate stale stdio workers and relaunch one clean instance before debugging tool behavior.
+
 ### FridAI (HTTP Transport)
 
 In your FridAI `remote_manager` config, point to the running server:
@@ -666,10 +709,18 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_VERSION_FALLBACK` | No | `0.0.0+local` | Version string used when package metadata is unavailable in local/source execution |
 | `ANALYST_MCP_AUTH_TOKEN` | No | _(unset)_ | If set, require `Authorization: Bearer <token>` for `/rpc`, `/health`, `/ready`, and `/metrics` |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | No | `8.0` | Timeout for MCP `resources/list` and `resources/read` filesystem work |
+| `ANALYST_MCP_MAX_INPUT_BYTES` | No | `104857600` | Maximum single-input byte budget for local files, GCS objects, and cumulative GCS prefix loads |
+| `ANALYST_MCP_MAX_GCS_PREFIX_OBJECTS` | No | `32` | Maximum number of `.csv` / `.parquet` blobs loaded from a single GCS prefix |
+| `ANALYST_MCP_MAX_INPUT_ROWS` | No | `1000000` | Maximum row count allowed after an input is loaded into a DataFrame |
+| `ANALYST_MCP_MAX_INPUT_MEMORY_BYTES` | No | `268435456` | Maximum in-memory DataFrame size allowed after an input is loaded |
 | `ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES` | No | `false` | If `true`, `resources/templates/list` returns URI templates (otherwise empty to avoid duplicate UI listings) |
 | `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC` | No | `8.0` | Timeout for cockpit template reads (`get_capability_catalog`, `get_golden_templates`) |
 | `ANALYST_MCP_STRUCTURED_LOGS` | No | `false` | Emit JSON-structured request lifecycle logs (`trace_id`, method, tool, duration) |
 | `ANALYST_MCP_JOB_STATE_PATH` | No | `exports/reports/jobs/job_state.json` | Local JSON persistence path for async job state (`get_job_status`, `list_jobs`) |
+| `ANALYST_MCP_SESSION_BACKEND` | No | `memory` | Session backend: `memory` or `sqlite` |
+| `ANALYST_MCP_SESSION_DB_PATH` | No | XDG/user-local state dir (`.../analyst_toolkit/session_store.db`) | SQLite database path when `ANALYST_MCP_SESSION_BACKEND=sqlite`; blank values fall back to the private default and paths under `./exports` are rejected |
+| `ANALYST_MCP_SESSION_TTL_SEC` | No | `3600` | Session time-to-live for both backends; SQLite cleanup is applied lazily on session reads/writes and explicit cleanup/list activity |
+| `ANALYST_MCP_SESSION_MAX_ENTRIES` | No | `32` | Maximum number of retained sessions for both backends before LRU eviction |
 | `ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE` | No | `false` | Allow a requested `run_id` to differ from the session-bound run id (otherwise run id is coerced) |
 | `ANALYST_MCP_RUN_HISTORY_SUMMARY_ONLY_DEFAULT` | No | `true` | Default compact ledger mode for `get_run_history` when caller omits `summary_only` |
 | `ANALYST_MCP_RUN_HISTORY_DEFAULT_LIMIT` | No | `50` | Default max ledger entries returned in compact mode when caller omits `limit` |
@@ -682,6 +733,16 @@ In your FridAI `remote_manager` config, point to the running server:
 | `ANALYST_MCP_ALLOW_BIND_ALL` | No | `false` | Allow artifact server to bind to `0.0.0.0` (explicit opt-in) |
 
 Copy `.envrc.example` to `.envrc` and fill in your values before starting the server.
+
+## MCP Compatibility Policy
+
+The project aims to preserve stable MCP response contracts where practical.
+
+Policy:
+- additive response fields are preferred over breaking field-shape changes
+- behavior or contract changes should land with regression tests in the same PR
+- externally visible contract changes should be called out in release notes and PR descriptions
+- `dev` is the integration branch; public contract changes should not bypass it on the way to `main`
 
 ---
 
@@ -697,6 +758,17 @@ The server dispatches on path format:
 | `path/to/file.parquet` | `pd.read_parquet()` (local) |
 | `path/to/file.csv` | `pd.read_csv()` (local) |
 | `session_id` | Reads from in-memory `StateStore` (no I/O) |
+
+Boundary guards:
+- local files, single GCS objects, and cumulative GCS prefix loads respect `ANALYST_MCP_MAX_INPUT_BYTES`
+- GCS prefix scans stop once `ANALYST_MCP_MAX_GCS_PREFIX_OBJECTS` is exceeded
+- loaded DataFrames are rejected if they exceed `ANALYST_MCP_MAX_INPUT_ROWS` or `ANALYST_MCP_MAX_INPUT_MEMORY_BYTES`
+
+Session lifecycle notes:
+- `manage_session(action="list")` returns the active retention policy (`backend`, `durable`, `ttl_sec`, `max_entries`) alongside the session summaries
+- `manage_session(action="inspect")` returns `last_accessed_at`, `expires_at`, and `expires_in_sec` for the selected session
+- `manage_session(action="inspect", include_configs=true)` retrieves the stored inferred config YAML payloads on demand
+- `manage_session(action="fork")` clones the in-memory DataFrame and optionally the stored inferred configs into a new session with its own run context
 
 > **Note:** Partition-style directory paths must end with `/`. Direct file paths (ending in `.parquet` or `.csv`) are read without listing.
 

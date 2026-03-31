@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -25,7 +25,11 @@ For MCP-specific template/resource exposure and remote tool usage, see the [MCP 
 
 ### Downloadable YAML Templates
 
->[Download Templates](config.zip)
+Download the bundled templates from the latest GitHub Release:
+
+>[Download Templates](https://github.com/G-Schumacher44/analyst_toolkit/releases/latest/download/config.zip)
+
+Prefer browsing the live source templates in [`config/`](../config/) when you want the exact in-repo files before a tagged release is cut.
 ___
 
 ## 📚 YAML Setup Guidebook

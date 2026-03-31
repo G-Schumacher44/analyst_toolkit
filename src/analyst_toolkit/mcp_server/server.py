@@ -26,14 +26,28 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import mcp.types as types
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from mcp.server import NotificationOptions, Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
+from pydantic import BaseModel
 
 from analyst_toolkit.mcp_server.auth import is_authorized
+from analyst_toolkit.mcp_server.input.errors import (
+    InputConflictError,
+    InputError,
+    InputNotSupportedError,
+    InputPayloadTooLargeError,
+    client_safe_input_error_code,
+)
+from analyst_toolkit.mcp_server.input.ingest import (
+    get_input_descriptor,
+    ingest_uploaded_bytes,
+    register_input_source,
+)
+from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.observability import RuntimeMetrics, log_rpc_event
 from analyst_toolkit.mcp_server.registry import TOOL_REGISTRY
 from analyst_toolkit.mcp_server.resources import list_mcp_resources, read_mcp_resource
@@ -52,6 +66,7 @@ logging.basicConfig(
     stream=sys.stderr,  # Log to stderr to avoid polluting stdout in stdio mode
 )
 logger = logging.getLogger("analyst_toolkit.mcp_server")
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def _env_float(name: str, default: float) -> float:
@@ -72,8 +87,29 @@ def _env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower().strip("[]")
+    return normalized in _LOOPBACK_HOSTS
+
+
+def _log_http_auth_posture(host: str, auth_token: str) -> None:
+    if auth_token:
+        return
+    if _is_loopback_host(host):
+        logger.warning(
+            "HTTP auth is disabled because ANALYST_MCP_AUTH_TOKEN is unset. "
+            "The default bind host is loopback-only, but set a token before exposing the server."
+        )
+        return
+    logger.warning(
+        "HTTP auth is disabled because ANALYST_MCP_AUTH_TOKEN is unset and the bind host "
+        "is non-loopback (%s). Set a token before exposing this server.",
+        host,
+    )
+
+
 RESOURCE_IO_TIMEOUT_SEC = _env_float("ANALYST_MCP_RESOURCE_TIMEOUT_SEC", 8.0)
-ADVERTISE_RESOURCE_TEMPLATES = _env_bool("ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES", False)
+ADVERTISE_RESOURCE_TEMPLATES = _env_bool("ANALYST_MCP_ADVERTISE_RESOURCE_TEMPLATES", True)
 STRUCTURED_LOGS = _env_bool("ANALYST_MCP_STRUCTURED_LOGS", False)
 AUTH_TOKEN = os.environ.get("ANALYST_MCP_AUTH_TOKEN", "").strip()
 SERVER_STARTED_AT = time.time()
@@ -105,6 +141,40 @@ def _log_rpc_event(level: int, event: str, **fields: Any) -> None:
 
 def _is_authorized(request: Request) -> bool:
     return is_authorized(request, AUTH_TOKEN)
+
+
+class RegisterInputRequest(BaseModel):
+    uri: str
+    source_type: InputSourceType | None = None
+    session_id: str | None = None
+    run_id: str | None = None
+    idempotency_key: str | None = None
+    load_into_session: bool = True
+
+
+def _input_error_http_status(exc: InputError) -> int:
+    if isinstance(exc, InputPayloadTooLargeError):
+        return 413
+    if isinstance(exc, InputNotSupportedError):
+        return 400
+    if isinstance(exc, InputConflictError):
+        return 409
+    return 400
+
+
+def _input_error_detail(exc: InputError, trace_id: str) -> dict[str, str]:
+    return {
+        "error": exc.message,
+        "code": client_safe_input_error_code(exc.code),
+        "trace_id": trace_id,
+    }
+
+
+def _require_http_auth(request: Request) -> str:
+    trace_id = new_trace_id()
+    if not _is_authorized(request):
+        raise HTTPException(status_code=401, detail={"error": "Unauthorized", "trace_id": trace_id})
+    return trace_id
 
 
 @mcp_server.list_tools()
@@ -303,6 +373,122 @@ async def rpc_handler(request: Request) -> JSONResponse:
     )
 
 
+@app.post("/inputs/upload")
+async def upload_input(
+    request: Request,
+    file: UploadFile = File(...),
+    session_id: str | None = Form(default=None),
+    run_id: str | None = Form(default=None),
+    idempotency_key: str | None = Form(default=None),
+    load_into_session: bool = Form(default=True),
+) -> JSONResponse:
+    trace_id = _require_http_auth(request)
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Empty upload payload.",
+                "code": "INPUT_EMPTY_UPLOAD",
+                "trace_id": trace_id,
+            },
+        )
+    try:
+        descriptor, df, effective_session_id = await asyncio.to_thread(
+            ingest_uploaded_bytes,
+            filename=file.filename or "upload.csv",
+            payload=payload,
+            media_type=file.content_type,
+            session_id=session_id,
+            run_id=run_id,
+            idempotency_key=idempotency_key,
+            load_into_session=load_into_session,
+        )
+    except InputError as exc:
+        logger.warning("upload_input failed (trace_id=%s, code=%s)", trace_id, exc.code)
+        raise HTTPException(
+            status_code=_input_error_http_status(exc),
+            detail=_input_error_detail(exc, trace_id),
+        ) from exc
+    except Exception as exc:
+        logger.exception("upload_input unexpected failure (trace_id=%s)", trace_id)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Internal server error.",
+                "code": "INTERNAL_ERROR",
+                "trace_id": trace_id,
+            },
+        ) from exc
+
+    summary = {}
+    if df is not None:
+        summary = {"row_count": int(df.shape[0]), "column_count": int(df.shape[1])}
+    return JSONResponse(
+        {
+            "status": "pass",
+            "trace_id": trace_id,
+            "input": descriptor.to_dict(),
+            "session_id": effective_session_id or "",
+            "summary": summary,
+        }
+    )
+
+
+@app.post("/inputs/register")
+async def register_input(request: Request, payload: RegisterInputRequest) -> JSONResponse:
+    trace_id = _require_http_auth(request)
+    try:
+        descriptor, df, effective_session_id = register_input_source(
+            reference=payload.uri,
+            source_type=payload.source_type,
+            session_id=payload.session_id,
+            run_id=payload.run_id,
+            idempotency_key=payload.idempotency_key,
+            load_into_session=payload.load_into_session,
+        )
+    except InputError as exc:
+        logger.warning("register_input failed (trace_id=%s, code=%s)", trace_id, exc.code)
+        raise HTTPException(
+            status_code=_input_error_http_status(exc),
+            detail=_input_error_detail(exc, trace_id),
+        ) from exc
+    except Exception as exc:
+        logger.exception("register_input unexpected failure (trace_id=%s)", trace_id)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Internal server error.",
+                "code": "INTERNAL_ERROR",
+                "trace_id": trace_id,
+            },
+        ) from exc
+
+    summary = {}
+    if df is not None:
+        summary = {"row_count": int(df.shape[0]), "column_count": int(df.shape[1])}
+    return JSONResponse(
+        {
+            "status": "pass",
+            "trace_id": trace_id,
+            "input": descriptor.to_dict(),
+            "session_id": effective_session_id or "",
+            "summary": summary,
+        }
+    )
+
+
+@app.get("/inputs/{input_id}")
+async def read_input_descriptor(input_id: str, request: Request) -> JSONResponse:
+    trace_id = _require_http_auth(request)
+    descriptor = get_input_descriptor(input_id)
+    if descriptor is None:
+        raise HTTPException(
+            status_code=404, detail={"error": "Input not found.", "trace_id": trace_id}
+        )
+    return JSONResponse({"status": "pass", "trace_id": trace_id, "input": descriptor.to_dict()})
+
+
 @app.get("/health")
 async def health(request: Request) -> Any:
     if not _is_authorized(request):
@@ -343,11 +529,17 @@ from analyst_toolkit.mcp_server.tools import (  # noqa: F401, E402
     final_audit,
     imputation,
     infer_configs,
+    input_ingest,
     jobs,
     normalization,
     outliers,
     preflight_config,
+    read_artifact,
+    session,
     validation,
+)
+from analyst_toolkit.mcp_server.tools import (
+    upload_input as upload_input_tool,
 )
 
 # --- Entry point and transport selection ---
@@ -387,9 +579,13 @@ def main():
     args = parser.parse_args()
 
     if args.stdio or os.environ.get("ANALYST_MCP_STDIO", "").lower() == "true":
+        # Propagate stdio flag so downstream modules auto-enable local defaults
+        # (trusted history, artifact server, CWD input roots, etc.)
+        os.environ.setdefault("ANALYST_MCP_STDIO", "true")
         logger.info("Starting Analyst Toolkit MCP Server in stdio mode")
         asyncio.run(run_stdio())
     else:
+        _log_http_auth_posture(args.host, AUTH_TOKEN)
         logger.info(
             "Starting Analyst Toolkit MCP Server in HTTP mode on %s:%s",
             args.host,

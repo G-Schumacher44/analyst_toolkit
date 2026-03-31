@@ -59,10 +59,11 @@ def apply_normalization(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
             mapped_info = []
             for col, mapping in value_maps.items():
                 if col in df_normalized.columns:
-                    if "null" in mapping:
-                        mapping[np.nan] = mapping.pop("null")
-                    df_normalized[col] = df_normalized[col].replace(mapping)
-                    mapped_info.append({"Column": col, "Mappings Applied": len(mapping)})
+                    effective_mapping = dict(mapping)
+                    if "null" in effective_mapping:
+                        effective_mapping[np.nan] = effective_mapping.pop("null")
+                    df_normalized[col] = df_normalized[col].replace(effective_mapping)
+                    mapped_info.append({"Column": col, "Mappings Applied": len(effective_mapping)})
             if mapped_info:
                 changelog["values_mapped"] = pd.DataFrame(mapped_info)
     except Exception as e:

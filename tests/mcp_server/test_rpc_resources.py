@@ -24,13 +24,15 @@ def test_rpc_resources_list(client):
 
 
 def test_rpc_resource_templates_list(client):
-    """Verify MCP resources/templates/list is empty by default to avoid client duplication."""
+    """Verify MCP resources/templates/list advertises template URI patterns by default."""
     payload = {"jsonrpc": "2.0", "id": 23, "method": "resources/templates/list", "params": {}}
     response = client.post("/rpc", json=payload)
     assert response.status_code == 200
     result = response.json()["result"]
     assert "resourceTemplates" in result
-    assert result["resourceTemplates"] == []
+    template_uris = [t["uriTemplate"] for t in result["resourceTemplates"]]
+    assert "analyst://templates/config/{name}_template.yaml" in template_uris
+    assert "analyst://templates/golden/{name}.yaml" in template_uris
 
 
 def test_rpc_resource_templates_list_when_enabled(client, monkeypatch):
@@ -43,6 +45,16 @@ def test_rpc_resource_templates_list_when_enabled(client, monkeypatch):
     template_uris = [t["uriTemplate"] for t in result["resourceTemplates"]]
     assert "analyst://templates/config/{name}_template.yaml" in template_uris
     assert "analyst://templates/golden/{name}.yaml" in template_uris
+
+
+def test_rpc_resource_templates_list_when_disabled(client, monkeypatch):
+    """Verify MCP resources/templates/list can still be explicitly disabled."""
+    monkeypatch.setattr(server_module, "ADVERTISE_RESOURCE_TEMPLATES", False)
+    payload = {"jsonrpc": "2.0", "id": 36, "method": "resources/templates/list", "params": {}}
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["resourceTemplates"] == []
 
 
 def test_rpc_resources_read(client):

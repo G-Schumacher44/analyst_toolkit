@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from analyst_toolkit.m04_duplicates.run_dupes_pipeline import run_duplicates_pipeline
+from analyst_toolkit.mcp_server.config_normalizers import INFER_CONFIG_REQUIRED_WARNING
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     build_artifact_contract,
@@ -13,8 +14,10 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_inferred_config,
     get_session_metadata,
     load_input,
+    missing_config_warning,
     resolve_run_context,
     save_output,
     save_to_session,
@@ -41,6 +44,7 @@ def _normalize_mode(mode: str) -> str:
 async def _toolkit_duplicates(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     config: dict | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
@@ -53,6 +57,7 @@ async def _toolkit_duplicates(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     for key in (
         "output_bucket",
@@ -67,14 +72,16 @@ async def _toolkit_duplicates(
 
     config = coerce_config(config, "duplicates")
     config, runtime_meta = resolve_layered_config(
+        inferred=get_inferred_config(session_id, "duplicates"),
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )
-    df = load_input(gcs_path, session_id=session_id)
+    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
 
     base_cfg = config.get("duplicates", config)
     subset_cols = subset_columns or base_cfg.get("subset_columns")
     mode = _normalize_mode(base_cfg.get("mode", "flag"))
+    plotting_requested = bool(config.get("plotting", {}).get("run", True))
 
     # Build module config for the pipeline runner
     module_cfg = {
@@ -86,7 +93,7 @@ async def _toolkit_duplicates(
             "settings": {
                 "export": True,
                 "export_html": should_export_html(config),
-                "plotting": {"run": True},
+                "plotting": {"run": plotting_requested},
             },
         }
     }
@@ -139,11 +146,17 @@ async def _toolkit_duplicates(
     artifact_delivery: dict[str, Any] = empty_delivery_state()
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
     plot_delivery: dict[str, dict] = {}
-    warnings: list = []
-    warnings.extend(lifecycle["warnings"])
-    warnings.extend(runtime_warnings)
-    warnings.extend(runtime_meta["runtime_warnings"])
-    warnings.extend(export_delivery["warnings"])
+    status_warnings: list = []
+    advisory_warnings: list = []
+    status_warnings.extend(lifecycle["warnings"])
+    status_warnings.extend(runtime_warnings)
+    status_warnings.extend(runtime_meta["runtime_warnings"])
+    if not base_cfg:
+        advisory_warnings.append(INFER_CONFIG_REQUIRED_WARNING)
+    status_warnings.extend(export_delivery["warnings"])
+    config_warning = missing_config_warning(runtime_meta)
+    if config_warning:
+        advisory_warnings.append(config_warning)
 
     if should_export_html(config):
         artifact_path = f"exports/reports/duplicates/{run_id}_duplicates_report.html"
@@ -156,7 +169,7 @@ async def _toolkit_duplicates(
         )
         artifact_path = artifact_delivery["local_path"]
         artifact_url = artifact_delivery["url"]
-        warnings.extend(artifact_delivery["warnings"])
+        artifact_warnings = artifact_delivery["warnings"]
 
         xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
         xlsx_delivery = deliver_artifact(
@@ -167,7 +180,7 @@ async def _toolkit_duplicates(
             session_id=session_id,
         )
         xlsx_url = xlsx_delivery["url"]
-        warnings.extend(xlsx_delivery["warnings"])
+        artifact_warnings.extend(xlsx_delivery["warnings"])
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/duplicates"), Path(f"exports/plots/duplicates/{run_id}")]
@@ -182,9 +195,11 @@ async def _toolkit_duplicates(
                         session_id=session_id,
                     )
                     plot_delivery[plot_file.name] = delivered
-                    warnings.extend(delivered["warnings"])
+                    artifact_warnings.extend(delivered["warnings"])
                     if delivered["url"]:
                         plot_urls[plot_file.name] = delivered["url"]
+    else:
+        artifact_warnings = []
 
     artifact_contract = build_artifact_contract(
         export_url,
@@ -199,13 +214,18 @@ async def _toolkit_duplicates(
         plot_urls=plot_urls,
         expect_html=should_export_html(config),
         expect_xlsx=should_export_html(config),
-        expect_plots=should_export_html(config),
+        expect_plots=should_export_html(config) and plotting_requested,
         required_html=should_export_html(config),
         probe_local_paths=True,
     )
-    warnings.extend(artifact_contract["artifact_warnings"])
+    warnings = (
+        status_warnings
+        + advisory_warnings
+        + artifact_warnings
+        + artifact_contract["artifact_warnings"]
+    )
     base_status = "pass" if duplicate_count == 0 else "warn"
-    if warnings and base_status == "pass":
+    if status_warnings and base_status == "pass":
         base_status = "warn"
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]

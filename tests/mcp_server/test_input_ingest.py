@@ -1,0 +1,664 @@
+from io import BytesIO
+from pathlib import Path
+
+import pandas as pd
+import pytest
+from fastapi import UploadFile
+
+import analyst_toolkit.mcp_server.server as server_module
+from analyst_toolkit.mcp_server.input import registry as input_registry
+from analyst_toolkit.mcp_server.input.errors import InputError, InputPathDeniedError
+from analyst_toolkit.mcp_server.input.models import InputDescriptor
+from analyst_toolkit.mcp_server.input.storage import validate_server_visible_path
+from analyst_toolkit.mcp_server.state import StateStore
+from analyst_toolkit.mcp_server.tools import diagnostics as diagnostics_tool
+
+
+@pytest.fixture
+def clean_input_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANALYST_MCP_INPUT_ROOT", str(tmp_path / "inputs"))
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(tmp_path))
+    StateStore.clear()
+    input_registry.clear()
+    return tmp_path
+
+
+def _write_sample_csv(path: Path) -> None:
+    pd.DataFrame(
+        {
+            "species": ["Adelie", "Gentoo"],
+            "bill_length_mm": [39.1, 46.5],
+        }
+    ).to_csv(path, index=False)
+
+
+def test_inputs_upload_creates_session_and_descriptor(client, clean_input_env):
+    response = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={"load_into_session": "true"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pass"
+    assert payload["session_id"].startswith("sess_")
+    assert payload["input"]["source_type"] == "upload"
+    assert payload["summary"]["row_count"] == 1
+    assert payload["summary"]["column_count"] == 2
+
+
+def test_inputs_upload_rejects_payload_over_limit(client, monkeypatch, clean_input_env):
+    monkeypatch.setattr(
+        "analyst_toolkit.mcp_server.input.storage._MAX_UPLOAD_BYTES",
+        8,
+    )
+
+    response = client.post(
+        "/inputs/upload",
+        files={"file": ("dirty_penguins.csv", b"species,bill_length_mm\n", "text/csv")},
+        data={"load_into_session": "false"},
+    )
+
+    assert response.status_code == 413
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_PAYLOAD_TOO_LARGE"
+    assert isinstance(detail["trace_id"], str)
+
+
+def test_inputs_upload_rejects_empty_payload(client, clean_input_env):
+    response = client.post(
+        "/inputs/upload",
+        files={"file": ("empty.csv", b"", "text/csv")},
+        data={"load_into_session": "false"},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_EMPTY_UPLOAD"
+    assert isinstance(detail["trace_id"], str)
+
+
+@pytest.mark.asyncio
+async def test_http_upload_input_offloads_ingest_to_thread(monkeypatch, clean_input_env):
+    monkeypatch.setattr(server_module, "_require_http_auth", lambda request: "trace_http_upload")
+    calls: list[tuple[object, tuple, dict]] = []
+
+    async def fake_to_thread(func, /, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(server_module.asyncio, "to_thread", fake_to_thread)
+
+    descriptor = InputDescriptor(
+        input_id="input_deadbeefdeadbeef",
+        source_type="upload",
+        original_reference="dirty_penguins.csv",
+        resolved_reference=str(clean_input_env / "inputs" / "staged.csv"),
+        display_name="dirty_penguins.csv",
+        media_type="text/csv",
+        file_size_bytes=29,
+        sha256="abc123",
+        session_id="sess_upload",
+        run_id="upload_run",
+    )
+
+    def fake_ingest_uploaded_bytes(**kwargs):
+        return descriptor, pd.DataFrame({"species": ["Adelie"]}), "sess_upload"
+
+    monkeypatch.setattr(server_module, "ingest_uploaded_bytes", fake_ingest_uploaded_bytes)
+
+    upload = UploadFile(
+        file=BytesIO(b"species,bill_length_mm\nAdelie,39.1\n"),
+        filename="dirty_penguins.csv",
+        headers={"content-type": "text/csv"},
+    )
+    response = await server_module.upload_input(
+        request=object(),
+        file=upload,
+        session_id=None,
+        run_id="upload_run",
+        idempotency_key="upload_http",
+        load_into_session=True,
+    )
+
+    assert response.status_code == 200
+    payload = response.body.decode("utf-8")
+    assert '"status":"pass"' in payload
+    assert '"session_id":"sess_upload"' in payload
+    assert calls
+    func, args, kwargs = calls[0]
+    assert func is fake_ingest_uploaded_bytes
+    assert not args
+    assert kwargs["filename"] == "dirty_penguins.csv"
+    assert kwargs["run_id"] == "upload_run"
+    assert kwargs["idempotency_key"] == "upload_http"
+
+
+def test_inputs_upload_reuses_input_id_for_same_payload(client, clean_input_env):
+    response_one = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={"load_into_session": "false"},
+    )
+    response_two = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={"load_into_session": "false"},
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["status"] == "pass"
+    assert response_two.json()["status"] == "pass"
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+
+
+def test_inputs_upload_reuses_session_for_anonymous_idempotent_retry(client, clean_input_env):
+    response_one = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-retry",
+            "run_id": "retry_upload_run",
+        },
+    )
+    response_two = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-retry",
+            "run_id": "retry_upload_run",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+    assert response_one.json()["session_id"] == response_two.json()["session_id"]
+
+
+def test_inputs_upload_conflict_does_not_mutate_original_session_or_descriptor(
+    client, clean_input_env
+):
+    response_one = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nAdelie,39.1\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-conflict",
+            "run_id": "retry_upload_conflict_run",
+        },
+    )
+    assert response_one.status_code == 200
+    payload_one = response_one.json()
+    input_id = payload_one["input"]["input_id"]
+    session_id = payload_one["session_id"]
+
+    response_two = client.post(
+        "/inputs/upload",
+        files={
+            "file": ("dirty_penguins.csv", b"species,bill_length_mm\nGentoo,46.5\n", "text/csv")
+        },
+        data={
+            "load_into_session": "true",
+            "idempotency_key": "stable-upload-conflict",
+            "run_id": "retry_upload_conflict_run",
+        },
+    )
+
+    assert response_two.status_code == 409
+    detail = response_two.json()["detail"]
+    assert detail["code"] == "INPUT_CONFLICT"
+    assert input_registry.get_session_input_id(session_id) == input_id
+    descriptor = input_registry.get_descriptor(input_id)
+    assert descriptor is not None
+    assert descriptor.sha256 == payload_one["input"]["sha256"]
+    assert descriptor.session_id == session_id
+    session_df = StateStore.get(session_id)
+    assert session_df is not None
+    assert session_df.iloc[0]["species"] == "Adelie"
+
+
+def test_inputs_register_server_path_loads_into_session(client, clean_input_env):
+    tmp_path = clean_input_env
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": str(source), "load_into_session": True},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pass"
+    assert payload["input"]["source_type"] == "server_path"
+    assert payload["session_id"].startswith("sess_")
+    assert payload["summary"]["row_count"] == 2
+
+
+def test_inputs_register_gcs_source_without_session_load(client, clean_input_env):
+    response = client.post(
+        "/inputs/register",
+        json={"uri": "gs://bucket/dirty_penguins.csv", "load_into_session": False},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pass"
+    assert payload["input"]["source_type"] == "gcs"
+    assert payload["input"]["resolved_reference"] == "gs://bucket/dirty_penguins.csv"
+    assert payload["session_id"] == ""
+    assert payload["summary"] == {}
+
+
+def test_inputs_register_reuses_input_id_with_stable_idempotency_key(client, clean_input_env):
+    tmp_path = clean_input_env
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key",
+        },
+    )
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["status"] == "pass"
+    assert response_two.json()["status"] == "pass"
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+
+
+def test_inputs_register_reuses_session_for_anonymous_idempotent_retry(client, clean_input_env):
+    tmp_path = clean_input_env
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+    assert response_one.json()["session_id"] == response_two.json()["session_id"]
+
+
+def test_inputs_register_rejects_conflicting_explicit_session_rebind_and_preserves_retry_binding(
+    client, clean_input_env
+):
+    tmp_path = clean_input_env
+
+    source_one = tmp_path / "dirty_penguins.csv"
+    source_two = tmp_path / "different_penguins.csv"
+    _write_sample_csv(source_one)
+    pd.DataFrame(
+        {
+            "species": ["Chinstrap"],
+            "bill_length_mm": [50.0],
+        }
+    ).to_csv(source_two, index=False)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+    assert response_one.status_code == 200
+    original_session_id = response_one.json()["session_id"]
+
+    competing_response = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_two),
+            "load_into_session": True,
+            "session_id": original_session_id,
+            "run_id": "other_register_run",
+        },
+    )
+    assert competing_response.status_code == 409
+    assert competing_response.json()["detail"]["code"] == "INPUT_CONFLICT"
+
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": True,
+            "idempotency_key": "stable-register-session-key",
+            "run_id": "retry_register_run",
+        },
+    )
+
+    assert response_two.status_code == 200
+    assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
+    assert response_two.json()["session_id"] == original_session_id
+    assert StateStore.get_metadata(original_session_id) is not None
+
+
+def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(
+    client, clean_input_env
+):
+    tmp_path = clean_input_env
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response_one = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key-a",
+        },
+    )
+    response_two = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source),
+            "load_into_session": False,
+            "idempotency_key": "stable-register-key-b",
+        },
+    )
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 200
+    assert response_one.json()["status"] == "pass"
+    assert response_two.json()["status"] == "pass"
+    assert response_one.json()["input"]["input_id"] != response_two.json()["input"]["input_id"]
+
+
+def test_inputs_register_rejects_path_outside_allowed_roots(client, monkeypatch, clean_input_env):
+    tmp_path = clean_input_env
+    allowed_dir = tmp_path / "allowed"
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(allowed_dir))
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": str(source), "load_into_session": True},
+    )
+    assert response.status_code == 400
+    error_msg = response.json()["detail"]["error"]
+    assert "not visible to the MCP runtime" in error_msg
+    # By default, allowed roots are NOT disclosed in the client-facing error
+    assert str(allowed_dir) not in error_msg
+
+
+def test_inputs_register_rejects_unsupported_local_format(client, clean_input_env):
+    tmp_path = clean_input_env
+    source = tmp_path / "dirty_penguins.json"
+    source.write_text('{"species":"Adelie"}', encoding="utf-8")
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": str(source), "load_into_session": True},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_NOT_SUPPORTED"
+    assert "Unsupported file format" in detail["error"]
+    assert isinstance(detail["trace_id"], str)
+
+
+def test_inputs_register_rejects_gdrive_source(client, clean_input_env):
+    response = client.post(
+        "/inputs/register",
+        json={"uri": "gdrive://folder/dirty_penguins.csv", "load_into_session": False},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_NOT_SUPPORTED"
+    assert "Google Drive inputs are not implemented yet" in detail["error"]
+    assert isinstance(detail["trace_id"], str)
+
+
+def test_inputs_register_returns_conflict_for_descriptor_reuse_mismatch(client, clean_input_env):
+    tmp_path = clean_input_env
+
+    source_one = tmp_path / "dirty_penguins.csv"
+    source_two = tmp_path / "clean_penguins.csv"
+    _write_sample_csv(source_one)
+    _write_sample_csv(source_two)
+
+    first = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": False,
+            "idempotency_key": "shared-key",
+        },
+    )
+    second = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_two),
+            "load_into_session": False,
+            "idempotency_key": "shared-key",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    detail = second.json()["detail"]
+    assert detail["code"] == "INPUT_CONFLICT"
+    assert isinstance(detail["trace_id"], str)
+
+
+def test_inputs_register_conflict_does_not_mutate_original_session_or_descriptor(
+    client, clean_input_env
+):
+    tmp_path = clean_input_env
+
+    source_one = tmp_path / "dirty_penguins.csv"
+    source_two = tmp_path / "clean_penguins.csv"
+    _write_sample_csv(source_one)
+    pd.DataFrame(
+        {
+            "species": ["Chinstrap"],
+            "bill_length_mm": [50.0],
+        }
+    ).to_csv(source_two, index=False)
+
+    first = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_one),
+            "load_into_session": True,
+            "idempotency_key": "shared-session-key",
+            "run_id": "register_conflict_run",
+        },
+    )
+    assert first.status_code == 200
+    first_payload = first.json()
+    input_id = first_payload["input"]["input_id"]
+    session_id = first_payload["session_id"]
+
+    second = client.post(
+        "/inputs/register",
+        json={
+            "uri": str(source_two),
+            "load_into_session": True,
+            "idempotency_key": "shared-session-key",
+            "run_id": "register_conflict_run",
+        },
+    )
+
+    assert second.status_code == 409
+    detail = second.json()["detail"]
+    assert detail["code"] == "INPUT_CONFLICT"
+    assert input_registry.get_session_input_id(session_id) == input_id
+    descriptor = input_registry.get_descriptor(input_id)
+    assert descriptor is not None
+    assert descriptor.original_reference == str(source_one)
+    assert descriptor.session_id == session_id
+    session_df = StateStore.get(session_id)
+    assert session_df is not None
+    assert session_df.iloc[0]["species"] == "Adelie"
+
+
+def test_get_input_descriptor_tool_returns_not_found_for_unknown_input_id(client, clean_input_env):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 903,
+        "method": "tools/call",
+        "params": {
+            "name": "get_input_descriptor",
+            "arguments": {"input_id": "input_deadbeefcafebabe"},
+        },
+    }
+
+    response = client.post("/rpc", json=payload)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "error"
+    assert result["module"] == "get_input_descriptor"
+    assert result["code"] == "INPUT_NOT_FOUND"
+    assert isinstance(result["trace_id"], str)
+
+
+def test_inputs_register_falls_back_to_allowlisted_error_code(client, monkeypatch, clean_input_env):
+    class FutureInputError(InputError):
+        code = "INPUT_FUTURE_MODE"
+
+    def raise_future_error(*args, **kwargs):
+        raise FutureInputError("Unexpected future input error")
+
+    monkeypatch.setattr(server_module, "register_input_source", raise_future_error)
+
+    response = client.post(
+        "/inputs/register",
+        json={"uri": "gs://bucket/dirty_penguins.csv", "load_into_session": False},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "INPUT_ERROR"
+    assert detail["error"] == "Unexpected future input error"
+    assert isinstance(detail["trace_id"], str)
+
+
+def test_register_input_tool_and_diagnostics_input_id_flow(client, mocker, clean_input_env):
+    tmp_path = clean_input_env
+    mocker.patch.object(diagnostics_tool, "run_diag_pipeline", return_value=None)
+    mocker.patch.object(diagnostics_tool, "save_output", return_value="gs://dummy/diagnostics.csv")
+    mocker.patch.object(diagnostics_tool, "append_to_run_history", return_value=None)
+    mocker.patch.object(diagnostics_tool, "should_export_html", return_value=False)
+
+    source = tmp_path / "dirty_penguins.csv"
+    _write_sample_csv(source)
+
+    register_payload = {
+        "jsonrpc": "2.0",
+        "id": 901,
+        "method": "tools/call",
+        "params": {
+            "name": "register_input",
+            "arguments": {"uri": str(source), "load_into_session": True},
+        },
+    }
+    register_response = client.post("/rpc", json=register_payload)
+    assert register_response.status_code == 200
+    register_result = register_response.json()["result"]
+    assert register_result["status"] == "pass"
+    input_id = register_result["input"]["input_id"]
+
+    diagnostics_payload = {
+        "jsonrpc": "2.0",
+        "id": 902,
+        "method": "tools/call",
+        "params": {
+            "name": "diagnostics",
+            "arguments": {
+                "input_id": input_id,
+                "export_path": str(tmp_path / "diagnostics.csv"),
+            },
+        },
+    }
+    diagnostics_response = client.post("/rpc", json=diagnostics_payload)
+    assert diagnostics_response.status_code == 200
+    diagnostics_result = diagnostics_response.json()["result"]
+    assert diagnostics_result["status"] in {"pass", "warn"}
+    assert diagnostics_result["module"] == "diagnostics"
+    assert diagnostics_result["summary"]["row_count"] == 2
+
+
+def test_validate_server_visible_path_redacts_roots_by_default(monkeypatch, tmp_path):
+    allowed = tmp_path / "my_inputs"
+    allowed.mkdir()
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(allowed))
+    monkeypatch.delenv("ANALYST_MCP_DISCLOSE_INPUT_ROOTS", raising=False)
+
+    with pytest.raises(InputPathDeniedError) as exc_info:
+        validate_server_visible_path("/some/other/path/data.csv")
+
+    msg = str(exc_info.value)
+    assert "not visible to the MCP runtime" in msg
+    assert "ANALYST_MCP_ALLOWED_INPUT_ROOTS" in msg
+    # Roots must NOT be disclosed in the client error by default
+    assert str(allowed) not in msg
+    assert "Allowed input roots" not in msg
+
+
+def test_validate_server_visible_path_discloses_roots_when_opted_in(monkeypatch, tmp_path):
+    allowed = tmp_path / "my_inputs"
+    allowed.mkdir()
+    monkeypatch.setenv("ANALYST_MCP_ALLOWED_INPUT_ROOTS", str(allowed))
+    monkeypatch.setenv("ANALYST_MCP_DISCLOSE_INPUT_ROOTS", "1")
+
+    with pytest.raises(InputPathDeniedError) as exc_info:
+        validate_server_visible_path("/some/other/path/data.csv")
+
+    msg = str(exc_info.value)
+    assert "Allowed input roots" in msg
+    assert str(allowed) in msg

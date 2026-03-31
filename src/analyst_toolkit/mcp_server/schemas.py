@@ -8,6 +8,8 @@ and document tool inputs.
 
 from typing import TypedDict
 
+from analyst_toolkit.mcp_server.input.models import INPUT_ID_HEX_LENGTH, INPUT_ID_PATTERN
+
 
 class ToolResponse(TypedDict):
     status: str  # "pass" | "warn" | "fail" | "error"
@@ -24,14 +26,34 @@ class ToolResponse(TypedDict):
 _GCS_PATH_PROP = {
     "gcs_path": {
         "type": "string",
-        "description": "Local file path (.csv / .parquet) or GCS URI (gs://bucket/path) to load data from. Optional if session_id is used.",
+        "description": (
+            "Local file path (.csv / .parquet) or GCS URI (gs://bucket/path) to load "
+            "data from. Optional only when exactly one of session_id or input_id is used "
+            "instead."
+        ),
     }
 }
 
 _SESSION_ID_PROP = {
     "session_id": {
         "type": "string",
-        "description": "Optional: In-memory session identifier from a previous tool run. If provided, gcs_path is ignored.",
+        "description": (
+            "Optional: Identifier for an existing session/run context backed by the active "
+            "session store. Use this instead of gcs_path or input_id; the selectors are "
+            "mutually exclusive."
+        ),
+    }
+}
+
+INPUT_ID_PROP = {
+    "input_id": {
+        "type": "string",
+        "pattern": INPUT_ID_PATTERN,
+        "description": (
+            "Optional: Canonical server-managed input reference returned by input "
+            f"ingest/register flows. Uses a stable {INPUT_ID_HEX_LENGTH}-hex suffix collision budget. "
+            "Use this instead of gcs_path or session_id; the selectors are mutually exclusive."
+        ),
     }
 }
 
@@ -83,6 +105,7 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
     props = {
         **_GCS_PATH_PROP,
         **_SESSION_ID_PROP,
+        **INPUT_ID_PROP,
         **_CONFIG_PROP,
         **_RUNTIME_PROP,
         **_RUN_ID_PROP,
@@ -93,9 +116,10 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
     return {
         "type": "object",
         "properties": props,
-        "anyOf": [
+        "oneOf": [
             {"required": ["gcs_path"]},
             {"required": ["session_id"]},
+            {"required": ["input_id"]},
         ],
     }
 

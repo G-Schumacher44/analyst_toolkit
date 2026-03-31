@@ -26,6 +26,7 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
     normalize_runtime_overlay,
     runtime_to_tool_overrides,
 )
+from analyst_toolkit.mcp_server.schemas import INPUT_ID_PROP
 from analyst_toolkit.mcp_server.tools.imputation import _toolkit_imputation
 from analyst_toolkit.mcp_server.tools.infer_configs import _toolkit_infer_configs
 from analyst_toolkit.mcp_server.tools.normalization import _toolkit_normalization
@@ -43,15 +44,27 @@ def _sanitize_dashboard_step_summary(summary: dict | None) -> dict:
         return {}
 
     sanitized = {k: v for k, v in summary.items() if k != "error"}
-    if "error" in summary:
+    if summary.get("error_code"):
+        sanitized["error_code"] = summary["error_code"]
+    elif "error" in summary:
         sanitized["error_code"] = "AUTO_HEAL_STEP_FAILED"
+    if summary.get("trace_id"):
+        sanitized["trace_id"] = summary["trace_id"]
+    elif "error" in summary:
         sanitized["trace_id"] = new_trace_id()
     return sanitized
+
+
+def _step_failure_summary(step: str, error_code: str, exc: Exception) -> dict:
+    trace_id = new_trace_id()
+    logger.exception("auto_heal %s step failed (trace_id=%s)", step, trace_id, exc_info=exc)
+    return {"error_code": error_code, "trace_id": trace_id}
 
 
 async def _run_auto_heal_pipeline(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
 ) -> dict:
@@ -64,6 +77,7 @@ async def _run_auto_heal_pipeline(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
@@ -71,6 +85,7 @@ async def _run_auto_heal_pipeline(
     infer_res = await _toolkit_infer_configs(
         gcs_path=gcs_path,
         session_id=session_id,
+        input_id=input_id,
         runtime=runtime_cfg,
         run_id=run_id,
         modules=["normalization", "imputation"],
@@ -81,6 +96,7 @@ async def _run_auto_heal_pipeline(
 
     configs = infer_res.get("configs", {})
     current_session_id = infer_res.get("session_id")
+    run_id = infer_res.get("run_id") or run_id
 
     summary = {}
     failed_steps: list[str] = []
@@ -106,7 +122,9 @@ async def _run_auto_heal_pipeline(
             if _is_terminal_failure(norm_res.get("status")):
                 failed_steps.append("normalization")
         except Exception as e:
-            summary["normalization"] = {"error": str(e)}
+            failure = _step_failure_summary("normalization", "NORMALIZATION_FAILED", e)
+            summary["normalization"] = failure
+            norm_res = {"status": "error", "summary": failure}
             failed_steps.append("normalization")
 
     # 3. Apply Imputation if inferred
@@ -136,7 +154,9 @@ async def _run_auto_heal_pipeline(
                     failed_steps.append("imputation")
 
         except Exception as e:
-            summary["imputation"] = {"error": str(e)}
+            failure = _step_failure_summary("imputation", "IMPUTATION_FAILED", e)
+            summary["imputation"] = failure
+            imp_res = {"status": "error", "summary": failure}
             failed_steps.append("imputation")
 
     # Final Metadata
@@ -230,11 +250,26 @@ async def _run_auto_heal_pipeline(
     else:
         artifact_path = ""
 
+    final_export_url = imp_res.get("export_url") or norm_res.get("export_url", "")
+    final_export_path = ""
+    child_plot_urls = imp_res.get("plot_urls") or norm_res.get("plot_urls", {})
+    child_plot_matrix = imp_res.get("artifact_matrix", {}).get("plots", {}) or norm_res.get(
+        "artifact_matrix", {}
+    ).get("plots", {})
+    for child in (imp_res, norm_res):
+        if child.get("export_url"):
+            matrix = child.get("artifact_matrix", {})
+            final_export_path = matrix.get("data_export", {}).get("path", "")
+            break
+
     artifact_contract = build_artifact_contract(
-        imp_res.get("export_url") or norm_res.get("export_url", ""),
+        final_export_url,
+        export_path=final_export_path,
         artifact_path=artifact_path,
         artifact_url=artifact_url,
+        plot_urls=child_plot_urls,
         expect_html=export_html,
+        expect_plots=bool(child_plot_matrix.get("expected")) or bool(child_plot_urls),
         required_html=False,
         probe_local_paths=True,
     )
@@ -249,8 +284,8 @@ async def _run_auto_heal_pipeline(
         "summary": {**summary, "row_count": row_count},
         "artifact_path": artifact_path,
         "artifact_url": artifact_url,
-        "export_url": imp_res.get("export_url") or norm_res.get("export_url", ""),
-        "plot_urls": imp_res.get("plot_urls") or norm_res.get("plot_urls", {}),
+        "export_url": final_export_url,
+        "plot_urls": child_plot_urls,
         "failed_steps": failed_steps,
         "destination_delivery": {
             "html_report": compact_destination_metadata(artifact_delivery["destinations"]),
@@ -296,12 +331,14 @@ async def _auto_heal_worker(
     session_id: str | None,
     runtime: dict | str | None,
     run_id: str,
+    input_id: str | None,
 ):
     JobStore.mark_running(job_id)
     try:
         result = await _run_auto_heal_pipeline(
             gcs_path=gcs_path,
             session_id=session_id,
+            input_id=input_id,
             runtime=runtime,
             run_id=run_id,
         )
@@ -330,6 +367,7 @@ async def _auto_heal_worker(
 async def _toolkit_auto_heal(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
     async_mode: bool = False,
@@ -342,6 +380,7 @@ async def _toolkit_auto_heal(
     normalized_runtime = runtime_cfg if runtime_cfg else runtime
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
@@ -352,13 +391,21 @@ async def _toolkit_auto_heal(
             inputs={
                 "gcs_path": gcs_path,
                 "session_id": session_id,
+                "input_id": input_id,
                 "runtime": normalized_runtime,
                 "run_id": run_id,
             },
         )
         try:
             asyncio.create_task(
-                _auto_heal_worker(job_id, gcs_path, session_id, normalized_runtime, run_id)
+                _auto_heal_worker(
+                    job_id=job_id,
+                    gcs_path=gcs_path,
+                    session_id=session_id,
+                    runtime=normalized_runtime,
+                    run_id=run_id,
+                    input_id=input_id,
+                )
             )
         except Exception as exc:
             JobStore.mark_failed(
@@ -391,6 +438,7 @@ async def _toolkit_auto_heal(
     return await _run_auto_heal_pipeline(
         gcs_path=gcs_path,
         session_id=session_id,
+        input_id=input_id,
         runtime=normalized_runtime,
         run_id=run_id,
     )
@@ -407,6 +455,7 @@ _INPUT_SCHEMA = {
             "type": "string",
             "description": "Optional: In-memory session identifier.",
         },
+        **INPUT_ID_PROP,
         "run_id": {
             "type": "string",
             "description": "Optional run identifier.",
@@ -428,6 +477,7 @@ _INPUT_SCHEMA = {
     "anyOf": [
         {"required": ["gcs_path"]},
         {"required": ["session_id"]},
+        {"required": ["input_id"]},
     ],
 }
 

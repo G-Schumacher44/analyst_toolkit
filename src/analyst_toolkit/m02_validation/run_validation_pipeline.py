@@ -1,5 +1,5 @@
 """
-🚀 Module: run_validation_pipeline.py
+Module: run_validation_pipeline.py
 
 Runner script for the M02 Validation module of the Analyst Toolkit.
 
@@ -96,13 +96,13 @@ def run_validation_pipeline(
             ]
             if failed_checks:
                 error_message = (
-                    "Validation Gatekeeper FAILED. The following checks did not pass:\n- "
+                    "Validation Gatekeeper failed. The following checks did not pass:\n- "
                     + "\n- ".join(failed_checks)
                 )
                 logging.error(error_message)
                 raise ValueError(error_message)
             else:
-                logging.info("✅ Validation Gatekeeper PASSED. All checks are clean.")
+                logging.info("Validation Gatekeeper passed. All checks are clean.")
 
         settings = module_cfg.get("settings", {})
         if settings.get("export", True):

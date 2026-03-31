@@ -3,5 +3,7 @@
 #
 # Canonical dependency source:
 # - core + extras live in pyproject.toml
+# - the mcp extra pins analyst_toolkit_deploy to a GitHub Release wheel, not a git checkout
+# - bump the release URL in pyproject.toml only after that asset is published upstream
 # - this file remains as a thin wrapper for Docker/CI and operator familiarity
 .[mcp]

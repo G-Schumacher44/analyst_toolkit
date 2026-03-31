@@ -1,5 +1,5 @@
 """
-🚀 Module: run_diag_pipeline.py
+Module: run_diag_pipeline.py
 
 Runner script for the M01 Diagnostics module of the Analyst Toolkit.
 
@@ -30,15 +30,6 @@ from analyst_toolkit.m00_utils.export_utils import (
 )
 from analyst_toolkit.m00_utils.load_data import load_csv
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
-from analyst_toolkit.m08_visuals.distributions import (
-    plot_categorical_distribution,
-    plot_continuous_distribution,
-)
-from analyst_toolkit.m08_visuals.summary_plots import (
-    plot_correlation_heatmap,
-    plot_dtype_summary,
-    plot_missingness,
-)
 
 
 def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
@@ -49,6 +40,26 @@ def configure_logging(notebook: bool = True, logging_mode: str = "auto"):
         logging.basicConfig(
             level=level, format="%(asctime)s - %(levelname)s - %(message)s", force=True
         )
+
+
+def _load_plotting_functions():
+    from analyst_toolkit.m08_visuals.distributions import (
+        plot_categorical_distribution,
+        plot_continuous_distribution,
+    )
+    from analyst_toolkit.m08_visuals.summary_plots import (
+        plot_correlation_heatmap,
+        plot_dtype_summary,
+        plot_missingness,
+    )
+
+    return {
+        "plot_categorical_distribution": plot_categorical_distribution,
+        "plot_continuous_distribution": plot_continuous_distribution,
+        "plot_correlation_heatmap": plot_correlation_heatmap,
+        "plot_dtype_summary": plot_dtype_summary,
+        "plot_missingness": plot_missingness,
+    }
 
 
 def run_diag_pipeline(
@@ -83,14 +94,15 @@ def run_diag_pipeline(
         if plotting_cfg.get("run", False):
             logging.info("Generating diagnostic plots...")
             save_dir = Path(plotting_cfg.get("save_dir", "exports/plots/diagnostics/")) / run_id
+            plotting = _load_plotting_functions()
 
             # Generate high-level summary plots (Fast and high-value)
             plot_paths["Summary Plots"] = [
                 p
                 for p in [
-                    plot_missingness(df, save_dir, run_id),
-                    plot_correlation_heatmap(df, save_dir, run_id),
-                    plot_dtype_summary(df, save_dir, run_id),
+                    plotting["plot_missingness"](df, save_dir, run_id),
+                    plotting["plot_correlation_heatmap"](df, save_dir, run_id),
+                    plotting["plot_dtype_summary"](df, save_dir, run_id),
                 ]
                 if p is not None
             ]
@@ -111,10 +123,11 @@ def run_diag_pipeline(
                     )
 
                 dist_num_paths = [
-                    plot_continuous_distribution(df[col], save_dir, run_id) for col in numeric_cols
+                    plotting["plot_continuous_distribution"](df[col], save_dir, run_id)
+                    for col in numeric_cols
                 ]
                 dist_cat_paths = [
-                    plot_categorical_distribution(df[col], save_dir, run_id)
+                    plotting["plot_categorical_distribution"](df[col], save_dir, run_id)
                     for col in categorical_cols
                 ]
 

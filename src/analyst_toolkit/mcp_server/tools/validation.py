@@ -6,7 +6,12 @@ from analyst_toolkit.m02_validation.run_validation_pipeline import (
     run_validation_pipeline,
 )
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
-from analyst_toolkit.mcp_server.config_normalizers import normalize_validation_config
+from analyst_toolkit.mcp_server.config_normalizers import (
+    INFER_CONFIG_REQUIRED_WARNING,
+    adapt_validation_config_to_dataframe,
+    has_actionable_validation_config,
+    normalize_validation_config,
+)
 from analyst_toolkit.mcp_server.io import (
     append_to_run_history,
     build_artifact_contract,
@@ -16,6 +21,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_inferred_config,
     get_session_metadata,
     load_input,
     make_json_safe,
@@ -42,6 +48,7 @@ from analyst_toolkit.mcp_server.schemas import base_input_schema
 async def _toolkit_validation(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     config: dict | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
@@ -53,6 +60,7 @@ async def _toolkit_validation(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     for key in (
         "output_bucket",
@@ -67,11 +75,13 @@ async def _toolkit_validation(
 
     config = coerce_config(config, "validation")
     config, runtime_meta = resolve_layered_config(
+        inferred=get_inferred_config(session_id, "validation"),
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )
     base_cfg = normalize_validation_config(config)
-    df = load_input(gcs_path, session_id=session_id)
+    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+    base_cfg = adapt_validation_config_to_dataframe(base_cfg, df)
 
     # Ensure it's in a session for the pipeline
     if not session_id:
@@ -134,18 +144,22 @@ async def _toolkit_validation(
                     violations_found.append(check_name)
                     violations_detail[check_name] = make_json_safe(check.get("details", {}))
 
-    passed = len(violations_found) == 0
+    has_validation_config = has_actionable_validation_config(base_cfg)
+    passed = has_validation_config and len(violations_found) == 0
 
     artifact_path = ""
     artifact_url = ""
     xlsx_url = ""
     artifact_delivery: dict[str, Any] = empty_delivery_state()
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
-    warnings: list = []
-    warnings.extend(lifecycle["warnings"])
-    warnings.extend(runtime_warnings)
-    warnings.extend(runtime_meta["runtime_warnings"])
-    warnings.extend(export_delivery["warnings"])
+    status_warnings: list = []
+    advisory_warnings: list = []
+    status_warnings.extend(lifecycle["warnings"])
+    status_warnings.extend(runtime_warnings)
+    status_warnings.extend(runtime_meta["runtime_warnings"])
+    if not has_validation_config:
+        advisory_warnings.append(INFER_CONFIG_REQUIRED_WARNING)
+    status_warnings.extend(export_delivery["warnings"])
     if should_export_html(config):
         artifact_path = f"exports/reports/validation/{run_id}_validation_report.html"
         artifact_delivery = deliver_artifact(
@@ -157,7 +171,7 @@ async def _toolkit_validation(
         )
         artifact_path = artifact_delivery["local_path"]
         artifact_url = artifact_delivery["url"]
-        warnings.extend(artifact_delivery["warnings"])
+        status_warnings.extend(artifact_delivery["warnings"])
 
         xlsx_path = f"exports/reports/validation/{run_id}_validation_report.xlsx"
         xlsx_delivery = deliver_artifact(
@@ -168,7 +182,7 @@ async def _toolkit_validation(
             session_id=session_id,
         )
         xlsx_url = xlsx_delivery["url"]
-        warnings.extend(xlsx_delivery["warnings"])
+        status_warnings.extend(xlsx_delivery["warnings"])
 
     artifact_contract = build_artifact_contract(
         export_url,
@@ -182,8 +196,11 @@ async def _toolkit_validation(
         required_html=should_export_html(config),
         probe_local_paths=True,
     )
-    warnings.extend(artifact_contract["artifact_warnings"])
-    base_status = "fail" if violations_found else ("warn" if warnings else "pass")
+    warnings = status_warnings + advisory_warnings + artifact_contract["artifact_warnings"]
+    if not has_validation_config:
+        base_status = "warn"
+    else:
+        base_status = "fail" if violations_found else ("warn" if status_warnings else "pass")
     status = fold_status_with_artifacts(
         base_status, artifact_contract["missing_required_artifacts"]
     )

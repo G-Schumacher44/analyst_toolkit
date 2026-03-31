@@ -71,7 +71,9 @@ def detect_outliers(df: pd.DataFrame, config: dict) -> dict:
                     "outlier_examples": str(outlier_values[:5]),
                 }
             )
-            outlier_flags[f"{col}_{method}_outlier"] = is_outlier
+            outlier_flags[f"{col}_{method}_outlier"] = is_outlier.reindex(
+                df.index, fill_value=False
+            )
 
     outlier_log_df = pd.DataFrame(outlier_log_entries)
 

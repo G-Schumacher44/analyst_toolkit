@@ -6,12 +6,28 @@ from pathlib import Path
 
 import yaml
 
+from analyst_toolkit.mcp_server.config_models import CONFIG_MODELS
+from analyst_toolkit.mcp_server.config_normalizers import normalize_module_config
+from analyst_toolkit.mcp_server.io import coerce_config
 from analyst_toolkit.mcp_server.templates import (
     get_golden_configs,
     list_config_template_specs,
     list_template_resources,
     read_template_resource,
 )
+from analyst_toolkit.mcp_server.tools.auto_heal import _INPUT_SCHEMA as AUTO_HEAL_INPUT_SCHEMA
+from analyst_toolkit.mcp_server.tools.data_dictionary import (
+    DATA_DICTIONARY_INPUT_SCHEMA,
+)
+from analyst_toolkit.mcp_server.tools.preflight_config import (
+    _shape_warnings,
+    _unknown_effective_keys,
+)
+
+_RUNNER_COERCE_KEYS = {
+    # Historical runner/public key for the outliers module uses outlier_detection.
+    "outliers": "outlier_detection",
+}
 
 
 def test_template_resource_uris_cover_template_files():
@@ -23,7 +39,9 @@ def test_template_resource_uris_cover_template_files():
     }
     expected_golden = {
         f"analyst://templates/golden/{p.name}"
-        for p in sorted(Path("config/golden_templates").glob("*.yaml"))
+        for p in sorted(
+            (Path(__file__).resolve().parent.parent / "config" / "golden_templates").glob("*.yaml")
+        )
         if p.is_file()
     }
 
@@ -32,6 +50,14 @@ def test_template_resource_uris_cover_template_files():
     # These are concrete local/internal run configs, not user-facing template resources.
     assert "analyst://templates/config/nightly_silver_qa_config.yaml" not in uris
     assert "analyst://templates/config/run_toolkit_config.yaml" not in uris
+    assert "analyst://templates/config/handling_config_template.yaml" not in uris
+    assert "analyst://templates/config/certification_config_template.yaml" not in uris
+
+
+def test_template_specs_resolve_to_bundled_package_resources():
+    for spec in list_config_template_specs():
+        assert spec.path.is_file(), spec.filename
+        assert "config_templates" in str(spec.path), spec.filename
 
 
 def test_all_template_resources_parse_as_yaml_mapping():
@@ -59,3 +85,40 @@ def test_golden_templates_have_known_top_level_sections():
         unknown = set(cfg.keys()) - allowed_keys
         assert not unknown, f"{name} has unknown top-level sections: {sorted(unknown)}"
         assert any(k != "description" for k in cfg), name
+
+
+def test_public_module_templates_match_current_config_contracts():
+    for spec in list_config_template_specs():
+        if not spec.tool or not spec.config_root or spec.tool not in CONFIG_MODELS:
+            continue
+
+        raw = yaml.safe_load(spec.path.read_text(encoding="utf-8"))
+        assert isinstance(raw, dict), spec.filename
+        assert isinstance(raw.get(spec.config_root), dict), spec.filename
+
+        module_name = spec.tool
+        coerce_key = _RUNNER_COERCE_KEYS.get(module_name, module_name)
+        coerced = coerce_config(raw, coerce_key)
+        normalized = normalize_module_config(module_name, coerced)
+
+        assert not _shape_warnings(module_name, normalized), spec.filename
+        assert not _unknown_effective_keys(module_name, normalized), spec.filename
+        CONFIG_MODELS[module_name].model_validate(normalized)
+
+
+def test_workflow_request_templates_match_public_tool_input_contracts():
+    cases = [
+        ("auto_heal_request_template.yaml", AUTO_HEAL_INPUT_SCHEMA),
+        ("data_dictionary_request_template.yaml", DATA_DICTIONARY_INPUT_SCHEMA),
+    ]
+
+    for filename, schema in cases:
+        raw = yaml.safe_load(
+            (Path(__file__).resolve().parent.parent / "config" / filename).read_text()
+        )
+        assert isinstance(raw, dict), filename
+        assert "properties" in schema, filename
+        assert isinstance(schema.get("properties"), dict), filename
+        assert all(key in schema.get("properties", {}) for key in raw), filename
+        assert "runtime" in raw, filename
+        assert not any(key in raw for key in ("auto_heal", "data_dictionary")), filename

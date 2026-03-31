@@ -38,6 +38,7 @@ def _allowed_keys(module_name: str) -> set[str]:
     if module_name == "final_audit":
         return common | {
             "final_audit",
+            "input_df_path",
             "raw_data_path",
             "final_edits",
             "certification",
@@ -97,6 +98,7 @@ def _unknown_effective_keys(module_name: str, config: dict[str, Any]) -> list[st
                 "value_mappings",
                 "fuzzy_matching",
                 "parse_datetimes",
+                "preview_columns",
                 "coerce_dtypes",
             }
             _add_unknown("rules", rules, rules_allowed)
@@ -124,6 +126,7 @@ def _unknown_effective_keys(module_name: str, config: dict[str, Any]) -> list[st
             "run",
             "logging",
             "input_path",
+            "input_df_path",
             "settings",
             "raw_data_path",
             "final_edits",

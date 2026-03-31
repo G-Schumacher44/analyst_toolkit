@@ -1,0 +1,233 @@
+"""Input ingest orchestration for the MCP server."""
+
+from __future__ import annotations
+
+import hashlib
+import mimetypes
+import uuid
+from pathlib import Path
+
+import pandas as pd
+
+from analyst_toolkit.mcp_server.input.adapters import resolve_source_reference
+from analyst_toolkit.mcp_server.input.errors import InputConflictError, InputNotFoundError
+from analyst_toolkit.mcp_server.input.loaders import load_dataframe_from_descriptor
+from analyst_toolkit.mcp_server.input.models import (
+    INPUT_ID_HEX_LENGTH,
+    INPUT_ID_PREFIX,
+    InputDescriptor,
+    InputSourceType,
+)
+from analyst_toolkit.mcp_server.input.registry import (
+    bind_session_input,
+    get_descriptor,
+    get_session_input_id,
+    save_descriptor,
+)
+from analyst_toolkit.mcp_server.input.storage import stage_uploaded_file
+from analyst_toolkit.mcp_server.state import StateStore
+
+
+def _new_input_id(stable_key: str | None = None) -> str:
+    """Return canonical input IDs with a 64-bit hex suffix.
+
+    Sixteen hex characters gives 64 bits of entropy, which is a safer long-term
+    collision budget for the bounded in-memory registry while preserving stable,
+    deterministic IDs for idempotent register/upload flows.
+    """
+    if stable_key:
+        digest = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()
+        return f"{INPUT_ID_PREFIX}{digest[:INPUT_ID_HEX_LENGTH]}"
+    return f"{INPUT_ID_PREFIX}{uuid.uuid4().hex[:INPUT_ID_HEX_LENGTH]}"
+
+
+def get_input_descriptor(input_id: str) -> InputDescriptor | None:
+    return get_descriptor(input_id)
+
+
+def _reuse_live_bound_session_id(
+    *,
+    input_id: str,
+    requested_session_id: str | None,
+) -> str | None:
+    """Reuse an existing bound session for anonymous idempotent retries."""
+    if requested_session_id is not None:
+        return requested_session_id
+
+    existing_descriptor = get_descriptor(input_id)
+    if existing_descriptor is None or existing_descriptor.session_id is None:
+        return None
+
+    bound_input_id = get_session_input_id(existing_descriptor.session_id)
+    if bound_input_id != input_id:
+        return None
+
+    if StateStore.get_metadata(existing_descriptor.session_id) is None:
+        return None
+
+    return existing_descriptor.session_id
+
+
+def _ensure_descriptor_compatible(descriptor: InputDescriptor) -> None:
+    """Abort idempotent retries before mutating session state on descriptor mismatch."""
+    existing_descriptor = get_descriptor(descriptor.input_id)
+    if existing_descriptor is None:
+        return
+    if existing_descriptor.same_canonical_input(descriptor):
+        return
+    raise InputConflictError(f"Conflicting descriptor for input_id '{descriptor.input_id}'.")
+
+
+def _ensure_session_binding_compatible(*, session_id: str | None, input_id: str) -> None:
+    """Abort before session mutation if an explicit session is already bound elsewhere."""
+    if session_id is None:
+        return
+    bound_input_id = get_session_input_id(session_id)
+    if bound_input_id is None or bound_input_id == input_id:
+        return
+    raise InputConflictError(
+        f"Session '{session_id}' is already bound to input_id '{bound_input_id}'."
+    )
+
+
+def ingest_uploaded_bytes(
+    *,
+    filename: str,
+    payload: bytes,
+    media_type: str | None,
+    session_id: str | None = None,
+    run_id: str | None = None,
+    load_into_session: bool = True,
+    idempotency_key: str | None = None,
+) -> tuple[InputDescriptor, pd.DataFrame | None, str | None]:
+    """
+    Stage uploaded bytes into a canonical input reference.
+
+    Input identity is deterministic for repeated uploads of the same filename/content pair.
+    Full run/session idempotency still requires callers to provide stable session_id/run_id.
+    """
+    staged_path, digest, size = stage_uploaded_file(filename=filename, payload=payload)
+    input_id = _new_input_id(idempotency_key or f"upload:{Path(filename).name}:{digest}")
+    descriptor = InputDescriptor(
+        input_id=input_id,
+        source_type="upload",
+        original_reference=filename,
+        resolved_reference=str(staged_path),
+        display_name=Path(filename).name,
+        media_type=media_type or mimetypes.guess_type(filename)[0] or "application/octet-stream",
+        file_size_bytes=size,
+        sha256=digest,
+        session_id=session_id,
+        run_id=run_id,
+    )
+    _ensure_descriptor_compatible(descriptor)
+    _ensure_session_binding_compatible(session_id=session_id, input_id=input_id)
+    df: pd.DataFrame | None = None
+    effective_session_id = session_id
+    if load_into_session:
+        effective_session_id = _reuse_live_bound_session_id(
+            input_id=input_id,
+            requested_session_id=session_id,
+        )
+        df = load_dataframe_from_descriptor(descriptor)
+        effective_session_id = StateStore.save(
+            df,
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
+        descriptor = descriptor.with_runtime_binding(
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
+    descriptor = save_descriptor(descriptor)
+    if load_into_session and effective_session_id is not None:
+        bind_session_input(effective_session_id, descriptor.input_id)
+    return descriptor, df, effective_session_id
+
+
+def register_input_source(
+    *,
+    reference: str,
+    source_type: InputSourceType | None = None,
+    session_id: str | None = None,
+    run_id: str | None = None,
+    load_into_session: bool = True,
+    idempotency_key: str | None = None,
+) -> tuple[InputDescriptor, pd.DataFrame | None, str | None]:
+    """
+    Register a canonical input source from a local server path or gs:// URI.
+
+    By default the same canonical resolved source reuses the same input_id. Callers may
+    provide a stable idempotency_key to control that identity explicitly across retries.
+    """
+    resolved_type, resolved_reference, display_name = resolve_source_reference(
+        reference, source_type
+    )
+    input_id = _new_input_id(idempotency_key or f"source:{resolved_reference}")
+    descriptor = InputDescriptor(
+        input_id=input_id,
+        source_type=resolved_type,
+        original_reference=reference,
+        resolved_reference=resolved_reference,
+        display_name=display_name,
+        media_type=mimetypes.guess_type(display_name)[0] or "application/octet-stream",
+        session_id=session_id,
+        run_id=run_id,
+    )
+    _ensure_descriptor_compatible(descriptor)
+    _ensure_session_binding_compatible(session_id=session_id, input_id=input_id)
+    df: pd.DataFrame | None = None
+    effective_session_id = session_id
+    if load_into_session:
+        effective_session_id = _reuse_live_bound_session_id(
+            input_id=input_id,
+            requested_session_id=session_id,
+        )
+        df = load_dataframe_from_descriptor(descriptor)
+        effective_session_id = StateStore.save(
+            df,
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
+        descriptor = descriptor.with_runtime_binding(
+            session_id=effective_session_id,
+            run_id=run_id,
+        )
+    descriptor = save_descriptor(descriptor)
+    if load_into_session and effective_session_id is not None:
+        bind_session_input(effective_session_id, descriptor.input_id)
+    return descriptor, df, effective_session_id
+
+
+def load_dataframe(
+    *,
+    path: str | None = None,
+    session_id: str | None = None,
+    input_id: str | None = None,
+) -> pd.DataFrame:
+    if session_id:
+        df = StateStore.get(session_id)
+        if df is not None:
+            return df
+        bound_input_id = get_session_input_id(session_id)
+        if bound_input_id:
+            descriptor = get_descriptor(bound_input_id)
+            if descriptor is not None:
+                return load_dataframe_from_descriptor(descriptor)
+        if not path and not input_id:
+            raise ValueError(f"Session {session_id} not found and no input reference provided.")
+
+    if input_id:
+        descriptor = get_descriptor(input_id)
+        if descriptor is None:
+            raise InputNotFoundError(f"Input descriptor not found for input_id='{input_id}'.")
+        return load_dataframe_from_descriptor(descriptor)
+
+    if not path:
+        raise ValueError("One of 'path', 'session_id', or 'input_id' must be provided.")
+
+    descriptor, df, _effective_session = register_input_source(
+        reference=path,
+        load_into_session=False,
+    )
+    return load_dataframe_from_descriptor(descriptor)

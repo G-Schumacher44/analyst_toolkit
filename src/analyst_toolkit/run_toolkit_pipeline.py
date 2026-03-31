@@ -1,6 +1,6 @@
 """
-🚀 run_toolkit_pipeline.py
-✅ Module: Master Pipeline Orchestrator
+run_toolkit_pipeline.py
+Module: Master Pipeline Orchestrator
 This is the main entry point for running the entire Analyst Toolkit pipeline from start to finish.
 
 Responsibilities:
@@ -33,6 +33,10 @@ import pandas as pd
 
 from analyst_toolkit.m00_utils.config_loader import load_config
 from analyst_toolkit.m00_utils.load_data import load_csv
+from analyst_toolkit.m00_utils.pipeline_config_validation import (
+    validate_pipeline_runner_config,
+    validate_runner_module_config,
+)
 
 # Import all module runners
 from analyst_toolkit.m01_diagnostics.run_diag_pipeline import run_diag_pipeline
@@ -49,23 +53,28 @@ from analyst_toolkit.m10_final_audit.final_audit_pipeline import run_final_audit
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+def _load_validated_module_config(runner_module_name: str, config_path: str) -> dict:
+    raw_config = load_config(config_path)
+    validated = validate_runner_module_config(runner_module_name, raw_config)
+    return validated["canonical_config"]
+
+
 def run_full_pipeline(config_path: str):
     """
     Executes the full data processing pipeline by chaining modules together.
     """
     logging.info(f"--- Loading Master Orchestration Config from {config_path} ---")
-    master_config = load_config(config_path)
+    master_config = validate_pipeline_runner_config(load_config(config_path))
 
-    run_id = master_config.get("run_id", "default_run")
+    run_id = master_config["run_id"]
     notebook_mode = master_config.get("notebook", False)
     modules_to_run = master_config.get("modules", {})
-
-    # --- ROBUST INITIAL DATA LOAD ---
     entry_path = master_config.get("pipeline_entry_path")
+
     if not entry_path:
         raise ValueError("Master config is missing 'pipeline_entry_path'. Cannot start pipeline.")
 
-    logging.info(f"--- 🚚 Loading initial data from {entry_path} ---")
+    logging.info("--- Loading initial data from %s ---", entry_path)
     df: pd.DataFrame = load_csv(entry_path)
 
     # Initialize artifact placeholder for outlier detection
@@ -76,61 +85,65 @@ def run_full_pipeline(config_path: str):
     # M01: Diagnostics
     module_info = modules_to_run.get("diagnostics")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: DIAGNOSTICS ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: DIAGNOSTICS ---")
+        module_config = _load_validated_module_config("diagnostics", module_info["config_path"])
         # The runner function does not modify the df, so no reassignment needed
         run_diag_pipeline(config=module_config, df=df, notebook=notebook_mode, run_id=run_id)
-        logging.info("--- ✅ Finished Module: DIAGNOSTICS ---")
+        logging.info("--- Finished Module: DIAGNOSTICS ---")
 
     # M02: Initial Validation
     module_info = modules_to_run.get("validation")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: VALIDATION ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: VALIDATION ---")
+        module_config = _load_validated_module_config("validation", module_info["config_path"])
         df = run_validation_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
-        logging.info("--- ✅ Finished Module: VALIDATION ---")
+        logging.info("--- Finished Module: VALIDATION ---")
 
     # M03: Normalization
     module_info = modules_to_run.get("normalization")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: NORMALIZATION ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: NORMALIZATION ---")
+        module_config = _load_validated_module_config("normalization", module_info["config_path"])
         df = run_normalization_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
-        logging.info("--- ✅ Finished Module: NORMALIZATION ---")
+        logging.info("--- Finished Module: NORMALIZATION ---")
 
     # M04: Validation Gatekeeper
     module_info = modules_to_run.get("validation_gatekeeper")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: VALIDATION_GATEKEEPER ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: VALIDATION_GATEKEEPER ---")
+        module_config = _load_validated_module_config(
+            "validation_gatekeeper", module_info["config_path"]
+        )
         df = run_validation_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
-        logging.info("--- ✅ Finished Module: VALIDATION_GATEKEEPER ---")
+        logging.info("--- Finished Module: VALIDATION_GATEKEEPER ---")
 
     # M05: Duplicates Handling
     module_info = modules_to_run.get("duplicates")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: DUPLICATES ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: DUPLICATES ---")
+        module_config = _load_validated_module_config("duplicates", module_info["config_path"])
         df = run_duplicates_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
-        logging.info("--- ✅ Finished Module: DUPLICATES ---")
+        logging.info("--- Finished Module: DUPLICATES ---")
 
     # M06: Outlier Detection
     module_info = modules_to_run.get("outlier_detection")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: OUTLIER_DETECTION ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: OUTLIER_DETECTION ---")
+        module_config = _load_validated_module_config(
+            "outlier_detection", module_info["config_path"]
+        )
         df, detection_results = run_outlier_detection_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
-        logging.info("--- ✅ Finished Module: OUTLIER_DETECTION ---")
+        logging.info("--- Finished Module: OUTLIER_DETECTION ---")
 
     # M07: Outlier Handling
     module_info = modules_to_run.get("outlier_handling")
@@ -139,8 +152,10 @@ def run_full_pipeline(config_path: str):
             raise RuntimeError(
                 "M07 Outlier Handling cannot run because M06 Outlier Detection did not return results."
             )
-        logging.info("--- 🚀 Starting Module: OUTLIER_HANDLING ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: OUTLIER_HANDLING ---")
+        module_config = _load_validated_module_config(
+            "outlier_handling", module_info["config_path"]
+        )
         df = run_outlier_handling_pipeline(
             config=module_config,
             df=df,
@@ -148,29 +163,29 @@ def run_full_pipeline(config_path: str):
             notebook=notebook_mode,
             run_id=run_id,
         )
-        logging.info("--- ✅ Finished Module: OUTLIER_HANDLING ---")
+        logging.info("--- Finished Module: OUTLIER_HANDLING ---")
 
     # M08: Imputation
     module_info = modules_to_run.get("imputation")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: IMPUTATION ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: IMPUTATION ---")
+        module_config = _load_validated_module_config("imputation", module_info["config_path"])
         df = run_imputation_pipeline(
             config=module_config, df=df, notebook=notebook_mode, run_id=run_id
         )
-        logging.info("--- ✅ Finished Module: IMPUTATION ---")
+        logging.info("--- Finished Module: IMPUTATION ---")
 
     # M10: Final Audit
     module_info = modules_to_run.get("final_audit")
     if module_info and module_info.get("run"):
-        logging.info("--- 🚀 Starting Module: FINAL_AUDIT ---")
-        module_config = load_config(module_info["config_path"])
+        logging.info("--- Starting Module: FINAL_AUDIT ---")
+        module_config = _load_validated_module_config("final_audit", module_info["config_path"])
         df = run_final_audit_pipeline(
             config=module_config, df=df, run_id=run_id, notebook=notebook_mode
         )
-        logging.info("--- ✅ Finished Module: FINAL_AUDIT ---")
+        logging.info("--- Finished Module: FINAL_AUDIT ---")
 
-    logging.info("--- 🎉 Full Pipeline Execution Complete ---")
+    logging.info("--- Full Pipeline Execution Complete ---")
     return df
 
 

@@ -1,14 +1,22 @@
 """MCP tool: toolkit_final_audit — final certification and big HTML report via M10."""
 
+import logging
 import os
 import tempfile
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
 from analyst_toolkit.m10_final_audit.final_audit_pipeline import (
     run_final_audit_pipeline,
 )
-from analyst_toolkit.mcp_server.config_normalizers import normalize_final_audit_config
+from analyst_toolkit.mcp_server.config_normalizers import (
+    adapt_final_audit_config_to_dataframe,
+    normalize_final_audit_config,
+)
+from analyst_toolkit.mcp_server.input.ingest import get_input_descriptor
 from analyst_toolkit.mcp_server.io import (
     ALLOW_EMPTY_CERT_RULES,
     append_to_run_history,
@@ -19,6 +27,7 @@ from analyst_toolkit.mcp_server.io import (
     empty_delivery_state,
     fold_status_with_artifacts,
     generate_default_export_path,
+    get_session_config,
     get_session_metadata,
     load_input,
     make_json_safe,
@@ -40,6 +49,25 @@ from analyst_toolkit.mcp_server.runtime_overlay import (
 )
 from analyst_toolkit.mcp_server.schemas import base_input_schema
 
+_TRANSIENT_PATH_KEYS = ("raw_data_path", "input_path", "input_df_path")
+
+
+def _is_transient_path(value: str | None) -> bool:
+    """Return True if the path looks like a temp file that won't survive across tool calls."""
+    if not value or not isinstance(value, str):
+        return False
+    return value.startswith("/tmp/") or value.startswith(tempfile.gettempdir())
+
+
+def _strip_transient_paths(cfg: dict) -> list[str]:
+    """Remove transient filesystem paths from a config dict. Returns list of stripped keys."""
+    stripped = []
+    for key in _TRANSIENT_PATH_KEYS:
+        if key in cfg and _is_transient_path(cfg[key]):
+            del cfg[key]
+            stripped.append(key)
+    return stripped
+
 
 def _has_effective_certification_rules(rules: dict) -> bool:
     if not isinstance(rules, dict):
@@ -57,6 +85,7 @@ def _has_effective_certification_rules(rules: dict) -> bool:
 async def _toolkit_final_audit(
     gcs_path: str | None = None,
     session_id: str | None = None,
+    input_id: str | None = None,
     config: dict | None = None,
     runtime: dict | str | None = None,
     run_id: str | None = None,
@@ -71,6 +100,7 @@ async def _toolkit_final_audit(
     runtime_applied = bool(runtime_cfg)
     gcs_path = gcs_path or runtime_overrides.get("gcs_path")
     session_id = session_id or runtime_overrides.get("session_id")
+    input_id = input_id or runtime_overrides.get("input_id")
     run_id = run_id or runtime_overrides.get("run_id")
     for key in (
         "output_bucket",
@@ -81,20 +111,78 @@ async def _toolkit_final_audit(
     ):
         kwargs.setdefault(key, runtime_overrides.get(key))
 
+    config = coerce_config(config, "final_audit")
+
+    # Resolve session_id from input_id so config discovery can find inferred configs
+    descriptor = None
+    if not session_id and input_id:
+        descriptor = get_input_descriptor(input_id)
+        if descriptor and descriptor.session_id:
+            session_id = descriptor.session_id
+    elif input_id:
+        descriptor = get_input_descriptor(input_id)
+
+    if descriptor and descriptor.run_id and not run_id:
+        run_id = descriptor.run_id
+
     run_id, lifecycle = resolve_run_context(run_id, session_id)
 
-    config = coerce_config(config, "final_audit")
+    # Auto-discover inferred configs from session when no explicit config is provided
+    inferred_config: dict = {}
+    if session_id:
+        for config_key in ("final_audit", "certification"):
+            raw_yaml = get_session_config(session_id, config_key)
+            if not raw_yaml:
+                continue
+            try:
+                parsed = yaml.safe_load(raw_yaml)
+            except yaml.YAMLError:
+                logging.getLogger(__name__).warning(
+                    "Failed to parse inferred %s config from session %s",
+                    config_key,
+                    session_id,
+                )
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            # Unwrap module-level key so the structure matches provided config
+            if "final_audit" in parsed and isinstance(parsed["final_audit"], dict):
+                parsed = parsed["final_audit"]
+            # Merge each discovered config layer (final_audit first, certification second)
+            for key, value in parsed.items():
+                if isinstance(value, dict) and isinstance(inferred_config.get(key), dict):
+                    inferred_config[key] = {**inferred_config[key], **value}
+                else:
+                    inferred_config.setdefault(key, value)
+
+    # Strip transient filesystem paths from both inferred and provided configs.
+    # infer_configs embeds /tmp paths that expire after the inference call returns;
+    # agents often pass those same stale paths back as explicit config.
+    _strip_transient_paths(inferred_config)
+    nested_inferred = inferred_config.get("final_audit")
+    if isinstance(nested_inferred, dict):
+        _strip_transient_paths(nested_inferred)
+    if isinstance(config, dict):
+        _strip_transient_paths(config)
+        nested_config = config.get("final_audit")
+        if isinstance(nested_config, dict):
+            _strip_transient_paths(nested_config)
+
     config, runtime_meta = resolve_layered_config(
+        inferred=inferred_config,
         provided=config,
         explicit=runtime_to_config_overlay(runtime_cfg),
     )
     base_cfg = normalize_final_audit_config(config)
-    df = load_input(gcs_path, session_id=session_id)
+    df = load_input(gcs_path, session_id=session_id, input_id=input_id)
+    base_cfg = adapt_final_audit_config_to_dataframe(base_cfg, df)
 
     # The M10 pipeline requires a raw_data_path to compute before/after row counts.
     # Write the current df to a temp CSV as the "raw" snapshot if not provided.
     tmp_raw = None
     raw_data_path = base_cfg.get("raw_data_path")
+    if _is_transient_path(raw_data_path):
+        raw_data_path = None
     if not raw_data_path:
         tmp_raw = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         df.to_csv(tmp_raw.name, index=False)
@@ -122,6 +210,27 @@ async def _toolkit_final_audit(
             },
         }
     }
+
+    # Ensure output directories exist — the M10 pipeline does not create them.
+    # Also strip any paths that resolve outside the project root to prevent
+    # the downstream pipeline from writing to untrusted locations.
+    project_root = Path(os.getcwd()).resolve()
+    paths_cfg = module_cfg["final_audit"].get("settings", {}).get("paths", {})
+    for path_key, path_value in list(paths_cfg.items()):
+        if not isinstance(path_value, str) or not path_value:
+            continue
+        resolved = path_value.replace("{run_id}", run_id)
+        target = (project_root / resolved).resolve()
+        try:
+            target.relative_to(project_root)
+            target.parent.mkdir(parents=True, exist_ok=True)
+        except ValueError:
+            logging.getLogger(__name__).warning(
+                "Refusing to use output path outside project root (%s): %s",
+                path_key,
+                target,
+            )
+            del paths_cfg[path_key]
 
     try:
         # run_final_audit_pipeline returns the certified dataframe
@@ -168,8 +277,11 @@ async def _toolkit_final_audit(
     artifact_delivery: dict[str, Any] = empty_delivery_state()
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
 
-    # M10 exports to these locations (matches final_audit_pipeline.py defaults)
-    artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
+    # M10 exports to these configured locations; use the effective settings-path contract
+    # instead of a parallel hard-coded path so delivery stays aligned with runtime config.
+    artifact_path = paths_cfg.get(
+        "report_html", "exports/reports/final_audit/{run_id}_final_audit_report.html"
+    ).format(run_id=run_id)
     artifact_delivery = deliver_artifact(
         artifact_path,
         run_id,
@@ -181,16 +293,23 @@ async def _toolkit_final_audit(
     artifact_url = artifact_delivery["url"]
     warnings.extend(artifact_delivery["warnings"])
 
-    xlsx_path = f"exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
-    xlsx_delivery = deliver_artifact(
-        xlsx_path,
-        run_id,
-        "final_audit",
-        config=kwargs,
-        session_id=session_id,
-    )
-    xlsx_url = xlsx_delivery["url"]
-    warnings.extend(xlsx_delivery["warnings"])
+    xlsx_path = (
+        paths_cfg.get(
+            "report_excel", "exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
+        )
+    ).format(run_id=run_id)
+    xlsx_expected = Path(xlsx_path).exists()
+    xlsx_url = ""
+    if xlsx_expected:
+        xlsx_delivery = deliver_artifact(
+            xlsx_path,
+            run_id,
+            "final_audit",
+            config=kwargs,
+            session_id=session_id,
+        )
+        xlsx_url = xlsx_delivery["url"]
+        warnings.extend(xlsx_delivery["warnings"])
 
     cert_cfg = base_cfg.get("certification", {})
     schema_cfg = cert_cfg.get("schema_validation", {})
@@ -238,7 +357,7 @@ async def _toolkit_final_audit(
         xlsx_path=xlsx_delivery["local_path"],
         xlsx_url=xlsx_url,
         expect_html=True,
-        expect_xlsx=True,
+        expect_xlsx=xlsx_expected,
         required_html=True,
         probe_local_paths=True,
     )

@@ -1,6 +1,8 @@
 import sys
 import types
 
+import pytest
+
 from analyst_toolkit.mcp_server.io import (
     check_upload,
     coerce_config,
@@ -9,7 +11,7 @@ from analyst_toolkit.mcp_server.io import (
     save_output,
     upload_artifact,
 )
-from analyst_toolkit.mcp_server.io_storage import should_export_html
+from analyst_toolkit.mcp_server.io_storage import _blob_exists, should_export_html
 from analyst_toolkit.mcp_server.state import StateStore
 
 
@@ -106,13 +108,22 @@ def test_should_export_html_honors_nested_module_config(monkeypatch):
     assert should_export_html({"normalization": {"settings": {"export_html": ["true"]}}}) is False
 
 
-def _install_fake_google_storage(monkeypatch, calls: list):
+def _install_fake_google_storage(monkeypatch, calls: list, *, fail_on_existing: bool = False):
+    existing_blobs: set[str] = set()
+
     class FakeBlob:
         def __init__(self, name: str):
             self.name = name
 
         def upload_from_filename(self, filename: str, content_type: str | None = None):
             calls.append(("upload", self.name, content_type, filename))
+            if fail_on_existing and self.name in existing_blobs:
+                raise FileExistsError(f"blob already exists: {self.name}")
+            existing_blobs.add(self.name)
+
+        def exists(self):
+            calls.append(("exists", self.name))
+            return self.name in existing_blobs
 
     class FakeBucket:
         def __init__(self, name: str):
@@ -121,6 +132,10 @@ def _install_fake_google_storage(monkeypatch, calls: list):
         def blob(self, blob_name: str):
             calls.append(("blob", self.name, blob_name))
             return FakeBlob(blob_name)
+
+        def get_blob(self, blob_name: str):
+            calls.append(("get_blob", self.name, blob_name))
+            return FakeBlob(blob_name) if blob_name in existing_blobs else None
 
     class FakeClient:
         def bucket(self, bucket_name: str):
@@ -159,19 +174,22 @@ def test_save_output_gcs_uses_storage_upload(sample_df, monkeypatch):
 
 def test_save_output_gcs_is_idempotent_for_same_path(sample_df, monkeypatch):
     calls: list = []
-    _install_fake_google_storage(monkeypatch, calls)
+    _install_fake_google_storage(monkeypatch, calls, fail_on_existing=True)
 
     path = "gs://example-bucket/runs/shared_run/imputation_output.csv"
-    save_output(sample_df, path)
-    save_output(sample_df, path)
+    out_one = save_output(sample_df, path)
+    out_two = save_output(sample_df, path)
 
+    assert out_one == path
+    assert out_two == path
     uploads = [c for c in calls if c[0] == "upload"]
     assert len(uploads) == 2
     assert uploads[0][1] == "runs/shared_run/imputation_output.csv"
     assert uploads[1][1] == "runs/shared_run/imputation_output.csv"
+    assert not any(call[1].startswith("runs/shared_run/imputation_output_") for call in uploads)
 
 
-def test_save_output_gcs_falls_back_to_versioned_key_on_primary_failure(sample_df, monkeypatch):
+def test_save_output_gcs_raises_on_primary_failure_without_existing_object(sample_df, monkeypatch):
     calls: list[tuple[str, str]] = []
 
     class FakeBlob:
@@ -202,12 +220,10 @@ def test_save_output_gcs_falls_back_to_versioned_key_on_primary_failure(sample_d
     monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_mod)
 
     path = "gs://example-bucket/runs/run_1/imputation_output.csv"
-    out = save_output(sample_df, path)
+    with pytest.raises(PermissionError):
+        save_output(sample_df, path)
 
-    assert out.startswith("gs://example-bucket/runs/run_1/")
-    assert out.endswith(".csv")
-    assert out != path
-    assert len([c for c in calls if c[0] == "upload"]) == 2
+    assert len([c for c in calls if c[0] == "upload"]) == 1
 
 
 def test_load_input_auto_normalizes_bucket_like_path(monkeypatch):
@@ -215,7 +231,7 @@ def test_load_input_auto_normalizes_bucket_like_path(monkeypatch):
 
     expected = pd.DataFrame({"a": [1]})
     monkeypatch.setattr(
-        "analyst_toolkit.mcp_server.io.load_from_gcs",
+        "analyst_toolkit.mcp_server.input.loaders.load_from_gcs",
         lambda gcs_path: expected if gcs_path == "gs://my-bucket/path/file.csv" else None,
     )
     out = load_input("my-bucket/path/file.csv")
@@ -238,7 +254,9 @@ def test_resolve_run_context_dedupes_mismatch_warning(sample_df, monkeypatch):
     assert lifecycle_b["warnings"] == []
 
 
-def test_upload_artifact_falls_back_to_versioned_key_on_primary_failure(monkeypatch, tmp_path):
+def test_upload_artifact_returns_empty_on_primary_failure_without_existing_object(
+    monkeypatch, tmp_path
+):
     local = tmp_path / "report.html"
     local.write_text("<html>ok</html>", encoding="utf-8")
 
@@ -283,8 +301,79 @@ def test_upload_artifact_falls_back_to_versioned_key_on_primary_failure(monkeypa
         session_id="sess_retry",
     )
 
-    assert out.startswith("https://storage.googleapis.com/example-bucket/")
-    assert len(upload_calls) == 2
+    assert out == ""
+    assert len(upload_calls) == 1
     assert upload_calls[0].endswith("/imputation/report.html")
-    assert upload_calls[1].endswith(".html")
-    assert upload_calls[1] != upload_calls[0]
+
+
+def test_upload_artifact_reuses_existing_remote_object_for_same_path(monkeypatch, tmp_path):
+    local = tmp_path / "report.html"
+    local.write_text("<html>ok</html>", encoding="utf-8")
+
+    upload_calls: list[str] = []
+    existing_blobs: set[str] = set()
+
+    class FakeBlob:
+        def __init__(self, name: str):
+            self.name = name
+
+        def upload_from_filename(self, filename: str, content_type: str | None = None):
+            upload_calls.append(self.name)
+            if self.name in existing_blobs:
+                raise FileExistsError(f"blob already exists: {self.name}")
+            existing_blobs.add(self.name)
+
+        def exists(self):
+            return self.name in existing_blobs
+
+    class FakeBucket:
+        def __init__(self, name: str):
+            self.name = name
+
+        def blob(self, blob_name: str):
+            return FakeBlob(blob_name)
+
+        def get_blob(self, blob_name: str):
+            return FakeBlob(blob_name) if blob_name in existing_blobs else None
+
+    class FakeClient:
+        def bucket(self, bucket_name: str):
+            return FakeBucket(bucket_name)
+
+    storage_mod = types.ModuleType("google.cloud.storage")
+    setattr(storage_mod, "Client", FakeClient)
+    cloud_mod = types.ModuleType("google.cloud")
+    setattr(cloud_mod, "storage", storage_mod)
+    google_mod = types.ModuleType("google")
+    setattr(google_mod, "cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google", google_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_mod)
+    monkeypatch.setenv("ANALYST_REPORT_BUCKET", "gs://example-bucket")
+    monkeypatch.setenv("ANALYST_REPORT_PREFIX", "analyst_toolkit/reports")
+
+    out_one = upload_artifact(
+        local_path=str(local),
+        run_id="run_retry",
+        module="imputation",
+        session_id="sess_retry",
+    )
+    out_two = upload_artifact(
+        local_path=str(local),
+        run_id="run_retry",
+        module="imputation",
+        session_id="sess_retry",
+    )
+
+    assert out_one == out_two
+    assert len(upload_calls) == 2
+    assert upload_calls[0] == upload_calls[1]
+
+
+def test_blob_exists_propagates_lookup_errors():
+    class BrokenBucket:
+        def get_blob(self, _blob_name: str):
+            raise PermissionError("denied")
+
+    with pytest.raises(PermissionError):
+        _blob_exists(BrokenBucket(), "reports/run/report.html")

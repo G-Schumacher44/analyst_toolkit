@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -37,6 +37,8 @@ make install-dev       # editable install + dev tooling + notebook extras
 pip install -e ".[mcp]"
 ```
 
+The `mcp` extra pulls `analyst_toolkit_deploy` from a pinned GitHub Release wheel, which keeps MCP installs off git checkouts while preserving an explicit released version.
+
 **With notebook extras**
 
 ```bash
@@ -49,7 +51,7 @@ pip install "analyst_toolkit[notebook] @ git+https://github.com/G-Schumacher44/a
 pip install git+https://github.com/G-Schumacher44/analyst_toolkit.git
 ```
 
-This installs the latest version from main. To target a specific branch or tag, append `@branchname` or `@v0.4.4` to the URL.
+This installs the latest version from main. To target a specific branch or tag, append `@branchname` or `@v0.5.0` to the URL.
 
 ---
 
@@ -328,7 +330,7 @@ ANALYST_MCP_ENABLE_ARTIFACT_SERVER=1    # enable the server
 ANALYST_MCP_ARTIFACT_SERVER_PORT=8765   # default port
 ```
 
-Once enabled, cockpit and module dashboard artifact references become live links (e.g., `http://127.0.0.1:8765/exports/reports/...`). Localhost-only by default.
+Once enabled, cockpit and module dashboard artifact references become live links (e.g., `http://127.0.0.1:8765/reports/...`). Localhost-only by default.
 
 Available as the `ensure_artifact_server` MCP tool.
 

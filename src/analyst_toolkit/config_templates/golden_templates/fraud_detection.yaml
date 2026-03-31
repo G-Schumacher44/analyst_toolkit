@@ -1,0 +1,14 @@
+# Golden Config: Fraud Detection
+# Purpose: Strict outliers and identity-based duplicate checks.
+description: "Strict detection for potential fraud: high-precision outliers and identity-based duplicate checks."
+outliers:
+  method: "iqr"
+  iqr_multiplier: 1.1
+  columns: ["transaction_amount", "frequency_24h"]
+duplicates:
+  subset_columns: ["device_id", "user_email", "billing_zip"]
+  mode: "flag"
+validation:
+  rules:
+    range_checks:
+      transaction_amount: {"min": 0, "max": 10000}

@@ -1,5 +1,5 @@
 """
-📦 Module: load_data.py
+Module: load_data.py
 
 Utility functions for loading tabular data into pandas DataFrames.
 
@@ -12,8 +12,16 @@ Functions:
 - load_joblib(path): Loads a joblib file.
 """
 
+import logging
+import os
+
 import joblib
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+_ALLOW_UNSAFE_JOBLIB_ENV = "ANALYST_TOOLKIT_ALLOW_UNSAFE_JOBLIB"
 
 
 def load_csv(path: str) -> pd.DataFrame:
@@ -29,6 +37,11 @@ def load_csv(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _unsafe_joblib_loading_enabled() -> bool:
+    value = os.environ.get(_ALLOW_UNSAFE_JOBLIB_ENV, "")
+    return value.strip().lower() in _TRUTHY_ENV_VALUES
+
+
 def load_joblib(path: str):
     """
     Loads a joblib file from a given path.
@@ -39,4 +52,11 @@ def load_joblib(path: str):
     Returns:
         Any: The Python object stored in the file.
     """
+    if not _unsafe_joblib_loading_enabled():
+        raise ValueError(
+            "Refusing to load joblib artifact from "
+            f"'{path}'. joblib deserialization is unsafe by default. "
+            f"Set {_ALLOW_UNSAFE_JOBLIB_ENV}=1 only for trusted local artifacts."
+        )
+    logger.warning("Loading trusted joblib artifact from %s", path)
     return joblib.load(path)

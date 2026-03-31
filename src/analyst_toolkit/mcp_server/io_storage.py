@@ -5,9 +5,16 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Callable
-from uuid import uuid4
 
 import pandas as pd
+
+from analyst_toolkit.mcp_server.input.errors import InputNotFoundError
+from analyst_toolkit.mcp_server.input.limits import (
+    enforce_dataframe_limits,
+    enforce_gcs_prefix_object_limit,
+    enforce_input_bytes_limit,
+    materialize_chunked_frames,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +27,60 @@ _CONTENT_TYPES = {
 }
 
 
+def _gcs_url(bucket_name: str, blob_path: str) -> str:
+    return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
+
+
+def _gcs_uri(bucket_name: str, blob_path: str) -> str:
+    return f"gs://{bucket_name}/{blob_path}"
+
+
+def _blob_exists(bucket: object, blob_path: str) -> bool:
+    get_blob = getattr(bucket, "get_blob", None)
+    if callable(get_blob):
+        return get_blob(blob_path) is not None
+
+    blob_factory = getattr(bucket, "blob", None)
+    if callable(blob_factory):
+        blob = blob_factory(blob_path)
+        exists = getattr(blob, "exists", None)
+        if callable(exists):
+            return bool(exists())
+    return False
+
+
+def _read_csv_with_limits(path: Path, *, reference: str) -> pd.DataFrame:
+    return materialize_chunked_frames(
+        pd.read_csv(path, low_memory=False, chunksize=50_000),
+        reference=reference,
+    )
+
+
+def _read_parquet_with_limits(path: Path, *, reference: str) -> pd.DataFrame:
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        df = pd.read_parquet(path)
+        enforce_dataframe_limits(df, reference=reference)
+        return df
+
+    parquet_file = pq.ParquetFile(path)
+    metadata = parquet_file.metadata
+    estimated_bytes = 0
+    for idx in range(metadata.num_row_groups):
+        estimated_bytes += metadata.row_group(idx).total_byte_size
+    from analyst_toolkit.mcp_server.input.limits import enforce_tabular_limits
+
+    enforce_tabular_limits(
+        row_count=metadata.num_rows,
+        memory_usage_bytes=estimated_bytes,
+        reference=reference,
+    )
+    df = pd.read_parquet(path)
+    enforce_dataframe_limits(df, reference=reference)
+    return df
+
+
 def load_from_gcs(gcs_path: str) -> pd.DataFrame:
     stripped = gcs_path.removeprefix("gs://")
     bucket_name, _, prefix = stripped.partition("/")
@@ -30,16 +91,29 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
 
     # Direct file path — download and read without listing
     if prefix.endswith(".parquet") or prefix.endswith(".csv"):
+        blob = bucket.get_blob(prefix)
+        if blob is None:
+            raise InputNotFoundError(f"No file found at gs://{bucket_name}/{prefix}")
+        enforce_input_bytes_limit(blob.size, reference=gcs_path)
         with tempfile.TemporaryDirectory() as tmpdir:
             local_path = Path(tmpdir) / Path(prefix).name
-            bucket.blob(prefix).download_to_filename(str(local_path))
+            blob.download_to_filename(str(local_path))
             if local_path.suffix == ".parquet":
-                return pd.read_parquet(local_path)
-            return pd.read_csv(local_path, low_memory=False)
+                df = _read_parquet_with_limits(local_path, reference=gcs_path)
+            else:
+                df = _read_csv_with_limits(local_path, reference=gcs_path)
+            return df
 
     # Directory path — list and concat all matching files
-    blobs = list(client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"))
-    blobs = [b for b in blobs if b.name.endswith(".parquet") or b.name.endswith(".csv")]
+    blobs = []
+    total_bytes = 0
+    for blob in client.list_blobs(bucket_name, prefix=f"{prefix.rstrip('/')}/"):
+        if not blob.name.endswith(".parquet") and not blob.name.endswith(".csv"):
+            continue
+        blobs.append(blob)
+        total_bytes += int(getattr(blob, "size", 0) or 0)
+        enforce_gcs_prefix_object_limit(object_count=len(blobs), reference=gcs_path)
+        enforce_input_bytes_limit(total_bytes, reference=gcs_path)
 
     if not blobs:
         raise FileNotFoundError(f"No .parquet or .csv files found at gs://{bucket_name}/{prefix}")
@@ -50,10 +124,12 @@ def load_from_gcs(gcs_path: str) -> pd.DataFrame:
             local_path = Path(tmpdir) / blob.name.replace("/", "_")
             blob.download_to_filename(str(local_path))
             if local_path.suffix == ".parquet":
-                frames.append(pd.read_parquet(local_path))
+                frames.append(_read_parquet_with_limits(local_path, reference=gcs_path))
             else:
-                frames.append(pd.read_csv(local_path, low_memory=False))
-    return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+                frames.append(_read_csv_with_limits(local_path, reference=gcs_path))
+    result = materialize_chunked_frames(frames, reference=gcs_path, copy=False)
+    enforce_dataframe_limits(result, reference=gcs_path)
+    return result
 
 
 def _collect_export_html_flags(
@@ -173,14 +249,10 @@ def save_output(df: pd.DataFrame, path: str) -> str:
                 blob = bucket.blob(blob_path)
                 try:
                     blob.upload_from_filename(tmp_path, content_type=content_type)
-                except Exception as first_exc:
-                    alt_blob_path = _versioned_blob_path(blob_path)
-                    alt_blob = bucket.blob(alt_blob_path)
-                    try:
-                        alt_blob.upload_from_filename(tmp_path, content_type=content_type)
-                    except Exception:
-                        raise first_exc
-                    return f"gs://{bucket_name}/{alt_blob_path}"
+                except Exception:
+                    if _blob_exists(bucket, blob_path):
+                        return _gcs_uri(bucket_name, blob_path)
+                    raise
             except ImportError:
                 # Backward-compatible fallback for environments using gcsfs-style paths.
                 if suffix == ".parquet":
@@ -246,25 +318,12 @@ def upload_artifact(
     def _upload(path: str) -> str:
         blob = bucket.blob(path)
         blob.upload_from_filename(str(p), content_type=content_type)
-        return f"https://storage.googleapis.com/{bucket_name}/{path}"
+        return _gcs_url(bucket_name, path)
 
     try:
         return _upload(blob_path)
     except Exception as first_exc:
-        # Fallback for idempotent reruns where same-key overwrite/delete permissions vary.
-        alt_name = f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"
-        alt_path = f"{prefix}/{path_root}/{module}/{alt_name}"
-        try:
-            return _upload(alt_path)
-        except Exception:
-            logger.warning(
-                "Artifact upload failed for primary and fallback paths: %s ; %s",
-                first_exc,
-                alt_path,
-            )
-            return ""
-
-
-def _versioned_blob_path(blob_path: str) -> str:
-    p = Path(blob_path)
-    return str(p.with_name(f"{p.stem}_{uuid4().hex[:8]}{p.suffix}"))
+        if _blob_exists(bucket, blob_path):
+            return _gcs_url(bucket_name, blob_path)
+        logger.warning("Artifact upload failed for primary path: %s", first_exc)
+        return ""

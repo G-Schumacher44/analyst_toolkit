@@ -27,6 +27,16 @@ make install-mcp
 6. If behavior changes, add or update tests in the same PR.
 7. Promote `dev` into `main` only after the integration slice is green and ready to release publicly.
 
+## Release Promotion Checklist
+
+Before opening or merging a `dev -> main` release PR:
+
+1. Ensure CI is green on `dev`.
+2. Verify CodeRabbit findings were fixed, resolved in-thread, logged as issues, or explicitly dismissed.
+3. Match release docs to the actual deployment posture being claimed.
+4. Check changelog/version state before the release cut.
+5. Document any remaining known limitations that are intentionally deferred.
+
 ## Quality Gates
 
 Before opening or updating a PR, run:
@@ -55,6 +65,9 @@ CodeRabbit is included in the PR review loop. Triage its findings using the [Cod
 
 CI enforces linting, type checks, tests, and Docker smoke tests.
 
+The CI pipeline also enforces a Python 3.13 coverage floor. The current release
+gate is `68%` statement coverage for `src/analyst_toolkit`.
+
 ## Testing Guidance
 
 - Add or update tests for behavior changes.
@@ -68,6 +81,18 @@ CI enforces linting, type checks, tests, and Docker smoke tests.
 - If a response field changes shape, document it in the PR.
 - Avoid introducing hidden behavior changes; make config-driven behavior explicit.
 - Keep `run_id` and `session_id` lifecycle behavior deterministic and test-covered.
+
+## Compatibility Policy
+
+- Prefer additive MCP response changes over breaking shape changes.
+- If a contract break is unavoidable, call it out in the PR and release notes.
+- Keep docs and regression tests aligned with the actual public contract.
+
+## GitHub Actions Trust Model
+
+- CI currently uses maintained major-version action tags such as `@v4` and `@v5`.
+- Before introducing or upgrading an action, review the upstream action owner, release history, and required permissions.
+- Prefer official GitHub or Docker-maintained actions where possible, and document any new third-party action use in the PR.
 
 ## Commit Message Guidance
 

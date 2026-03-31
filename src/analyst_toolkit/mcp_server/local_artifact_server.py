@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import json
 import logging
@@ -45,7 +46,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 def artifact_server_enabled() -> bool:
-    return _env_bool("ANALYST_MCP_ENABLE_ARTIFACT_SERVER", False)
+    return _env_bool("ANALYST_MCP_ENABLE_ARTIFACT_SERVER", _env_bool("ANALYST_MCP_STDIO", False))
 
 
 def _artifact_server_host() -> str:
@@ -149,8 +150,12 @@ class _ArtifactRequestHandler(SimpleHTTPRequestHandler):
             return str(Path("__missing__").resolve(strict=False))
         if parsed_path in {"/exports", "/exports/"}:
             relative = PurePosixPath(".")
+        elif parsed_path in {"/reports", "/reports/"}:
+            relative = PurePosixPath("reports")
         elif parsed_path.startswith("/exports/"):
             relative = PurePosixPath(parsed_path.removeprefix("/exports/"))
+        elif parsed_path.startswith("/reports/"):
+            relative = PurePosixPath(parsed_path.removeprefix("/"))
         else:
             return str((artifact_root / "__missing__").resolve(strict=False))
         if ".." in relative.parts:
@@ -176,6 +181,35 @@ def _probe_server(base_url: str, timeout_sec: float = 0.25) -> bool:
             return response.status == 200
     except Exception:
         return False
+
+
+def _read_server_health(base_url: str, timeout_sec: float = 0.25) -> dict[str, Any] | None:
+    try:
+        with urllib.request.urlopen(f"{base_url}/__health", timeout=timeout_sec) as response:
+            if response.status != 200:
+                logger.debug(
+                    "Artifact server health probe to %s returned non-200 status %s",
+                    base_url,
+                    response.status,
+                )
+                return None
+            payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, dict):
+                logger.debug(
+                    "Artifact server health probe to %s returned non-dict payload %r",
+                    base_url,
+                    payload,
+                )
+                return None
+            return payload
+    except Exception as exc:
+        logger.debug(
+            "Artifact server health probe to %s failed (timeout=%ss): %s",
+            base_url,
+            timeout_sec,
+            exc,
+        )
+        return None
 
 
 def get_local_artifact_server_status() -> dict[str, Any]:
@@ -231,9 +265,65 @@ def ensure_local_artifact_server() -> dict[str, Any]:
             root.mkdir(parents=True, exist_ok=True)
             host = _artifact_server_host()
             requested_port = _artifact_server_port()
-            server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
+            advertised_host = "127.0.0.1" if host == "0.0.0.0" else host
+            base_url = f"http://{advertised_host}:{requested_port}"
+            try:
+                server = _ArtifactHTTPServer((host, requested_port), _ArtifactRequestHandler)
+            except OSError as exc:
+                if exc.errno == errno.EADDRINUSE:
+                    health = _read_server_health(base_url)
+                    if health is not None:
+                        health_root = Path(str(health.get("root", ""))).resolve(strict=False)
+                        health_base_url = str(health.get("base_url", ""))
+                        expected_base_url = base_url
+                        if health_root == root and health_base_url == expected_base_url:
+                            return {
+                                "status": "pass",
+                                "enabled": True,
+                                "running": True,
+                                "already_running": True,
+                                "base_url": expected_base_url,
+                                "root": str(root),
+                            }
+                        logger.warning(
+                            "Artifact server port %s is occupied by an incompatible server "
+                            "(expected root=%s, base_url=%s; got root=%s, base_url=%s)",
+                            requested_port,
+                            root,
+                            expected_base_url,
+                            health_root,
+                            health_base_url,
+                        )
+                        return {
+                            "status": "error",
+                            "error_code": "ARTIFACT_SERVER_BIND_CONFLICT",
+                            "enabled": True,
+                            "running": False,
+                            "already_running": False,
+                            "base_url": "",
+                            "root": str(root),
+                            "message": (
+                                "Artifact server port is already in use by an incompatible server."
+                            ),
+                        }
+                    return {
+                        "status": "error",
+                        "error_code": "ARTIFACT_SERVER_BIND_CONFLICT",
+                        "enabled": True,
+                        "running": False,
+                        "already_running": False,
+                        "base_url": "",
+                        "root": str(root),
+                        "message": (
+                            "Artifact server port is already in use and no compatible health "
+                            "response was found."
+                        ),
+                    }
+                raise
             server.artifact_root = root
-            server.base_url = f"http://{host}:{server.server_address[1]}"
+            # Advertise 127.0.0.1 in URLs even when bound to 0.0.0.0 —
+            # 0.0.0.0 is not a valid browsable address.
+            server.base_url = f"http://{advertised_host}:{server.server_address[1]}"
             thread = threading.Thread(
                 target=server.serve_forever,
                 name="analyst-toolkit-artifact-server",
@@ -307,7 +397,10 @@ def build_local_artifact_url(local_path: str) -> str:
         relative = candidate.relative_to(artifact_root)
     except ValueError:
         return ""
-    return f"{status['base_url']}/exports/{relative.as_posix()}"
+    relative_posix = relative.as_posix()
+    if relative_posix.startswith("reports/"):
+        return f"{status['base_url']}/{relative_posix}"
+    return f"{status['base_url']}/exports/{relative_posix}"
 
 
 def _reset_local_artifact_server_for_tests() -> None:

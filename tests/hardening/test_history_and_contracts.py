@@ -2,6 +2,7 @@ import threading
 
 import pandas as pd
 
+import analyst_toolkit.mcp_server.io as io_module
 from analyst_toolkit.mcp_server.io import (
     _resolve_path_root,
     append_to_run_history,
@@ -138,3 +139,29 @@ def test_build_artifact_contract_warns_for_server_local_export(tmp_path, monkeyp
     assert contract["artifact_matrix"]["data_export"]["status"] == "available"
     assert contract["artifact_matrix"]["data_export"]["reason"] == "server_local_path"
     assert any("server runtime filesystem" in w for w in contract["artifact_warnings"])
+
+
+def test_history_lock_cache_is_bounded(tmp_path, monkeypatch):
+    monkeypatch.setattr(io_module, "_HISTORY_LOCKS", io_module.OrderedDict())
+
+    first_path = tmp_path / "history_0.json"
+    first_lock = io_module._history_lock_for(first_path)
+    for idx in range(io_module._MAX_HISTORY_LOCKS + 25):
+        io_module._history_lock_for(tmp_path / f"history_{idx}.json")
+
+    assert len(io_module._HISTORY_LOCKS) == io_module._MAX_HISTORY_LOCKS
+    refreshed_lock = io_module._history_lock_for(first_path)
+    assert refreshed_lock is not first_lock
+    assert len(io_module._HISTORY_LOCKS) == io_module._MAX_HISTORY_LOCKS
+
+
+def test_last_history_meta_cache_is_bounded(monkeypatch):
+    monkeypatch.setattr(io_module, "_LAST_HISTORY_READ_META", io_module.OrderedDict())
+
+    for idx in range(io_module._MAX_HISTORY_READ_META + 10):
+        io_module._set_last_history_meta(
+            f"run_{idx}", None, {"parse_errors": [], "skipped_records": idx}
+        )
+
+    assert len(io_module._LAST_HISTORY_READ_META) == io_module._MAX_HISTORY_READ_META
+    assert ("run_0", None) not in io_module._LAST_HISTORY_READ_META

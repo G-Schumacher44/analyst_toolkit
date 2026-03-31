@@ -15,6 +15,12 @@ All plots are saved to disk with run-aware filenames for audit traceability.
 import logging
 from pathlib import Path
 
+from analyst_toolkit.m00_utils.plot_runtime import configure_plot_runtime_env
+
+# Configure writable matplotlib/fontconfig cache paths before pyplot import.
+# This call is idempotent and does not change plot styles or RNG state.
+configure_plot_runtime_env()
+
 import matplotlib.pyplot as plt
 import pandas as pd
 

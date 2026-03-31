@@ -1,5 +1,5 @@
 """
-✅ Module: final_audit_pipeline.py
+Module: final_audit_pipeline.py
 
 This is the main runner script for the M10 Final Audit & Certification module.
 
@@ -29,14 +29,13 @@ df_certified = run_final_audit_pipeline(
 import logging
 
 import pandas as pd
-from joblib import load as load_joblib
 
 from analyst_toolkit.m00_utils.export_utils import (
     export_dataframes,
     export_html_report,
     save_joblib,
 )
-from analyst_toolkit.m00_utils.load_data import load_csv
+from analyst_toolkit.m00_utils.load_data import load_csv, load_joblib
 from analyst_toolkit.m01_diagnostics.data_diag import run_data_profile
 from analyst_toolkit.m10_final_audit.final_audit_producer import run_final_audit_producer
 
@@ -157,6 +156,6 @@ def run_final_audit_pipeline(
                 "report_html", "exports/reports/final_audit/{run_id}_final_audit_report.html"
             ).format(run_id=run_id)
             export_html_report(final_report, html_path, "Final Audit", run_id)
-        logging.info("✅ Final artifacts exported successfully.")
+        logging.info("Final artifacts exported successfully.")
 
     return df_certified

@@ -6,7 +6,7 @@
 <p align="center">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.4-blueviolet">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.0-blueviolet">
   <a href="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml">
     <img alt="CI" src="https://github.com/G-Schumacher44/analyst_toolkit/actions/workflows/analyst-toolkit-mcp-ci.yml/badge.svg">
   </a>
@@ -17,14 +17,14 @@
 
 Modular data QA and preprocessing toolkit — run as a Jupyter notebook pipeline, CLI, or MCP server with Docker and GCS support.
 
-## 🆕 Version 0.4.4: Full Dashboard Rollout
+## 🆕 Version 0.5.0: MCP Platform Upgrade
 
-Every pipeline module now produces a standalone, exportable HTML dashboard. The toolkit went from a few report surfaces to a complete, artifact-first audit trail — end to end.
+This release turns the MCP server into a fuller product surface, not just a dashboard add-on.
 
-1. **See Everything:** Cockpit, diagnostics, normalization, duplicates, outlier detection, outlier handling, imputation, final audit, auto-heal, and data dictionary — each as a self-contained HTML artifact.
-2. **Navigate with the Cockpit Hub:** A single landing page links every module dashboard for a run into one reviewable session view.
-3. **Browse Locally:** An optional artifact server turns cockpit artifact references into stable browser links — no manual file paths.
-4. **Share Templates:** MCP `resources/list` and `resources/read` now expose the full template and resource inventory directly to clients and agents.
+1. **Ingest First:** `register_input` and `upload_input` establish canonical `input_id`s, deterministic error handling, and retry-aware session reuse.
+2. **Durable Sessions:** `manage_session` plus the optional SQLite backend make session lifecycle explicit: list, inspect, fork, rebind, clear, and survive restarts when operators opt in.
+3. **Artifact-First UX:** `read_artifact`, stable local artifact URLs, and the localhost artifact server make dashboards and reports usable across stdio, HTTP, and containerized clients.
+4. **Safer Contracts:** config normalization, certification alignment, and retry/idempotency hardening now keep MCP behavior deterministic under reruns and partial failures.
 
 ---
 
@@ -121,6 +121,8 @@ make install-dev       # editable install + dev tooling + notebook extras
 pip install -e ".[mcp]"
 ```
 
+The `mcp` extra installs `analyst_toolkit_deploy` from a pinned GitHub Release wheel, so MCP builds do not rely on git checkouts during dependency resolution.
+
 **With notebook extras**
 
 ```bash
@@ -180,8 +182,32 @@ Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an op
 | `ANALYST_MCP_STRUCTURED_LOGS=true` | Structured request lifecycle logging |
 | `ANALYST_MCP_AUTH_TOKEN` | Bearer token auth for networked deployments |
 | `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | Tune template/resource read timeouts |
+| `ANALYST_MCP_SESSION_BACKEND` | Keep session state in memory by default or opt into durable local SQLite persistence |
+
+### Deployment Profiles
+
+Use one of these operating modes intentionally:
+
+| Profile | Bind/Auth Posture | Intended Use |
+| ------- | ----------------- | ------------ |
+| `local-dev` | loopback bind, auth token optional | local testing, Claude Desktop, local FridAI integration |
+| `internal-trusted` | explicit non-loopback bind, bearer token strongly recommended | team/internal network use behind normal network controls |
+| `public-or-prod` | explicit non-loopback bind, bearer token strongly recommended, docs+ops review completed | managed or internet-reachable deployment |
+
+Notes:
+- Default HTTP posture is localhost-first. Do not treat `docker-compose` port publishing as a reason to skip auth.
+- If you set a non-loopback host, set `ANALYST_MCP_AUTH_TOKEN` as an operator policy. Current runtime behavior warns when the token is unset; it does not hard-fail startup.
+- The artifact server is also localhost-first by default and should only be widened deliberately.
+- `ANALYST_MCP_SESSION_BACKEND=sqlite` writes durable session state to the local filesystem. By default the database lives in a private user-local state directory, not under `exports/`. Treat that as an explicit trust-boundary expansion: keep filesystem permissions narrow and prefer the default memory backend unless operators intentionally want restart-persistent sessions.
+- In stdio/local mode, run one `analyst_toolkit` MCP server instance per client. Repeated reconnects can orphan extra stdio workers, which can make session visibility and input bindings look inconsistent during QA. If behavior looks split-brain, restart the client and terminate stale `python -m analyst_toolkit.mcp_server.server --stdio` processes before retesting.
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
+
+### MCP Retry Semantics
+
+- `register_input` and `upload_input` are input-idempotent when you provide a stable `idempotency_key`.
+- If `load_into_session=true` and you do not provide an explicit `session_id`, anonymous retries now reuse the existing live bound session for that canonical input instead of minting a new session each time.
+- Repeating the same-run module and dashboard calls now reuses the primary remote artifact object when it already exists. Versioned fallback object names are reserved for true first-write collisions or permission failures, not normal retries.
 
 ---
 
@@ -330,6 +356,13 @@ This toolkit is developed and tested using the **Dirty Birds v3.5** dataset — 
 
 <details>
 <summary><strong>🫆 Version Release Notes</strong></summary>
+
+**v0.5.0 — MCP Platform Upgrade**
+- **Input Ingest + Retry Semantics:** Added `register_input` and `upload_input` as first-class MCP flows with canonical `input_id`s, stable idempotency keys, and conflict-safe retry handling.
+- **Session Lifecycle Management:** Added `manage_session` with retention policy visibility, on-demand config inspection, fork/rebind support, and an optional SQLite-backed durable session store.
+- **Artifact Access + Delivery:** Added `read_artifact`, hardened local artifact server routing, and stabilized same-run remote artifact identities on retry.
+- **Certification + Contract Alignment:** `infer_configs`, `validation`, and `final_audit` now align inferred rules to transformed session state instead of failing on obvious runtime drift.
+- **Operator Hardening:** Improved trust boundaries around artifact serving, SQLite state paths, input registry/session behavior, and stdio troubleshooting guidance.
 
 **v0.4.4 — Full Dashboard Rollout**
 - **Complete Dashboard Surface:** All ten pipeline modules now produce standalone exportable HTML dashboards — cockpit, diagnostics, validation, normalization, duplicates, outlier detection, outlier handling, imputation, auto-heal, and data dictionary.

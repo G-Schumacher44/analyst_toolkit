@@ -10,10 +10,14 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _is_stdio_mode() -> bool:
+    return _env_bool("ANALYST_MCP_STDIO", False)
+
+
 def _trusted_history_enabled() -> bool:
     return _env_bool(
         "ANALYST_MCP_ENABLE_TRUSTED_HISTORY_TOOL",
-        _env_bool("ANALYST_MCP_STDIO", False),
+        _is_stdio_mode(),
     )
 
 
@@ -28,17 +32,36 @@ def user_quickstart_payload() -> dict:
 - You can enable/disable plotting and HTML export per module.
 - When HTML export is enabled, module tools return standalone dashboard artifacts that should be opened or linked for review.
 
+## Input Ingest
+- Prefer a canonical `input_id` for user-provided datasets whenever possible.
+{input_ingest_tree}
+- If `register_input` fails with `INPUT_PATH_DENIED`, the path is not visible to the server — check the `next_actions` in the error response for the recommended upload method.
+- Use `get_input_descriptor` to inspect the resolved canonical input reference when needed.
+
+## Session Management
+- Use `manage_session` to control session lifecycle without re-downloading data or re-running `infer_configs`.
+- `manage_session(action="list")` — see all active sessions.
+- `manage_session(action="inspect", session_id="...")` — view session details and stored configs.
+- `manage_session(action="fork", session_id="...", run_id="new_run")` — clone a session into a new run context. The forked session gets its own run_id and optionally inherits inferred configs.
+- `manage_session(action="rebind", session_id="...", run_id="new_run")` — change the run_id bound to an existing session.
+- `manage_session(action="clear", session_id="...")` — evict a single session, or omit `session_id` to clear all sessions. Useful for freeing memory or resetting state.
+
 ## Recommended Order (Manual Pipeline)
-1. `diagnostics`
-2. `infer_configs`
-3. Review/edit configs (normalization, duplicates, outliers, imputation, validation)
-4. `normalization` -> `duplicates` -> `outliers` -> `imputation` -> `validation`
-5. `final_audit`
-6. `get_run_history` + `get_data_health_report`
+1. `register_input` (gs:// or server path) or `upload_input` (local file via base64)
+2. `diagnostics`
+3. `infer_configs` — **required before running module tools**. Without this, modules have no rules and will silently produce no-op results.
+4. Review/edit configs (normalization, duplicates, outliers, imputation, validation)
+5. `normalization` -> `duplicates` -> `outliers` -> `imputation` -> `validation`
+6. `final_audit`
+7. `get_run_history` + `get_data_health_report`
+8. (Optional) `manage_session(action="fork")` to start a second pass with a new run_id
 
 ## Dashboard Artifacts
 - In trusted/local mode, you can start a review session by building the cockpit dashboard for one human-readable landing page.
-- Use `ensure_artifact_server` before relying on localhost dashboard links.
+- Decision tree for accessing artifacts:
+  1. Call `ensure_artifact_server` first to start the localhost artifact server.
+  2. Surface the `dashboard_url` (e.g. `http://127.0.0.1:8765/reports/...`) to the user — this is the preferred path.
+  3. If the user reports the URL is unreachable, fall back to `read_artifact(artifact_path=<dashboard_path from tool output>)` to retrieve the HTML content directly through MCP.
 - Module tools can return `dashboard_url` when standalone HTML reports are uploaded or exposed for review.
 - Agents should surface those dashboard links to users instead of burying them in long summaries.
 - Use the dashboard artifact as the primary review surface when it exists.
@@ -52,6 +75,8 @@ def user_quickstart_payload() -> dict:
   - `runtime.run.input_path`
   - `runtime.artifacts.export_html`
   - `runtime.artifacts.plotting`
+  - `runtime.destinations.local.enabled` — mirror artifacts to a local directory
+  - `runtime.destinations.local.root` — relative path for local artifact output (e.g. `exports`)
   - `runtime.destinations.gcs.*`
 - Keep module `config` for business logic like normalization rules, validation rules, imputation strategies, and outlier detection settings.
 - Prefer `runtime` over editing every module config when the change is cross-cutting.
@@ -83,6 +108,28 @@ Use this to auto-correct typos while controlling aggressiveness via score cutoff
 
 Turn plotting off for speed on large datasets, on for exploratory analysis.
 """
+    stdio = _is_stdio_mode()
+    if stdio:
+        input_ingest_tree = (
+            "- Decision tree for getting data in:\n"
+            '  1. **Local file path** → `register_input(uri="/absolute/path/to/file.csv", load_into_session=true)`. '
+            "The server runs locally and can read your filesystem directly. This is the fastest path.\n"
+            '  2. **GCS path** → `register_input(uri="gs://bucket/file.csv")`. Zero byte transfer.\n'
+            '  3. **Base64 upload** → `upload_input(filename="data.csv", content_base64="...")`. '
+            "Only needed if the file is not on disk (e.g. generated in memory)."
+        )
+    else:
+        input_ingest_tree = (
+            "- Decision tree for getting data in:\n"
+            '  1. **GCS or server-visible path** → `register_input(uri="gs://..." or "/mnt/data/...")`. Zero byte transfer.\n'
+            '  2. **Local file, small (<100KB)** → `upload_input(filename="data.csv", content_base64="...")`. '
+            "Base64-encode and send through MCP.\n"
+            "  3. **Local file, large (>100KB)** → Upload via HTTP from your shell: "
+            "`curl -sS -X POST -F 'file=@<path>' -F 'load_into_session=true' http://127.0.0.1:8001/inputs/upload`. "
+            "This avoids MCP transport size limits. Parse the JSON response for `input_id` and `session_id`.\n"
+            "  4. **No shell access** → Use `upload_input` with base64 for any size, but be aware the MCP transport may truncate large payloads."
+        )
+    guide = guide.format(input_ingest_tree=input_ingest_tree)
     trusted_history = _trusted_history_enabled()
     ordered_steps = []
     if trusted_history:
@@ -102,20 +149,43 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
         [
             {
                 "step": 1 if trusted_history else 0,
+                "tool": "register_input",
+                "required_inputs": ["uri"],
+                "outputs": ["input_id", "session_id?", "summary"],
+                "notes": (
+                    [
+                        "In stdio/local mode, the server can read your filesystem directly — use local absolute paths.",
+                        "Also works with gs:// URIs for cloud-hosted data.",
+                        "If this fails with INPUT_PATH_DENIED, check the allowed input roots.",
+                    ]
+                    if stdio
+                    else [
+                        "Use this when data already lives at gs:// or a server-visible path.",
+                        "If the user has a local file that is not server-visible, use upload_input instead.",
+                        "If this fails with INPUT_PATH_DENIED, switch to upload_input.",
+                    ]
+                ),
+            },
+            {
+                "step": 2 if trusted_history else 1,
                 "tool": "diagnostics",
                 "required_inputs": [
-                    "gcs_path|session_id|runtime.run.input_path",
+                    "input_id|gcs_path|session_id|runtime.run.input_path",
                     "run_id|runtime.run.run_id",
                 ],
                 "outputs": ["session_id", "summary", "dashboard_url?"],
             },
             {
-                "step": 2 if trusted_history else 1,
+                "step": 3 if trusted_history else 2,
                 "tool": "infer_configs",
-                "required_inputs": ["gcs_path|session_id"],
+                "required_inputs": ["input_id|gcs_path|session_id"],
+                "notes": [
+                    "REQUIRED before running module tools. Without inferred configs, modules have no rules and produce no-op results.",
+                    "Pass the returned configs to each module tool, or let the session carry them forward.",
+                ],
             },
             {
-                "step": 3 if trusted_history else 2,
+                "step": 4 if trusted_history else 3,
                 "tool_chain": [
                     "normalization",
                     "duplicates",
@@ -126,7 +196,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "required_inputs": ["session_id", "run_id", "config", "runtime?"],
             },
             {
-                "step": 4 if trusted_history else 3,
+                "step": 5 if trusted_history else 4,
                 "tool": "final_audit",
                 "required_inputs": ["session_id", "run_id"],
             },
@@ -136,55 +206,71 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
         "ordered_steps": ordered_steps,
         "example_calls": [
             {
+                "tool": "register_input",
+                "arguments": {
+                    "uri": "/absolute/path/to/data.csv" if stdio else "gs://bucket/data.csv",
+                    "load_into_session": True,
+                    "idempotency_key": "run_001_source",
+                },
+            },
+            {
                 "tool": "diagnostics",
                 "arguments": {
+                    "input_id": "<input_id_from_register_or_upload>",
+                    "run_id": "run_001",
                     "runtime": {
-                        "run": {
-                            "input_path": "gs://bucket/data.csv",
-                            "run_id": "run_001",
-                        },
                         "artifacts": {"export_html": True, "plotting": False},
-                    }
+                        "destinations": {
+                            "local": {"enabled": True, "root": "exports"},
+                        },
+                    },
                 },
             },
             {
                 "tool": "infer_configs",
-                "arguments": {"session_id": "<session_id_from_diagnostics>"},
+                "arguments": {"input_id": "<input_id_from_register_or_upload>"},
             },
             {
                 "tool": "auto_heal",
                 "arguments": {
+                    "input_id": "<input_id_from_register_or_upload>",
                     "runtime": {
-                        "run": {
-                            "input_path": "gs://bucket/data.csv",
-                            "run_id": "auto_heal_run_001",
-                        },
+                        "run": {"run_id": "auto_heal_run_001"},
                         "artifacts": {"export_html": True, "plotting": False},
                     },
-                    "mode": "sync",
                 },
             },
             {
                 "tool": "data_dictionary",
                 "arguments": {
-                    "gcs_path": "gs://bucket/data.csv",
+                    "input_id": "<input_id_from_register_or_upload>",
                     "run_id": "dictionary_prelaunch_001",
                     "prelaunch_report": True,
-                    "runtime": {
-                        "run": {"input_path": "gs://bucket/data.csv"},
-                        "artifacts": {"export_html": True},
-                    },
+                    "runtime": {"artifacts": {"export_html": True}},
+                },
+            },
+            {
+                "tool": "manage_session",
+                "arguments": {
+                    "action": "fork",
+                    "session_id": "<session_id_from_previous_run>",
+                    "run_id": "second_pass_001",
+                },
+            },
+            {
+                "tool": "manage_session",
+                "arguments": {
+                    "action": "clear",
+                    "session_id": "<session_id_to_evict>",
                 },
             },
         ],
     }
     return {
         "status": "pass",
-        "content": {
-            "format": "markdown",
-            "title": "Analyst Toolkit Quickstart",
-            "markdown": guide.strip(),
-        },
+        "format": "markdown",
+        "title": "Analyst Toolkit Quickstart",
+        "markdown": guide.strip(),
         "machine_guide": machine_guide,
         "quick_actions": (
             [
@@ -204,14 +290,29 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
         )
         + [
             {
+                "label": "Register input",
+                "tool": "register_input",
+                "arguments_schema_hint": {"required": ["uri"]},
+            },
+            {
+                "label": "Upload local file",
+                "tool": "upload_input",
+                "arguments_schema_hint": {"required": ["filename", "content_base64"]},
+            },
+            {
+                "label": "Read artifact",
+                "tool": "read_artifact",
+                "arguments_schema_hint": {"required": ["artifact_path"]},
+            },
+            {
                 "label": "Run diagnostics",
                 "tool": "diagnostics",
-                "arguments_schema_hint": {"required": ["gcs_path|session_id", "run_id"]},
+                "arguments_schema_hint": {"required": ["input_id|gcs_path|session_id", "run_id"]},
             },
             {
                 "label": "Infer configs",
                 "tool": "infer_configs",
-                "arguments_schema_hint": {"required": ["gcs_path|session_id"]},
+                "arguments_schema_hint": {"required": ["input_id|gcs_path|session_id"]},
             },
             {
                 "label": "Open capabilities",
@@ -222,7 +323,7 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "label": "Run auto-heal",
                 "tool": "auto_heal",
                 "arguments_schema_hint": {
-                    "required": ["gcs_path|session_id|runtime.run.input_path"]
+                    "required": ["input_id|gcs_path|session_id|runtime.run.input_path"]
                 },
             },
             {
@@ -230,11 +331,17 @@ Turn plotting off for speed on large datasets, on for exploratory analysis.
                 "tool": "data_dictionary",
                 "arguments_schema_hint": {"required": []},
             },
+            {
+                "label": "Manage sessions",
+                "tool": "manage_session",
+                "arguments_schema_hint": {"required": ["action"]},
+            },
         ],
     }
 
 
 def agent_playbook_payload() -> dict:
+    stdio = _is_stdio_mode()
     trusted_history = _trusted_history_enabled()
     offset = 1 if trusted_history else 0
     return {
@@ -242,10 +349,17 @@ def agent_playbook_payload() -> dict:
         "version": "1.0",
         "goal": "Audit, clean, and certify a dataset with controlled user-editable configs.",
         "prerequisites": [
-            "Input data path (local csv/parquet or gs:// URI) or existing session_id",
+            "Canonical input_id from upload/register flow (preferred) or existing session_id",
+            (
+                "In stdio/local mode the server shares your filesystem — use register_input with absolute local paths directly"
+                if stdio
+                else "If no input_id exists yet: a gs:// URI or server-visible path for register_input, or use upload_input to push base64-encoded file content through MCP"
+            ),
             "Stable run_id used across calls",
             "Optional output bucket/prefix overrides",
             "Optional runtime overlay for cross-cutting execution control",
+            "Use manage_session(action='fork') to start a new run context from an existing session without re-downloading data or re-running infer_configs",
+            "Use manage_session(action='clear') to evict a session and free memory when done, or omit session_id to clear all",
         ],
         "ordered_steps": (
             [
@@ -278,9 +392,28 @@ def agent_playbook_payload() -> dict:
             },
             {
                 "step": offset + 1,
+                "tool": "register_input",
+                "required_inputs": ["uri"],
+                "outputs": ["input_id", "session_id?", "summary"],
+                "notes": (
+                    [
+                        "In stdio/local mode, the server can read your filesystem directly — use local absolute paths.",
+                        "Also works with gs:// URIs for cloud-hosted data.",
+                    ]
+                    if stdio
+                    else [
+                        "Use this when data already lives at gs:// or a server-visible path.",
+                        "If the user has a local file that is not server-visible, use the upload_input MCP tool instead.",
+                        "If register_input fails with INPUT_PATH_DENIED, switch to upload_input.",
+                    ]
+                ),
+                "next": [offset + 2],
+            },
+            {
+                "step": offset + 2,
                 "tool": "diagnostics",
                 "required_inputs": [
-                    "gcs_path|session_id|runtime.run.input_path",
+                    "input_id|gcs_path|session_id|runtime.run.input_path",
                     "run_id|runtime.run.run_id",
                 ],
                 "outputs": [
@@ -290,31 +423,35 @@ def agent_playbook_payload() -> dict:
                     "artifact_url?",
                     "plot_urls?",
                 ],
-                "next": [offset + 2],
-            },
-            {
-                "step": offset + 2,
-                "tool": "get_data_health_report",
-                "required_inputs": ["run_id", "session_id?"],
-                "outputs": ["health_score", "breakdown"],
                 "next": [offset + 3],
             },
             {
                 "step": offset + 3,
-                "tool": "infer_configs",
-                "required_inputs": ["gcs_path|session_id"],
-                "outputs": ["configs (YAML strings by module)"],
+                "tool": "get_data_health_report",
+                "required_inputs": ["run_id", "session_id?"],
+                "outputs": ["health_score", "breakdown"],
                 "next": [offset + 4],
             },
             {
                 "step": offset + 4,
-                "tool": "get_capability_catalog",
-                "required_inputs": [],
-                "outputs": ["editable knobs + defaults + example paths"],
+                "tool": "infer_configs",
+                "required_inputs": ["input_id|gcs_path|session_id"],
+                "outputs": ["configs (YAML strings by module)"],
+                "notes": [
+                    "REQUIRED before running module tools. Without inferred configs, modules have no rules and produce no-op results.",
+                    "Pass the returned configs to each module tool, or let the session carry them forward.",
+                ],
                 "next": [offset + 5],
             },
             {
                 "step": offset + 5,
+                "tool": "get_capability_catalog",
+                "required_inputs": [],
+                "outputs": ["editable knobs + defaults + example paths"],
+                "next": [offset + 6],
+            },
+            {
+                "step": offset + 6,
                 "tool": "manual config + runtime review",
                 "required_inputs": [
                     "inferred configs",
@@ -329,13 +466,13 @@ def agent_playbook_payload() -> dict:
                     "Use runtime for paths, run_id, export_html, plotting, and destination overrides.",
                     "Use module config for business logic and per-module rules.",
                 ],
-                "next": [offset + 6],
+                "next": [offset + 7],
             },
             {
-                "step": offset + 6,
+                "step": offset + 7,
                 "tool": "auto_heal",
                 "required_inputs": [
-                    "gcs_path|session_id|runtime.run.input_path",
+                    "input_id|gcs_path|session_id|runtime.run.input_path",
                     "run_id|runtime.run.run_id",
                 ],
                 "outputs": ["session_id", "dashboard_url?", "dashboard_path?", "export_url?"],
@@ -343,10 +480,10 @@ def agent_playbook_payload() -> dict:
                     "Use only when the user explicitly wants one-shot automation.",
                     "Open or link the auto-heal dashboard artifact for review.",
                 ],
-                "next": [offset + 7],
+                "next": [offset + 8],
             },
             {
-                "step": offset + 7,
+                "step": offset + 8,
                 "tool_chain": [
                     "normalization",
                     "duplicates",
@@ -361,10 +498,10 @@ def agent_playbook_payload() -> dict:
                     "Prefer the standalone dashboard artifact as the main review surface.",
                     "Use runtime instead of editing every module config when the override is cross-cutting.",
                 ],
-                "next": [offset + 8],
+                "next": [offset + 9],
             },
             {
-                "step": offset + 8,
+                "step": offset + 9,
                 "tool_chain": ["final_audit", "get_run_history"],
                 "required_inputs": ["session_id", "run_id"],
                 "outputs": ["final certificate artifacts", "healing ledger"],

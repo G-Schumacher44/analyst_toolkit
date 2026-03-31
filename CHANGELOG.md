@@ -41,6 +41,116 @@ Format:
 
 - None.
 
+## [0.5.0] - 2026-03-30
+
+### Added
+
+- Add MCP input ingest subsystem
+- Add manage_session MCP tool for session lifecycle management
+- Add upload_input and read_artifact MCP tools for container isolation
+- Add session memory guardrails and manage_session clear action
+- Auto-discover inferred configs from session in all module tools
+- Add sqlite session backend
+
+### Changed
+
+- Clean up MCP env-var wall of text in README
+- Clarify data dictionary input schema semantics
+- Standardize input_id schema usage
+- Publish shared input_id schema fragment
+- Lead clients through input ingest first
+- Enumerate all MCP environment variables in .envrc.example
+- Pass all MCP env variables through docker-compose
+- Add manage_session to agent/user-facing resources
+- Add manage_session to cockpit dashboard launchpad and launch sequences
+- Update changelog, add stdio-aware input guidance and session clear to resources
+- Dedupe input contract literals
+- Split MCP IO regressions
+- Split infer config regressions
+- Add release profiles and governance
+- Align release docs with auth posture
+- Pin patched pygments for audit
+- Add CI coverage release gate
+- Always upload coverage artifacts
+- Add shared pipeline config validation helpers
+- Polish runner validation tests
+- Normalize config and CLI surface text
+- Normalize validation gatekeeper messaging
+
+### Fixed
+
+- Address ingest review followups
+- Tighten ingest review followups
+- Harden input registry idempotency semantics
+- Harden ingest trust boundaries and errors
+- Tighten ingest hardening followups
+- Align data dictionary input schema
+- Align data dictionary run_id default
+- Tolerate older infer_configs helper signatures
+- Flatten quickstart tool response contract
+- Map generated infer configs into module payloads
+- Harden infer config result normalization
+- Restore full infer_configs module coverage for MCP workflows
+- Align artifact publication and routing for MCP module outputs
+- Separate artifact delivery warnings from status-affecting warnings
+- Preserve certification as distinct module in infer_configs
+- Handle load_input failures in infer_configs and pass run_id to session
+- Show disabled instead of missing for report artifacts when no work done
+- Auto-discover inferred certification config in final_audit
+- Lift certification.rules shorthand in final_audit config normalizer
+- Strip stale temp paths from inferred config in final_audit
+- Resolve session_id from input_id for config discovery in final_audit
+- Allow input_id + session_id in infer_configs and resolve session from descriptor
+- Strip stale /tmp paths from provided config and auto-create output dirs in final_audit
+- Prevent path traversal in final_audit output directory creation
+- Remove traversal paths from pipeline config, not just block mkdir
+- Run TTL cleanup before fork/rebind/list and avoid run_id collisions
+- Resolve doubled exports path and surface allowed input roots
+- Redact allowed input roots from client errors by default
+- Restrict read_artifact to artifact root only in HTTP mode
+- Update agent resources, docker-compose, and env config
+- Advertise 127.0.0.1 in artifact URLs when bound to 0.0.0.0
+- Strip exports prefix from relative paths and rename content field
+- Doubled exports path for relative inputs, read_artifact field name, and add next_actions hints to ingestion errors
+- Guide agents to HTTP upload for large files
+- Auto-enable local defaults in stdio mode and resolve config paths from package root
+- Evaluate trusted history at call time and require infer_configs in pipeline docs
+- Harden pipeline core regressions
+- Harden joblib and notebook trust boundaries
+- Avoid tabulate dependency in markdown fallback
+- Harden cockpit history contracts
+- Bound long-running state growth
+- Harden infer config contracts
+- Align artifact and dashboard contracts
+- Align cockpit health and template contracts
+- Guard malformed cockpit summaries
+- Advertise mcp templates and validate auto_heal input ids
+- Harden input ids and client error codes
+- Bound MCP input loading
+- Harden input guardrail errors
+- Surface session retention policy
+- Add on-demand session config retrieval
+- Trim redundant session inspect actions
+- Harden sqlite session backend surface
+- Tighten sqlite session path defaults
+- Harden shared config validation helpers
+- Fail early on invalid pipeline configs
+- Reject non-mapping runner configs
+- Polish artifact server and plotting runtime
+
+### Deprecated
+
+- None.
+
+### Removed
+
+- None.
+
+### Security
+
+- None.
+
+
 ## [0.4.4] - 2026-03-15
 
 ### Added
