@@ -142,11 +142,15 @@ def test_history_sort_value_parses_iso_timestamps_not_lexicographic(tmp_path):
         '[{"timestamp":"2026-03-01T08:00:00Z"},{"timestamp":"2026-03-01T09:00:00+01:00"}]',
         encoding="utf-8",
     )
+    original_enabled = cockpit_history_module._trusted_history_enabled
+    cockpit_history_module._trusted_history_enabled = lambda: True
 
-    sort_value = cockpit_history_module._history_sort_value(history_file)
-
-    expected = datetime.fromisoformat("2026-03-01T08:00:00+00:00").timestamp()
-    assert sort_value == pytest.approx(expected)
+    try:
+        sort_value = cockpit_history_module._history_sort_value(history_file)
+        expected = datetime.fromisoformat("2026-03-01T08:00:00+00:00").timestamp()
+        assert sort_value == pytest.approx(expected)
+    finally:
+        cockpit_history_module._trusted_history_enabled = original_enabled
 
 
 def test_artifact_root_label_uses_current_workspace(tmp_path, monkeypatch):
