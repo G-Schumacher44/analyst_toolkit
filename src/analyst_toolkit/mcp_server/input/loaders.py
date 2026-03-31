@@ -66,10 +66,11 @@ def load_dataframe_from_descriptor(descriptor: InputDescriptor) -> pd.DataFrame:
     path = Path(descriptor.resolved_reference).resolve(strict=False)
     safe_reference = _safe_descriptor_reference(descriptor, path)
     enforce_input_bytes_limit(path.stat().st_size, reference=safe_reference)
-    if path.suffix == ".parquet":
+    suffix = path.suffix.lower()
+    if suffix == ".parquet":
         return _read_parquet_with_limits(path, reference=safe_reference)
-    if path.suffix == ".csv":
+    if suffix == ".csv":
         return _read_csv_with_limits(path, reference=safe_reference)
     raise InputNotSupportedError(
-        f"Unsupported file format: {path.suffix or '<none>'}. Supported formats are .csv and .parquet."
+        f"Unsupported file format: {suffix or '<none>'}. Supported formats are .csv and .parquet."
     )

@@ -169,7 +169,7 @@ async def _toolkit_duplicates(
         )
         artifact_path = artifact_delivery["local_path"]
         artifact_url = artifact_delivery["url"]
-        status_warnings.extend(artifact_delivery["warnings"])
+        artifact_warnings = artifact_delivery["warnings"]
 
         xlsx_path = f"exports/reports/duplicates/{run_id}_duplicates_report.xlsx"
         xlsx_delivery = deliver_artifact(
@@ -180,7 +180,7 @@ async def _toolkit_duplicates(
             session_id=session_id,
         )
         xlsx_url = xlsx_delivery["url"]
-        status_warnings.extend(xlsx_delivery["warnings"])
+        artifact_warnings.extend(xlsx_delivery["warnings"])
 
         # Upload plots - search both root and run_id subdir
         plot_dirs = [Path("exports/plots/duplicates"), Path(f"exports/plots/duplicates/{run_id}")]
@@ -195,9 +195,11 @@ async def _toolkit_duplicates(
                         session_id=session_id,
                     )
                     plot_delivery[plot_file.name] = delivered
-                    status_warnings.extend(delivered["warnings"])
+                    artifact_warnings.extend(delivered["warnings"])
                     if delivered["url"]:
                         plot_urls[plot_file.name] = delivered["url"]
+    else:
+        artifact_warnings = []
 
     artifact_contract = build_artifact_contract(
         export_url,
@@ -216,7 +218,12 @@ async def _toolkit_duplicates(
         required_html=should_export_html(config),
         probe_local_paths=True,
     )
-    warnings = status_warnings + advisory_warnings + artifact_contract["artifact_warnings"]
+    warnings = (
+        status_warnings
+        + advisory_warnings
+        + artifact_warnings
+        + artifact_contract["artifact_warnings"]
+    )
     base_status = "pass" if duplicate_count == 0 else "warn"
     if status_warnings and base_status == "pass":
         base_status = "warn"

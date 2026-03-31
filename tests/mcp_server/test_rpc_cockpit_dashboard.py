@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
@@ -122,7 +124,6 @@ def test_build_recent_run_cards_discovers_local_dashboards(mocker, tmp_path, mon
         "build_data_health_report",
         return_value={"health_score": 94.0, "health_status": "green"},
     )
-    mocker.patch.object(cockpit_history_module, "_WORKSPACE_ROOT", tmp_path)
     monkeypatch.chdir(tmp_path)
 
     cards = cockpit_module._build_recent_run_cards(limit=5)
@@ -133,3 +134,26 @@ def test_build_recent_run_cards_discovers_local_dashboards(mocker, tmp_path, mon
     assert card["auto_heal_dashboard"].endswith(f"{run_id}_auto_heal_report.html")
     assert card["final_audit_dashboard"].endswith(f"{run_id}_final_audit_report.html")
     assert card["best_dashboard"] == card["final_audit_dashboard"]
+
+
+def test_history_sort_value_parses_iso_timestamps_not_lexicographic(tmp_path):
+    history_file = tmp_path / "run_history.json"
+    history_file.write_text(
+        '[{"timestamp":"2026-03-01T08:00:00Z"},{"timestamp":"2026-03-01T09:00:00+01:00"}]',
+        encoding="utf-8",
+    )
+
+    sort_value = cockpit_history_module._history_sort_value(history_file)
+
+    expected = datetime.fromisoformat("2026-03-01T08:00:00+00:00").timestamp()
+    assert sort_value == pytest.approx(expected)
+
+
+def test_artifact_root_label_uses_current_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    artifact_root = workspace / "exports"
+    artifact_root.mkdir()
+    monkeypatch.chdir(workspace)
+
+    assert cockpit_history_module._artifact_root_label(str(artifact_root)) == "exports"

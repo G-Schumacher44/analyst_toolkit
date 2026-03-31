@@ -27,7 +27,6 @@ from analyst_toolkit.mcp_server.tools.cockpit_templates import (
 )
 
 MAX_ARTIFACT_ROWS = 24
-_WORKSPACE_ROOT = Path.cwd().resolve(strict=False)
 
 
 def _module_display_name(module: str) -> str:
@@ -44,15 +43,26 @@ def _module_display_name(module: str) -> str:
     return mapping.get(module, module.replace("_", " ").title())
 
 
-def _artifact_root_label(root: Any) -> str:
+def _artifact_root_label(root: Any, workspace_root: Path | None = None) -> str:
     text = str(root or "").strip()
     if not text:
         return ""
     path = Path(text).expanduser().resolve(strict=False)
+    resolved_workspace = workspace_root or Path.cwd().resolve(strict=False)
     try:
-        return path.relative_to(_WORKSPACE_ROOT).as_posix()
+        return path.relative_to(resolved_workspace).as_posix()
     except ValueError:
         return path.name or "artifacts"
+
+
+def _parse_history_timestamp(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _read_history_entries(path: Path) -> list[dict[str, Any]]:
@@ -71,17 +81,14 @@ def _history_sort_value(path: Path) -> float:
     except OSError:
         return 0.0
     history = _read_history_entries(path)
-    newest = ""
+    newest = None
     for entry in history:
-        timestamp = str(entry.get("timestamp", "") or "")
-        if timestamp > newest:
+        timestamp = _parse_history_timestamp(entry.get("timestamp"))
+        if timestamp and (newest is None or timestamp > newest):
             newest = timestamp
     if not newest:
         return fallback
-    try:
-        return datetime.fromisoformat(newest.replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return fallback
+    return newest.timestamp()
 
 
 def _iter_recent_history_files(limit: int) -> list[Path]:

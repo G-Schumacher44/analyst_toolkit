@@ -1,0 +1,70 @@
+validation:
+  input_path: "data/raw/example.csv"
+
+  # Schema and content validation rules
+  schema_validation:
+    run: true
+    fail_on_error: false   # Set to false in audit mode to detect all issues
+
+    rules:
+      expected_columns:
+        - "tag_id"
+        - "species"
+        - "bill_length_mm"
+        - "bill_depth_mm"
+        - "flipper_length_mm"
+        - "body_mass_g"
+        - "age_group"
+        - "sex"
+        - "colony_id"
+        - "island"
+        - "capture_date"
+        - "health_status"
+        - "study_name"
+        - "clutch_completion"
+        - "date_egg"
+
+      expected_types:
+        tag_id: "object"
+        species: "object"
+        bill_length_mm: "float64"
+        bill_depth_mm: "float64"
+        flipper_length_mm: "int64"
+        body_mass_g: "float64"
+        age_group: "object"
+        sex: "object"
+        colony_id: "object"
+        island: "object"
+        capture_date: "object"
+        health_status: "object"
+        study_name: "object"
+        clutch_completion: "object"
+        date_egg: "object"
+
+      categorical_values:
+        species: ["Adelie", "Chinstrap", "Gentoo"]
+        island: ["Dream", "Biscoe", "Torgersen", "Cormorant", "Shortcut"]
+        sex: ["MALE", "FEMALE", "UNKNOWN"]
+        colony_id: ["Biscoe West", "Cormorant East", "Dream South", "Shortcut Point", "Torgersen North"]
+        clutch_completion: ["Yes", "No"]
+        age_group: ["Juvenile", "Adult", "Chick", "UNKNOWN"]
+        health_status: ["Healthy", "Critical", "Underweight", "Sick", "Overweight", "UNKNOWN"]
+        study_name: ["PAPRI2019", "PAPRI2020", "PAPRI2021", "PAPRI2022", "PAPRI2023", "PAPRI2024"]
+
+      numeric_ranges:
+        bill_length_mm:
+          min: 30.0
+          max: 65.0
+        bill_depth_mm:
+          min: 12.0
+          max: 23.5
+        flipper_length_mm:
+          min: 160.0
+          max: 255.0
+        body_mass_g:
+          min: 2300.0
+          max: 7500.0
+
+  settings:
+    export_html: true
+    export_html_path: "exports/reports/validation/{run_id}_validation_report.html"

@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 from collections import OrderedDict
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -59,7 +60,7 @@ RUN_ID_OVERRIDE_ALLOWED = _env_bool("ANALYST_MCP_ALLOW_RUN_ID_OVERRIDE", False)
 DEDUP_RUN_ID_WARNINGS = _env_bool("ANALYST_MCP_DEDUP_RUN_ID_WARNINGS", True)
 _HISTORY_LOCKS_GUARD = threading.Lock()
 _MAX_HISTORY_LOCKS = 256
-_HISTORY_LOCKS: OrderedDict[str, threading.Lock] = OrderedDict()
+_HISTORY_LOCKS: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _LIFECYCLE_WARNINGS_GUARD = threading.Lock()
 _MAX_LIFECYCLE_WARNING_KEYS = 512
 _SEEN_LIFECYCLE_WARNING_KEYS: set[tuple[str, str]] = set()
@@ -381,8 +382,7 @@ def append_to_run_history(run_id: str, entry: dict, session_id: Optional[str] = 
     history_dir.mkdir(parents=True, exist_ok=True)
 
     history_file = history_dir / f"{run_id}_history.json"
-    lock = _history_lock_for(history_file)
-    with lock:
+    with _history_lock(history_file):
         history, parse_meta = _read_history_file_safe(history_file)
         if parse_meta["parse_errors"]:
             logger.warning(
@@ -425,8 +425,7 @@ def _get_run_history_with_meta(
         path_root = _resolve_path_root(run_id, session_id)
         history_file = history_root / path_root / f"{run_id}_history.json"
         if history_file.exists():
-            lock = _history_lock_for(history_file)
-            with lock:
+            with _history_lock(history_file):
                 return _read_history_file_safe(history_file)
         return [], meta
 
@@ -436,8 +435,7 @@ def _get_run_history_with_meta(
         reverse=True,
     )
     if candidates:
-        lock = _history_lock_for(candidates[0])
-        with lock:
+        with _history_lock(candidates[0]):
             return _read_history_file_safe(candidates[0])
     return [], meta
 
@@ -445,15 +443,43 @@ def _get_run_history_with_meta(
 def _history_lock_for(path: Path) -> threading.Lock:
     key = str(path.resolve())
     with _HISTORY_LOCKS_GUARD:
-        lock = _HISTORY_LOCKS.get(key)
-        if lock is not None:
+        entry = _HISTORY_LOCKS.get(key)
+        if entry is not None:
             _HISTORY_LOCKS.move_to_end(key)
-            return lock
+            return entry["lock"]
         if len(_HISTORY_LOCKS) >= _MAX_HISTORY_LOCKS:
-            _HISTORY_LOCKS.popitem(last=False)
+            for stale_key, stale_entry in list(_HISTORY_LOCKS.items()):
+                if stale_entry["use_count"] == 0:
+                    _HISTORY_LOCKS.pop(stale_key)
+                    break
         lock = threading.Lock()
-        _HISTORY_LOCKS[key] = lock
+        _HISTORY_LOCKS[key] = {"lock": lock, "use_count": 0}
         return lock
+
+
+def _release_history_lock(path: Path) -> None:
+    key = str(path.resolve())
+    with _HISTORY_LOCKS_GUARD:
+        entry = _HISTORY_LOCKS.get(key)
+        if entry is None:
+            return
+        entry["use_count"] = max(0, int(entry.get("use_count", 0)) - 1)
+        _HISTORY_LOCKS.move_to_end(key)
+
+
+@contextmanager
+def _history_lock(path: Path):
+    key = str(path.resolve())
+    lock = _history_lock_for(path)
+    with _HISTORY_LOCKS_GUARD:
+        entry = _HISTORY_LOCKS.get(key)
+        if entry is not None:
+            entry["use_count"] += 1
+    try:
+        with lock:
+            yield
+    finally:
+        _release_history_lock(path)
 
 
 def _should_emit_lifecycle_warning(session_id: str, requested_run_id: str) -> bool:

@@ -40,7 +40,7 @@ def compact_destination_metadata(destinations: dict[str, Any]) -> dict[str, Any]
         if status in {"", "disabled"}:
             continue
         item = {"status": status}
-        for key in ("path", "url", "folder_id"):
+        for key in ("path", "url", "folder_id", "requested_root_status"):
             value = payload.get(key)
             if value:
                 item[key] = value

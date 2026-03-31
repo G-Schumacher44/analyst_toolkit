@@ -66,7 +66,7 @@ def run_full_pipeline(config_path: str):
     logging.info(f"--- Loading Master Orchestration Config from {config_path} ---")
     master_config = validate_pipeline_runner_config(load_config(config_path))
 
-    run_id = master_config.get("run_id", "default_run")
+    run_id = master_config["run_id"]
     notebook_mode = master_config.get("notebook", False)
     modules_to_run = master_config.get("modules", {})
     entry_path = master_config.get("pipeline_entry_path")
@@ -153,7 +153,9 @@ def run_full_pipeline(config_path: str):
                 "M07 Outlier Handling cannot run because M06 Outlier Detection did not return results."
             )
         logging.info("--- Starting Module: OUTLIER_HANDLING ---")
-        module_config = load_config(module_info["config_path"])
+        module_config = _load_validated_module_config(
+            "outlier_handling", module_info["config_path"]
+        )
         df = run_outlier_handling_pipeline(
             config=module_config,
             df=df,

@@ -111,15 +111,21 @@ async def _toolkit_final_audit(
     ):
         kwargs.setdefault(key, runtime_overrides.get(key))
 
-    run_id, lifecycle = resolve_run_context(run_id, session_id)
-
     config = coerce_config(config, "final_audit")
 
     # Resolve session_id from input_id so config discovery can find inferred configs
+    descriptor = None
     if not session_id and input_id:
         descriptor = get_input_descriptor(input_id)
         if descriptor and descriptor.session_id:
             session_id = descriptor.session_id
+    elif input_id:
+        descriptor = get_input_descriptor(input_id)
+
+    if descriptor and descriptor.run_id and not run_id:
+        run_id = descriptor.run_id
+
+    run_id, lifecycle = resolve_run_context(run_id, session_id)
 
     # Auto-discover inferred configs from session when no explicit config is provided
     inferred_config: dict = {}
@@ -153,8 +159,14 @@ async def _toolkit_final_audit(
     # infer_configs embeds /tmp paths that expire after the inference call returns;
     # agents often pass those same stale paths back as explicit config.
     _strip_transient_paths(inferred_config)
+    nested_inferred = inferred_config.get("final_audit")
+    if isinstance(nested_inferred, dict):
+        _strip_transient_paths(nested_inferred)
     if isinstance(config, dict):
         _strip_transient_paths(config)
+        nested_config = config.get("final_audit")
+        if isinstance(nested_config, dict):
+            _strip_transient_paths(nested_config)
 
     config, runtime_meta = resolve_layered_config(
         inferred=inferred_config,
@@ -265,8 +277,11 @@ async def _toolkit_final_audit(
     artifact_delivery: dict[str, Any] = empty_delivery_state()
     xlsx_delivery: dict[str, Any] = empty_delivery_state()
 
-    # M10 exports to these locations (matches final_audit_pipeline.py defaults)
-    artifact_path = f"exports/reports/final_audit/{run_id}_final_audit_report.html"
+    # M10 exports to these configured locations; use the effective settings-path contract
+    # instead of a parallel hard-coded path so delivery stays aligned with runtime config.
+    artifact_path = paths_cfg.get(
+        "report_html", "exports/reports/final_audit/{run_id}_final_audit_report.html"
+    ).format(run_id=run_id)
     artifact_delivery = deliver_artifact(
         artifact_path,
         run_id,
@@ -279,10 +294,9 @@ async def _toolkit_final_audit(
     warnings.extend(artifact_delivery["warnings"])
 
     xlsx_path = (
-        module_cfg.get("final_audit", {})
-        .get("settings", {})
-        .get("paths", {})
-        .get("report_excel", "exports/reports/final_audit/{run_id}_final_audit_report.xlsx")
+        paths_cfg.get(
+            "report_excel", "exports/reports/final_audit/{run_id}_final_audit_report.xlsx"
+        )
     ).format(run_id=run_id)
     xlsx_expected = Path(xlsx_path).exists()
     xlsx_url = ""

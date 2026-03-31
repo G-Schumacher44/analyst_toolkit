@@ -33,6 +33,11 @@ def test_validate_pipeline_runner_config_requires_pipeline_entry_path():
         validate_pipeline_runner_config({"run_id": "x", "modules": {}})
 
 
+def test_validate_pipeline_runner_config_requires_run_id():
+    with pytest.raises(PipelineConfigValidationError, match="run_id"):
+        validate_pipeline_runner_config({"pipeline_entry_path": "data.csv", "modules": {}})
+
+
 def test_validate_runner_module_config_normalizes_validation_gatekeeper_template():
     config = _load_yaml("config/certification_config_template.yaml")
 
@@ -56,6 +61,18 @@ def test_validate_runner_module_config_normalizes_outlier_detection_template():
     assert "outlier_detection" in validated["canonical_config"]
 
 
+def test_validate_runner_module_config_normalizes_outlier_handling_template():
+    config = _load_yaml("config/handling_config_template.yaml")
+    config["outlier_handling"]["run"] = "true"
+
+    validated = validate_runner_module_config("outlier_handling", config)
+
+    assert validated["module_name"] == "outlier_handling"
+    assert validated["root_key"] == "outlier_handling"
+    assert validated["effective_config"]["run"] is True
+    assert "outlier_handling" in validated["canonical_config"]
+
+
 def test_validate_runner_module_config_rejects_unsupported_runner_module():
     with pytest.raises(PipelineConfigValidationError, match="Unsupported runner module"):
-        validate_runner_module_config("outlier_handling", {})
+        validate_runner_module_config("totally_unknown_module", {})

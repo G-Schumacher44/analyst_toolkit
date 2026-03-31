@@ -100,6 +100,18 @@ def test_translate_path_accepts_reports_prefix(tmp_path):
     assert translated == (root / "reports" / "pipeline" / "run1_dashboard.html")
 
 
+def test_translate_path_maps_bare_reports_prefix_to_reports_dir(tmp_path):
+    root = tmp_path / "exports"
+    handler = artifact_server_module._ArtifactRequestHandler.__new__(
+        artifact_server_module._ArtifactRequestHandler
+    )
+    handler.server = type("Server", (), {"artifact_root": root})()
+
+    translated = Path(handler.translate_path("/reports/"))
+
+    assert translated == (root / "reports")
+
+
 def test_ensure_local_artifact_server_returns_conflict_without_health_match(
     monkeypatch, tmp_path, reset_artifact_server
 ):

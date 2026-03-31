@@ -183,7 +183,7 @@ def build_capability_catalog(*, golden_configs: dict[str, Any]) -> dict[str, Any
             continue
         tool_name = spec.tool
         root_key = spec.config_root
-        template_path = spec.path.as_posix()
+        template_path = spec.relative_path
         root = _load_template_root(root_key, template_path)
         knobs = []
         for knob in _KEY_KNOBS.get(tool_name, []):

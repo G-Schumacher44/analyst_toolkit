@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -9,8 +10,12 @@ from analyst_toolkit.mcp_server.input.errors import InputNotSupportedError
 from analyst_toolkit.mcp_server.input.models import InputSourceType
 from analyst_toolkit.mcp_server.input.storage import validate_server_visible_path
 
+_WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
 
 def detect_source_type(reference: str) -> InputSourceType:
+    if _WINDOWS_ABSOLUTE_PATH_RE.match(reference):
+        return "server_path"
     parsed = urlparse(reference)
     if parsed.scheme == "gs":
         return "gcs"

@@ -1,0 +1,37 @@
+runtime:
+  run:
+    run_id: example_run_001
+    session_id:
+    input_path: gs://bucket/path/to/data.csv
+
+  artifacts:
+    export_html: true
+    export_xlsx:
+    export_data:
+    plotting: false
+    artifact_mode: single_html
+    collision_policy: overwrite
+
+  destinations:
+    local:
+      enabled: true
+      root: exports
+    gcs:
+      enabled: false
+      bucket_uri: gs://my-report-bucket
+      prefix: analyst_toolkit/reports
+    drive:
+      enabled: false
+      folder_id:
+
+  paths:
+    report_root: exports/reports
+    plot_root: exports/plots
+    checkpoint_root: exports/joblib
+    data_root: exports/data
+
+  execution:
+    allow_plot_generation: false
+    upload_artifacts: true
+    persist_history: true
+    strict_config: false

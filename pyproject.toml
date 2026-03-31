@@ -125,5 +125,8 @@ include = [
   "analyst_toolkit.*",
 ]
 
+[tool.setuptools.package-data]
+"analyst_toolkit.config_templates" = ["*.yaml", "golden_templates/*.yaml"]
+
 [project.scripts]
 analyst-toolkit = "analyst_toolkit.run_toolkit_pipeline:main"

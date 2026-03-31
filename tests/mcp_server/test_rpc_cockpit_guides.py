@@ -85,6 +85,7 @@ def test_rpc_capability_catalog_tool(client):
         for item in result["workflow_templates"]
     )
     modules = {item["tool"]: item for item in result["modules"]}
+    assert all(str(item["template_path"]).startswith("config/") for item in result["modules"])
     final_audit_knobs = {k["path"]: k["default"] for k in modules["final_audit"]["key_knobs"]}
     assert "summary.run" not in final_audit_knobs
     assert final_audit_knobs["final_edits.run"] is True

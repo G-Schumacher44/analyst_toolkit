@@ -13,6 +13,26 @@ INPUT_ID_PATTERN = rf"^{INPUT_ID_PREFIX}[a-f0-9]{{{INPUT_ID_HEX_LENGTH}}}$"
 _UNSET = object()
 
 
+def _deep_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _deep_freeze(val) for key, val in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_deep_freeze(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(item) for item in value)
+    return value
+
+
+def _deep_thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _deep_thaw(val) for key, val in value.items()}
+    if isinstance(value, tuple):
+        return [_deep_thaw(item) for item in value]
+    if isinstance(value, frozenset):
+        return sorted(_deep_thaw(item) for item in value)
+    return value
+
+
 @dataclass(frozen=True)
 class InputDescriptor:
     input_id: str
@@ -28,7 +48,7 @@ class InputDescriptor:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+        object.__setattr__(self, "metadata", _deep_freeze(dict(self.metadata)))
 
     def same_canonical_input(self, other: "InputDescriptor") -> bool:
         if not isinstance(other, InputDescriptor):
@@ -42,7 +62,7 @@ class InputDescriptor:
             and self.media_type == other.media_type
             and self.file_size_bytes == other.file_size_bytes
             and self.sha256 == other.sha256
-            and dict(self.metadata) == dict(other.metadata)
+            and _deep_thaw(self.metadata) == _deep_thaw(other.metadata)
         )
 
     def with_runtime_binding(
@@ -73,5 +93,5 @@ class InputDescriptor:
             "sha256": self.sha256,
             "session_id": self.session_id,
             "run_id": self.run_id,
-            "metadata": dict(self.metadata),
+            "metadata": _deep_thaw(self.metadata),
         }

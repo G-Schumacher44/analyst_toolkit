@@ -1,11 +1,14 @@
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from fastapi import UploadFile
 
 import analyst_toolkit.mcp_server.server as server_module
 from analyst_toolkit.mcp_server.input import registry as input_registry
 from analyst_toolkit.mcp_server.input.errors import InputError, InputPathDeniedError
+from analyst_toolkit.mcp_server.input.models import InputDescriptor
 from analyst_toolkit.mcp_server.input.storage import validate_server_visible_path
 from analyst_toolkit.mcp_server.state import StateStore
 from analyst_toolkit.mcp_server.tools import diagnostics as diagnostics_tool
@@ -75,6 +78,62 @@ def test_inputs_upload_rejects_empty_payload(client, clean_input_env):
     detail = response.json()["detail"]
     assert detail["code"] == "INPUT_EMPTY_UPLOAD"
     assert isinstance(detail["trace_id"], str)
+
+
+@pytest.mark.asyncio
+async def test_http_upload_input_offloads_ingest_to_thread(monkeypatch, clean_input_env):
+    monkeypatch.setattr(server_module, "_require_http_auth", lambda request: "trace_http_upload")
+    calls: list[tuple[object, tuple, dict]] = []
+
+    async def fake_to_thread(func, /, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(server_module.asyncio, "to_thread", fake_to_thread)
+
+    descriptor = InputDescriptor(
+        input_id="input_deadbeefdeadbeef",
+        source_type="upload",
+        original_reference="dirty_penguins.csv",
+        resolved_reference=str(clean_input_env / "inputs" / "staged.csv"),
+        display_name="dirty_penguins.csv",
+        media_type="text/csv",
+        file_size_bytes=29,
+        sha256="abc123",
+        session_id="sess_upload",
+        run_id="upload_run",
+    )
+
+    def fake_ingest_uploaded_bytes(**kwargs):
+        return descriptor, pd.DataFrame({"species": ["Adelie"]}), "sess_upload"
+
+    monkeypatch.setattr(server_module, "ingest_uploaded_bytes", fake_ingest_uploaded_bytes)
+
+    upload = UploadFile(
+        file=BytesIO(b"species,bill_length_mm\nAdelie,39.1\n"),
+        filename="dirty_penguins.csv",
+        headers={"content-type": "text/csv"},
+    )
+    response = await server_module.upload_input(
+        request=object(),
+        file=upload,
+        session_id=None,
+        run_id="upload_run",
+        idempotency_key="upload_http",
+        load_into_session=True,
+    )
+
+    assert response.status_code == 200
+    payload = response.body.decode("utf-8")
+    assert '"status":"pass"' in payload
+    assert '"session_id":"sess_upload"' in payload
+    assert calls
+    func, args, kwargs = calls[0]
+    assert func is fake_ingest_uploaded_bytes
+    assert not args
+    assert kwargs["filename"] == "dirty_penguins.csv"
+    assert kwargs["run_id"] == "upload_run"
+    assert kwargs["idempotency_key"] == "upload_http"
 
 
 def test_inputs_upload_reuses_input_id_for_same_payload(client, clean_input_env):
@@ -268,7 +327,7 @@ def test_inputs_register_reuses_session_for_anonymous_idempotent_retry(client, c
     assert response_one.json()["session_id"] == response_two.json()["session_id"]
 
 
-def test_inputs_register_allocates_new_session_when_old_binding_was_reused_for_other_input(
+def test_inputs_register_rejects_conflicting_explicit_session_rebind_and_preserves_retry_binding(
     client, clean_input_env
 ):
     tmp_path = clean_input_env
@@ -304,8 +363,8 @@ def test_inputs_register_allocates_new_session_when_old_binding_was_reused_for_o
             "run_id": "other_register_run",
         },
     )
-    assert competing_response.status_code == 200
-    assert competing_response.json()["session_id"] == original_session_id
+    assert competing_response.status_code == 409
+    assert competing_response.json()["detail"]["code"] == "INPUT_CONFLICT"
 
     response_two = client.post(
         "/inputs/register",
@@ -319,8 +378,8 @@ def test_inputs_register_allocates_new_session_when_old_binding_was_reused_for_o
 
     assert response_two.status_code == 200
     assert response_one.json()["input"]["input_id"] == response_two.json()["input"]["input_id"]
-    assert response_two.json()["session_id"] != original_session_id
-    assert StateStore.get_metadata(response_two.json()["session_id"]) is not None
+    assert response_two.json()["session_id"] == original_session_id
+    assert StateStore.get_metadata(original_session_id) is not None
 
 
 def test_inputs_register_uses_distinct_input_ids_for_distinct_idempotency_keys(

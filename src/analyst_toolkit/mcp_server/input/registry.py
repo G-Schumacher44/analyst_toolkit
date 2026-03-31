@@ -91,7 +91,23 @@ def _refresh_input_locked(
     return descriptor
 
 
-def _refresh_session_locked(session_id: str, input_id: str, now: float) -> None:
+def _assert_session_binding_compatible_locked(session_id: str, input_id: str) -> None:
+    existing = _SESSION_INPUTS.get(session_id)
+    if existing is not None and existing.input_id != input_id:
+        raise InputConflictError(
+            f"Session '{session_id}' is already bound to input_id '{existing.input_id}'."
+        )
+
+
+def _refresh_session_locked(
+    session_id: str,
+    input_id: str,
+    now: float,
+    *,
+    allow_rebind: bool = False,
+) -> None:
+    if not allow_rebind:
+        _assert_session_binding_compatible_locked(session_id, input_id)
     _SESSION_INPUTS[session_id] = _SessionBinding(
         input_id=input_id,
         expires_at=_expires_at(now),
@@ -138,6 +154,12 @@ def save_descriptor(descriptor: InputDescriptor) -> InputDescriptor:
             effective_descriptor = descriptor.with_runtime_binding(
                 session_id=descriptor.session_id or existing_descriptor.session_id,
                 run_id=descriptor.run_id or existing_descriptor.run_id,
+            )
+
+        if effective_descriptor.session_id:
+            _assert_session_binding_compatible_locked(
+                effective_descriptor.session_id,
+                effective_descriptor.input_id,
             )
 
         effective_descriptor = _refresh_input_locked(

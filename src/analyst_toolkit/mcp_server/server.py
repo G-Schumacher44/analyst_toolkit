@@ -394,7 +394,8 @@ async def upload_input(
             },
         )
     try:
-        descriptor, df, effective_session_id = ingest_uploaded_bytes(
+        descriptor, df, effective_session_id = await asyncio.to_thread(
+            ingest_uploaded_bytes,
             filename=file.filename or "upload.csv",
             payload=payload,
             media_type=file.content_type,

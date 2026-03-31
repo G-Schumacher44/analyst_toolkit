@@ -1,9 +1,19 @@
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
 from analyst_toolkit.mcp_server.state import StateStore
+
+
+def _configure_sqlite_state_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    state_home = tmp_path / "state_home"
+    db_path = state_home / "analyst_toolkit" / "session_store.db"
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(db_path))
+    return db_path
 
 
 def test_save_and_get(sample_df):
@@ -118,8 +128,7 @@ def test_non_expired_session_survives_cleanup(sample_df, monkeypatch):
 
 
 def test_sqlite_backend_save_and_get(sample_df, tmp_path, monkeypatch):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    db_path = _configure_sqlite_state_env(monkeypatch, tmp_path)
 
     sid = StateStore.save(sample_df, run_id="sqlite_run")
 
@@ -131,11 +140,12 @@ def test_sqlite_backend_save_and_get(sample_df, tmp_path, monkeypatch):
 
     pd.testing.assert_frame_equal(result, sample_df)
     assert StateStore.get_run_id(sid) == "sqlite_run"
+    assert db_path.stat().st_mode & 0o777 == 0o600
+    assert db_path.parent.stat().st_mode & 0o777 == 0o700
 
 
 def test_sqlite_backend_persists_configs_and_fork(sample_df, tmp_path, monkeypatch):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
 
     sid = StateStore.save(sample_df, run_id="sqlite_run")
     StateStore.save_config(sid, "validation", "validation:\n  run: true\n")
@@ -148,8 +158,7 @@ def test_sqlite_backend_persists_configs_and_fork(sample_df, tmp_path, monkeypat
 
 
 def test_sqlite_backend_rebind_and_clear(sample_df, tmp_path, monkeypatch):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
 
     sid = StateStore.save(sample_df, run_id="sqlite_run")
 
@@ -163,8 +172,7 @@ def test_sqlite_backend_rebind_and_clear(sample_df, tmp_path, monkeypatch):
 def test_sqlite_backend_ttl_cleanup(sample_df, tmp_path, monkeypatch):
     import analyst_toolkit.mcp_server.state as state_module
 
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
     monkeypatch.setattr(state_module, "SESSION_TTL_SECONDS", 1)
 
     sid = StateStore.save(sample_df, run_id="sqlite_run")
@@ -175,9 +183,8 @@ def test_sqlite_backend_ttl_cleanup(sample_df, tmp_path, monkeypatch):
 
 
 def test_sqlite_concurrent_saves_are_thread_safe(tmp_path, monkeypatch):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
-    ids = []
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
+    saved = []
     errors = []
     lock = threading.Lock()
 
@@ -188,7 +195,7 @@ def test_sqlite_concurrent_saves_are_thread_safe(tmp_path, monkeypatch):
             df = pd.DataFrame({"col": [i]})
             sid = StateStore.save(df, run_id=f"run_{i}")
             with lock:
-                ids.append(sid)
+                saved.append((sid, i))
         except Exception as e:
             with lock:
                 errors.append(e)
@@ -200,14 +207,17 @@ def test_sqlite_concurrent_saves_are_thread_safe(tmp_path, monkeypatch):
         thread.join()
 
     assert not errors, f"Errors during concurrent sqlite saves: {errors}"
-    assert len(ids) == 20
-    for sid in ids:
-        assert StateStore.get(sid) is not None
+    assert len(saved) == 20
+    assert len({sid for sid, _ in saved}) == 20
+    for sid, i in saved:
+        stored = StateStore.get(sid)
+        assert stored is not None
+        assert stored.iloc[0]["col"] == i
+        assert StateStore.get_run_id(sid) == f"run_{i}"
 
 
 def test_sqlite_concurrent_reads_are_safe(sample_df, tmp_path, monkeypatch):
-    monkeypatch.setenv("ANALYST_MCP_SESSION_BACKEND", "sqlite")
-    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "session_store.db"))
+    _configure_sqlite_state_env(monkeypatch, tmp_path)
     sid = StateStore.save(sample_df, run_id="sqlite_run")
     errors = []
     lock = threading.Lock()
@@ -257,3 +267,49 @@ def test_sqlite_state_path_rejects_exports_root(monkeypatch):
 
     with pytest.raises(ValueError, match="cannot use a path under ./exports"):
         state_module._sqlite_state_path()
+
+
+def test_sqlite_state_path_requires_private_root(monkeypatch, tmp_path):
+    import analyst_toolkit.mcp_server.state as state_module
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state_home"))
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(tmp_path / "elsewhere" / "db.sqlite"))
+
+    with pytest.raises(ValueError, match="private session state root"):
+        state_module._sqlite_state_path()
+
+
+def test_sqlite_state_path_rejects_symlink(monkeypatch, tmp_path):
+    import analyst_toolkit.mcp_server.state as state_module
+
+    state_home = tmp_path / "state_home"
+    state_home.mkdir()
+    target = state_home / "target.sqlite"
+    target.write_text("", encoding="utf-8")
+    link = state_home / "link.sqlite"
+    link.symlink_to(target)
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    monkeypatch.setenv("ANALYST_MCP_SESSION_DB_PATH", str(link))
+
+    with pytest.raises(ValueError, match="symlinked database path"):
+        state_module._sqlite_state_path()
+
+
+def test_sqlite_rejects_legacy_pickle_rows(sample_df, tmp_path, monkeypatch):
+    import sqlite3
+
+    db_path = _configure_sqlite_state_env(monkeypatch, tmp_path)
+    sid = StateStore.save(sample_df, run_id="sqlite_run")
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "UPDATE sessions SET dataframe_format = ? WHERE session_id = ?",
+            ("pickle", sid),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with pytest.raises(ValueError, match="Unsupported SQLite session dataframe format"):
+        StateStore.get(sid)

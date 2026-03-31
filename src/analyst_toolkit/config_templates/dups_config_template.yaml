@@ -1,0 +1,10 @@
+duplicates:
+  run: true
+
+  subset_columns: ['tag_id', 'species', 'capture_date']
+  keep: 'first'
+  mode: 'flag'
+  input_path: "data/processed/example.csv"
+  settings:
+    export_html: true
+    export_html_path: "exports/reports/duplicates/{run_id}_duplicates_report.html"

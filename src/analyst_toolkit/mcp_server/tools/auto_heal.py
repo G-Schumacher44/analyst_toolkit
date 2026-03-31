@@ -44,10 +44,21 @@ def _sanitize_dashboard_step_summary(summary: dict | None) -> dict:
         return {}
 
     sanitized = {k: v for k, v in summary.items() if k != "error"}
-    if "error" in summary:
+    if summary.get("error_code"):
+        sanitized["error_code"] = summary["error_code"]
+    elif "error" in summary:
         sanitized["error_code"] = "AUTO_HEAL_STEP_FAILED"
+    if summary.get("trace_id"):
+        sanitized["trace_id"] = summary["trace_id"]
+    elif "error" in summary:
         sanitized["trace_id"] = new_trace_id()
     return sanitized
+
+
+def _step_failure_summary(step: str, error_code: str, exc: Exception) -> dict:
+    trace_id = new_trace_id()
+    logger.exception("auto_heal %s step failed (trace_id=%s)", step, trace_id, exc_info=exc)
+    return {"error_code": error_code, "trace_id": trace_id}
 
 
 async def _run_auto_heal_pipeline(
@@ -85,6 +96,7 @@ async def _run_auto_heal_pipeline(
 
     configs = infer_res.get("configs", {})
     current_session_id = infer_res.get("session_id")
+    run_id = infer_res.get("run_id") or run_id
 
     summary = {}
     failed_steps: list[str] = []
@@ -110,7 +122,9 @@ async def _run_auto_heal_pipeline(
             if _is_terminal_failure(norm_res.get("status")):
                 failed_steps.append("normalization")
         except Exception as e:
-            summary["normalization"] = {"error": str(e)}
+            failure = _step_failure_summary("normalization", "NORMALIZATION_FAILED", e)
+            summary["normalization"] = failure
+            norm_res = {"status": "error", "summary": failure}
             failed_steps.append("normalization")
 
     # 3. Apply Imputation if inferred
@@ -140,7 +154,9 @@ async def _run_auto_heal_pipeline(
                     failed_steps.append("imputation")
 
         except Exception as e:
-            summary["imputation"] = {"error": str(e)}
+            failure = _step_failure_summary("imputation", "IMPUTATION_FAILED", e)
+            summary["imputation"] = failure
+            imp_res = {"status": "error", "summary": failure}
             failed_steps.append("imputation")
 
     # Final Metadata

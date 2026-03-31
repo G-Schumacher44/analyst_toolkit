@@ -26,14 +26,22 @@ class ToolResponse(TypedDict):
 _GCS_PATH_PROP = {
     "gcs_path": {
         "type": "string",
-        "description": "Local file path (.csv / .parquet) or GCS URI (gs://bucket/path) to load data from. Optional if session_id is used.",
+        "description": (
+            "Local file path (.csv / .parquet) or GCS URI (gs://bucket/path) to load "
+            "data from. Optional only when exactly one of session_id or input_id is used "
+            "instead."
+        ),
     }
 }
 
 _SESSION_ID_PROP = {
     "session_id": {
         "type": "string",
-        "description": "Optional: In-memory session identifier from a previous tool run. If provided, gcs_path is ignored.",
+        "description": (
+            "Optional: Identifier for an existing session/run context backed by the active "
+            "session store. Use this instead of gcs_path or input_id; the selectors are "
+            "mutually exclusive."
+        ),
     }
 }
 
@@ -44,7 +52,7 @@ INPUT_ID_PROP = {
         "description": (
             "Optional: Canonical server-managed input reference returned by input "
             f"ingest/register flows. Uses a stable {INPUT_ID_HEX_LENGTH}-hex suffix collision budget. "
-            "If provided, gcs_path and session_id are ignored."
+            "Use this instead of gcs_path or session_id; the selectors are mutually exclusive."
         ),
     }
 }
@@ -108,7 +116,7 @@ def base_input_schema(extra_props: dict | None = None) -> dict:
     return {
         "type": "object",
         "properties": props,
-        "anyOf": [
+        "oneOf": [
             {"required": ["gcs_path"]},
             {"required": ["session_id"]},
             {"required": ["input_id"]},

@@ -362,7 +362,9 @@ async def test_infer_configs_returns_structured_error_on_load_failure(monkeypatc
 
     assert result["status"] == "error"
     assert result["error_code"] == "INPUT_LOAD_FAILED"
-    assert "Session not found" in result["error"]
+    assert result["error"] == "Failed to load input. See trace_id."
+    assert isinstance(result.get("trace_id"), str)
+    assert result["trace_id"]
 
 
 @pytest.mark.asyncio
@@ -408,9 +410,10 @@ async def test_auto_heal_returns_error_when_infer_configs_load_fails(monkeypatch
         return {
             "status": "error",
             "module": "infer_configs",
-            "error": "Failed to load input: InputNotFoundError: not found",
+            "error": "Failed to load input. See trace_id.",
             "error_code": "INPUT_LOAD_FAILED",
             "config_yaml": "",
+            "trace_id": "trace_autoheal_infer",
         }
 
     monkeypatch.setattr(auto_heal_tool, "_toolkit_infer_configs", failing_infer_configs)
@@ -558,11 +561,17 @@ async def test_infer_configs_repopulates_stale_session_resolved_from_input_id(mo
     )
 
     assert result["status"] == "pass"
+    assert result["run_id"] == "stale_session_repopulate"
     assert result["session_id"] != "sess_stale_input"
     assert StateStore.get("sess_stale_input") is None
     assert StateStore.get(result["session_id"]) is not None
     assert StateStore.get_config(result["session_id"], "validation") is not None
     assert any("saved to a new session" in warning for warning in result["warnings"])
+    assert any(
+        action.get("arguments", {}).get("session_id") == result["session_id"]
+        for action in result["next_actions"]
+        if isinstance(action, dict)
+    )
     StateStore.clear()
 
 
@@ -604,7 +613,13 @@ async def test_infer_configs_resolves_session_from_input_id(monkeypatch, mocker)
     )
 
     assert result["status"] == "pass"
+    assert result["run_id"] == "infer_resolve_run"
     assert result["session_id"] == session_id
     stored = StateStore.get_config(session_id, "normalization")
     assert stored is not None
+    assert any(
+        action.get("arguments", {}).get("session_id") == session_id
+        for action in result["next_actions"]
+        if isinstance(action, dict)
+    )
     StateStore.clear()

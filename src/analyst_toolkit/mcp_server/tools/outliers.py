@@ -155,12 +155,14 @@ async def _toolkit_outliers(
     html_requested = should_export_html(config)
     expect_reports = html_requested and outlier_count > 0
     runtime_artifacts = runtime_cfg.get("artifacts", {}) if isinstance(runtime_cfg, dict) else {}
+    plotting_requested_runtime = runtime_artifacts.get("plotting") is True
+    expect_plots = plotting_requested and outlier_count > 0
     if runtime_artifacts.get("export_html") is True and not expect_reports:
         artifact_warnings.append(
             "runtime.artifacts.export_html=true requested report artifacts, but outlier "
             "detection found no outliers so HTML/XLSX outputs were disabled."
         )
-    if runtime_artifacts.get("plotting") is True and not expect_reports:
+    if plotting_requested_runtime and not expect_plots:
         artifact_warnings.append(
             "runtime.artifacts.plotting=true requested plot artifacts, but outlier detection "
             "found no outliers so plots were disabled."
@@ -224,7 +226,7 @@ async def _toolkit_outliers(
         plot_urls=plot_urls,
         expect_html=expect_reports,
         expect_xlsx=expect_reports,
-        expect_plots=expect_reports and plotting_requested,
+        expect_plots=expect_plots,
         required_html=False,
         probe_local_paths=True,
     )

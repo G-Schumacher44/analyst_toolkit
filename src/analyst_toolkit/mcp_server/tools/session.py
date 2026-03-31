@@ -42,6 +42,7 @@ async def _toolkit_manage_session(
     run_id: str | None = None,
     copy_configs: bool = True,
     include_configs: bool = False,
+    confirm_clear_all: bool = False,
 ) -> dict:
     """
     Manage session lifecycle: list, inspect, fork, rebind, or clear.
@@ -227,6 +228,14 @@ async def _toolkit_manage_session(
                 "cleared_session_id": session_id,
             }
         else:
+            if not confirm_clear_all:
+                return {
+                    "status": "error",
+                    "module": "manage_session",
+                    "action": "clear",
+                    "error": "confirm_clear_all=true is required to clear every session.",
+                    "error_code": "CLEAR_ALL_CONFIRMATION_REQUIRED",
+                }
             sessions = StateStore.list_sessions()
             count = len(sessions)
             StateStore.clear()
@@ -277,6 +286,14 @@ _INPUT_SCHEMA = {
             "type": "boolean",
             "description": "Whether to copy inferred configs when forking. Defaults to true.",
             "default": True,
+        },
+        "confirm_clear_all": {
+            "type": "boolean",
+            "description": (
+                "Required when action=clear and session_id is omitted. "
+                "Set true to clear every session."
+            ),
+            "default": False,
         },
         "include_configs": {
             "type": "boolean",

@@ -1,0 +1,103 @@
+normalization:
+  run: true
+
+  input_path: "data/processed/example_validated.csv"
+
+  rules:
+    rename_columns:
+      'bill length (mm)': 'bill_length_mm'
+      'bill depth (mm)': 'bill_depth_mm'
+
+    standardize_text_columns:
+      - 'clutch_completion'
+      - 'sex'
+
+    value_mappings:
+      sex:
+        '.': null
+        'male': 'MALE'
+        'female': 'FEMALE'
+        'm': 'MALE'
+        'f': 'FEMALE'
+        '?': 'UNKNOWN'
+        'unknown': 'UNKNOWN'
+      species:
+        'unknown': 'UNKNOWN'
+      island:
+        'unknown': 'UNKNOWN'
+      colony_id:
+        'biscoe 2': 'Biscoe West'
+        'cormorant NW': 'Cormorant East'
+        'invalid_colony': 'UNKNOWN'
+        'Torgersen': 'Torgersen North'
+        'Cormorant': 'Cormorant East'
+        'torgersen SE': 'Torgersen North'
+        'TORGERSEN 4': 'Torgersen North'
+        '/Shortcut': 'Shortcut Point'
+        ' short point': 'Shortcut Point'
+        'Biscoe': 'Biscoe West'
+        'Unknown': 'UNKNOWN'
+        'dream island': 'Dream South'
+        'Dream Island': 'Dream South'
+        'dream': 'Dream South'
+      age_group:
+        'juvenille': 'Juvenile'
+        'unk': 'UNKNOWN'
+        'ADLT': 'Adult'
+        'chik': 'Chick'
+      health_status:
+        'Unwell': 'Sick'
+        'Critically Ill': 'Critical'
+        'critcal ill': 'Critical'
+        'Overwight': 'Overweight'
+        'under weight': 'Underweight'
+        'Unknown': 'UNKNOWN'
+        'ok': 'UNKNOWN'
+      study_name:
+        'PAPR12021': 'PAPRI2021'
+        'papri2024': 'PAPRI2024'
+        'STUDY_2022': 'PAPRI2022'
+        'PP2020': 'PAPRI2020'
+        'PAPR2023': 'PAPRI2023'
+        'PAPRI20X9': 'UNKNOWN'
+
+    fuzzy_matching:
+      run: true
+      settings:
+        species:
+          master_list: ["Adelie", "Chinstrap", "Gentoo"]
+          score_cutoff: 80
+        island:
+          master_list: ["Torgersen", "Biscoe", "Dream", "Shortcut", "Cormorant"]
+          score_cutoff: 85
+
+    parse_datetimes:
+      capture_date:
+        format: '%Y-%m-%d'
+        errors: 'coerce'
+        utc: false
+        make_naive: true
+      date_egg:
+        format: '%Y-%m-%d'
+        errors: 'coerce'
+        utc: false
+        make_naive: true
+    preview_columns:
+      - 'sex'
+      - 'island'
+      - 'species'
+      - 'health_status'
+      - 'colony_id'
+      - 'age_group'
+      - 'study_name'
+      - 'capture_date'
+      - 'date_egg'
+      - 'clutch_completion'
+
+    coerce_dtypes:
+      bill_length_mm: 'float64'
+      flipper_length_mm: 'float64'
+
+  settings:
+    export_html: true
+    export_html_path: "exports/reports/normalization/{run_id}_normalization_report.html"

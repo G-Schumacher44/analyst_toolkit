@@ -15,11 +15,14 @@ Outputs:
 This module is called by the M10 pipeline runner and does not export files directly.
 """
 
+import logging
 from typing import Any
 
 import pandas as pd
 
 from analyst_toolkit.m02_validation.validate_data import run_validation_suite
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_final_edits(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -62,6 +65,7 @@ def _apply_final_edits(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd
                 }
             )
         if failed_columns:
+            logger.warning("Final audit dtype coercion failed for columns: %s", failed_columns)
             changelog.append(
                 {
                     "Action": "coerce_dtypes_failed",
