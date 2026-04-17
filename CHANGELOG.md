@@ -41,6 +41,17 @@ Format:
 
 - None.
 
+## [0.5.1] - 2026-04-17
+
+### Fixed
+
+- Remove top-level `anyOf`/`oneOf` from MCP tool schemas (`auto_heal`, `infer_configs`, `cockpit_schemas`, `drift`) to comply with OpenAI API stricter tool schema validation; fixes Codex CLI startup failure (#181).
+- Pipeline dashboard iframes now prefer local file server URLs over remote GCS URLs when `destination_delivery` provides them, so embedded reports load in the browser (#181).
+
+### Security
+
+- Acknowledge `CVE-2025-71176` (pytest 8.x) pending pytest 9 compatibility review.
+
 ## [0.5.0] - 2026-03-30
 
 ### Added
