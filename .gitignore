@@ -126,3 +126,8 @@ htmlcov/
 # ===============================
 local_plans/
 resource_hub/monolith_decomposition_execution_plan.md
+
+# ===============================
+# Playwright
+# ===============================
+.playwright-mcp/
