@@ -6,3 +6,7 @@
 # Pygments 2.19.2 — no patched release available yet (transitive dep via pytest/sphinx)
 # Added: 2026-03-25 | Revisit by: 2026-04-25
 CVE-2026-4539
+
+# pytest 8.4.2 — fixed in 9.0.3, holding off on major upgrade until compatibility verified
+# Added: 2026-04-17 | Revisit by: 2026-05-17
+CVE-2025-71176
