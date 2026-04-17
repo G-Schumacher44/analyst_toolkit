@@ -302,6 +302,7 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
             "dashboard_url": entry.get("dashboard_url", ""),
             "artifact_url": entry.get("artifact_url", ""),
             "export_url": entry.get("export_url", ""),
+            "destination_delivery": entry.get("destination_delivery", {}),
             "warnings": entry.get("warnings", []),
         }
 
@@ -336,10 +337,13 @@ async def _toolkit_get_pipeline_dashboard(run_id: str, session_id: str | None = 
                 "dashboard_path": payload.get("dashboard_path", ""),
                 "artifact_url": payload.get("artifact_url", ""),
                 "export_url": payload.get("export_url", ""),
+                "destination_delivery": payload.get("destination_delivery", {}),
                 "warnings": payload.get("warnings", []),
             }
             for name, payload in modules.items()
         },
+        "final_destination_delivery": final_audit_entry.get("destination_delivery")
+        or auto_heal_entry.get("destination_delivery", {}),
         "final_dashboard_url": final_audit_entry.get("dashboard_url")
         or auto_heal_entry.get("dashboard_url", ""),
         "final_dashboard_path": final_audit_entry.get("dashboard_path")
