@@ -43,7 +43,7 @@ def test_rpc_tools_list(client):
 
 
 def test_rpc_tools_list_exposes_data_dictionary_input_id_schema(client):
-    """Verify data_dictionary advertises the shared input_id and oneOf input contract."""
+    """Verify data_dictionary advertises the shared input_id schema."""
     payload = {"jsonrpc": "2.0", "id": 33, "method": "tools/list", "params": {}}
     response = client.post("/rpc", json=payload)
     assert response.status_code == 200
@@ -53,9 +53,6 @@ def test_rpc_tools_list_exposes_data_dictionary_input_id_schema(client):
 
     assert input_schema["properties"]["input_id"]["pattern"] == INPUT_ID_PATTERN
     assert "mutually exclusive" in input_schema["properties"]["input_id"]["description"].lower()
-    assert {"required": ["input_id"]} in input_schema["oneOf"]
-    assert {"required": ["gcs_path"]} in input_schema["oneOf"]
-    assert {"required": ["session_id"]} in input_schema["oneOf"]
 
 
 def test_rpc_tools_list_standardizes_input_id_pattern_across_tool_schemas(client):

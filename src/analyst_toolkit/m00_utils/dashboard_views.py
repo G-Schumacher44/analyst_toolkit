@@ -579,9 +579,7 @@ def _render_pipeline_module_panel(module_name: str, payload: dict[str, Any]) -> 
     dashboard_path = effective_payload.get("dashboard_path")
     dashboard_ref = _preferred_dashboard_reference(effective_payload)
     local_dashboard_ref = _preferred_local_reference(destination_delivery, "html_report")
-    embed_src = (
-        local_dashboard_ref or _embed_reference_src(dashboard_path, dashboard_url)
-    )
+    embed_src = local_dashboard_ref or _embed_reference_src(dashboard_path, dashboard_url)
     export_ref = _preferred_export_reference(effective_payload)
     warnings = effective_payload.get("warnings", [])
     summary_table = _render_auto_heal_summary_table(summary)
