@@ -119,11 +119,6 @@ DATA_DICTIONARY_INPUT_SCHEMA = {
             "description": "Reserve a prelaunch dictionary/readiness surface seeded from infer_configs.",
         },
     },
-    "oneOf": [
-        {"required": ["gcs_path"]},
-        {"required": ["session_id"]},
-        {"required": ["input_id"]},
-    ],
 }
 
 COCKPIT_DASHBOARD_INPUT_SCHEMA = {

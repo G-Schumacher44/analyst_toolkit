@@ -155,12 +155,6 @@ _INPUT_SCHEMA = {
         },
         "run_id": {"type": "string", "description": "Optional run identifier."},
     },
-    "anyOf": [
-        {"required": ["base_path", "target_path"]},
-        {"required": ["base_session_id", "target_session_id"]},
-        {"required": ["base_path", "target_session_id"]},
-        {"required": ["base_session_id", "target_path"]},
-    ],
 }
 
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
