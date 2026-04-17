@@ -1,6 +1,7 @@
 import pytest
 
 import analyst_toolkit.mcp_server.tools.cockpit as cockpit_module
+from analyst_toolkit.m00_utils.dashboard_views import render_pipeline_dashboard
 
 
 @pytest.mark.asyncio
@@ -86,6 +87,59 @@ async def test_toolkit_get_pipeline_dashboard_builds_tabbed_artifact(mocker):
         mocker.ANY,
         session_id=None,
     )
+
+
+def test_render_pipeline_dashboard_prefers_local_module_urls_for_embeds():
+    report = {
+        "session_id": "sess_pipeline",
+        "final_status": "pass",
+        "health_score": 88,
+        "health_status": "green",
+        "health_advisory": False,
+        "health_message": "",
+        "certification_status": "pass",
+        "ready_modules": 1,
+        "warned_modules": 0,
+        "failed_modules": 0,
+        "not_run_modules": 7,
+        "module_order": ["Diagnostics"],
+        "modules": {
+            "Diagnostics": {
+                "status": "pass",
+                "summary": {"rows": 100},
+                "dashboard_url": "https://storage.googleapis.com/private/diag.html",
+                "dashboard_path": "exports/reports/diagnostics/run_diag.html",
+                "artifact_url": "gs://bucket/diag.csv",
+                "export_url": "gs://bucket/diag.csv",
+                "destination_delivery": {
+                    "html_report": {
+                        "local": {
+                            "status": "available",
+                            "url": "http://127.0.0.1:8765/reports/diagnostics/run_diag.html",
+                        }
+                    }
+                },
+                "warnings": [],
+            }
+        },
+        "final_dashboard_url": "https://storage.googleapis.com/private/final.html",
+        "final_dashboard_path": "exports/reports/final_audit/run_final.html",
+        "final_export_url": "gs://bucket/final.csv",
+        "final_destination_delivery": {
+            "html_report": {
+                "local": {
+                    "status": "available",
+                    "url": "http://127.0.0.1:8765/reports/final_audit/run_final.html",
+                }
+            }
+        },
+    }
+
+    html = render_pipeline_dashboard(report, "run-pipeline-embed")
+
+    assert "http://127.0.0.1:8765/reports/diagnostics/run_diag.html" in html
+    assert "http://127.0.0.1:8765/reports/final_audit/run_final.html" in html
+    assert "https://storage.googleapis.com/private/diag.html" not in html
 
 
 @pytest.mark.asyncio

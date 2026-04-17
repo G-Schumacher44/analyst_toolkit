@@ -29,6 +29,35 @@ _TEMPLATES_GROUP_TITLE = "templates and contracts"
 _COCKPIT_REPORT_DIR = "exports/reports/cockpit"
 
 
+def _preferred_local_reference(
+    destination_delivery: Any,
+    destination_key: str,
+) -> str:
+    if not isinstance(destination_delivery, dict):
+        return ""
+    destination = destination_delivery.get(destination_key, {})
+    if not isinstance(destination, dict):
+        return ""
+    local = destination.get("local", {})
+    if not isinstance(local, dict):
+        return ""
+    return str(local.get("url", "") or local.get("path", "")).strip()
+
+
+def _preferred_dashboard_reference(payload: dict[str, Any]) -> str:
+    local_ref = _preferred_local_reference(payload.get("destination_delivery", {}), "html_report")
+    if local_ref:
+        return local_ref
+    return str(payload.get("dashboard_url") or payload.get("dashboard_path") or "").strip()
+
+
+def _preferred_export_reference(payload: dict[str, Any]) -> str:
+    local_ref = _preferred_local_reference(payload.get("destination_delivery", {}), "data_export")
+    if local_ref:
+        return local_ref
+    return str(payload.get("export_url") or payload.get("artifact_url") or "").strip()
+
+
 def _render_resource_inline_item(item: dict[str, Any], *, show_detail: bool = True) -> str:
     detail_html = (
         f"<p class='subtle'>{html.escape(str(item.get('Detail', '')))}</p>" if show_detail else ""
@@ -545,11 +574,15 @@ def _render_pipeline_module_panel(module_name: str, payload: dict[str, Any]) -> 
     effective_payload = payload if isinstance(payload, dict) and payload else {"status": "not_run"}
     status = str(effective_payload.get("status", "not_run")).lower()
     summary = effective_payload.get("summary", {})
+    destination_delivery = effective_payload.get("destination_delivery", {})
     dashboard_url = effective_payload.get("dashboard_url")
     dashboard_path = effective_payload.get("dashboard_path")
-    dashboard_ref = dashboard_url or dashboard_path
-    embed_src = _embed_reference_src(dashboard_path, dashboard_url)
-    export_ref = effective_payload.get("export_url") or effective_payload.get("artifact_url")
+    dashboard_ref = _preferred_dashboard_reference(effective_payload)
+    local_dashboard_ref = _preferred_local_reference(destination_delivery, "html_report")
+    embed_src = (
+        local_dashboard_ref or _embed_reference_src(dashboard_path, dashboard_url)
+    )
+    export_ref = _preferred_export_reference(effective_payload)
     warnings = effective_payload.get("warnings", [])
     summary_table = _render_auto_heal_summary_table(summary)
     warning_table = (
@@ -637,8 +670,14 @@ def render_pipeline_dashboard(report: dict[str, Any], run_id: str) -> str:
     not_run_modules = int(report.get("not_run_modules", 0))
     module_order = report.get("module_order", [])
     modules = report.get("modules", {})
-    final_dashboard = report.get("final_dashboard_url") or report.get("final_dashboard_path")
-    final_export = report.get("final_export_url")
+    final_payload = {
+        "dashboard_url": report.get("final_dashboard_url", ""),
+        "dashboard_path": report.get("final_dashboard_path", ""),
+        "export_url": report.get("final_export_url", ""),
+        "destination_delivery": report.get("final_destination_delivery", {}),
+    }
+    final_dashboard = _preferred_dashboard_reference(final_payload)
+    final_export = _preferred_export_reference(final_payload)
     module_ledger_rows = []
     for name in module_order:
         status = (modules.get(name) or {}).get("status", "unknown")

@@ -609,12 +609,6 @@ _INPUT_SCHEMA = {
             "default": {},
         },
     },
-    "anyOf": [
-        {"required": ["gcs_path"]},
-        {"required": ["session_id"]},
-        {"required": ["input_id"]},
-        {"required": ["runtime"]},
-    ],
 }
 
 from analyst_toolkit.mcp_server.registry import register_tool  # noqa: E402
