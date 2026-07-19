@@ -171,11 +171,15 @@ curl -X POST http://localhost:8001/rpc \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"outliers","arguments":{"gcs_path":"gs://my-bucket/data/"}}}'
 ```
 
-Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure. HTML reports are generated automatically when `ANALYST_REPORT_BUCKET` is set, or explicitly with `export_html: true` in the config.
-If template/resource reads are timing out under load, tune `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` and `ANALYST_MCP_TEMPLATE_IO_TIMEOUT_SEC`.
-For structured request lifecycle logs, set `ANALYST_MCP_STRUCTURED_LOGS=true`.
-For token auth in networked deployments, set `ANALYST_MCP_AUTH_TOKEN` and send `Authorization: Bearer <token>`.
-To enable stable browser links from cockpit and dashboard responses, set `ANALYST_MCP_ENABLE_ARTIFACT_SERVER=true` in trusted/local mode. See the MCP Server Guide for the full artifact server configuration.
+Tools accept a `gcs_path` (GCS URI, local `.parquet`, or local `.csv`) and an optional `config` dict matching the module's YAML structure.
+
+| Setting | Purpose |
+| ------- | ------- |
+| `export_html: true` in config (or `ANALYST_REPORT_BUCKET`) | Generate HTML dashboard reports |
+| `ANALYST_MCP_ENABLE_ARTIFACT_SERVER=true` | Serve dashboards as browser-openable links |
+| `ANALYST_MCP_STRUCTURED_LOGS=true` | Structured request lifecycle logging |
+| `ANALYST_MCP_AUTH_TOKEN` | Bearer token auth for networked deployments |
+| `ANALYST_MCP_RESOURCE_TIMEOUT_SEC` | Tune template/resource read timeouts |
 
 > See [📡 MCP Server Guide](resource_hub/mcp_server_guide.md) for full setup, tool reference, FridAI integration, Claude Desktop wiring, and environment variable reference.
 
