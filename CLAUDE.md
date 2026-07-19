@@ -1,4 +1,4 @@
-# AGENTS.md
+# Agent Rules — analyst_toolkit
 
 Repository guidance for coding agents working in `analyst_toolkit`.
 

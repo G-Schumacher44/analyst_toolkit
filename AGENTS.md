@@ -1,5 +1,5 @@
 <!-- AUTO-GENERATED from CLAUDE.md by 'koa sync-rules' — edit CLAUDE.md, never this file. -->
-# AGENTS.md
+# Agent Rules — analyst_toolkit
 
 Repository guidance for coding agents working in `analyst_toolkit`.
 
