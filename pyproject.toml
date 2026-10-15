@@ -59,15 +59,15 @@ mcp = [
   "fastapi>=0.111,<1",
   "uvicorn[standard]>=0.29,<1",
   "mcp>=1.2.1,<2",
-  "pyarrow>=14.0,<20",
+  "pyarrow>=23.0.1,<28",
   "google-cloud-storage>=2.14,<4",
-  "gcsfs>=2024.2.0,<2026.0.0",
+  "gcsfs>=2026.6.0,<2027",
   "python-multipart>=0.0.9,<1",
   "pydantic>=2.0,<3",
   "analyst_toolkit_deploy @ https://github.com/G-Schumacher44/analyst_toolkit_deployment_utility/releases/download/v0.2.5/analyst_toolkit_deploy-0.2.5-py3-none-any.whl",
 ]
 dev = [
-  "pytest>=7.0,<9",
+  "pytest>=9.0.3,<10",
   "pytest-cov>=7.1,<8",
   "pytest-asyncio>=0.23,<2",
   "pytest-mock>=3.12,<4",
